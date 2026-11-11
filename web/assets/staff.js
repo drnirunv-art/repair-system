@@ -3,6 +3,7 @@
   const ROLES = { owner: "Owner", admin: "Admin", chief_engineer: "Chief Engineer", supervisor: "Supervisor",
     senior_technician: "Senior Technician", technician: "Technician", safety_officer: "จป.", observer: "Observer" };
   const MANAGER = ["owner", "admin", "chief_engineer", "supervisor"];
+  let invites = [];
   let me = null, H = null, staff = [], prios = [], types = [], locs = [], jobs = [], editing = null, channel = null;
   const isMgr = () => me && MANAGER.includes(me.role);
   const can = () => me && me.role !== "observer";
@@ -64,6 +65,7 @@
       sb.from("priorities").select("*").eq("hospital_id", H.id).order("sort").order("sla_minutes"),
       sb.from("job_types").select("*").eq("hospital_id", H.id).order("code"),
       sb.from("locations").select("*").eq("hospital_id", H.id).order("building").order("floor").order("department")]);
+    if (isMgr()) { const iv = await sb.from("staff_invites").select("email,role,full_name").eq("hospital_id", H.id).is("used_at", null).order("created_at"); invites = iv.data || []; }
     staff = s.data || []; prios = p.data || []; types = t.data || []; locs = l.data || [];
     opts($("#wStatus"), [["open", "งานที่ยังไม่ปิด"], ["", "ทุกสถานะ"], ...Object.entries(STATUS)]);
     opts($("#wTech"), [["", "ช่างทุกคน"], ...staff.filter(x => x.active).map(x => [x.id, x.full_name || "(ไม่มีชื่อ)"])]);
@@ -187,20 +189,22 @@
   const msg = (el, err, okText) => $(el).innerHTML = err ? `<div class="note bad">${esc(errText(err))}</div>` : `<div class="note ok">${okText}</div>`;
   function renderSetup() {
     $("#sList").innerHTML = "<tr><th>ชื่อ</th><th>บทบาท</th><th>สถานะ</th><th></th></tr>" + staff.map(s => `<tr><td>${esc(s.full_name)}</td><td>${ROLES[s.role]}</td><td>${s.active ? "ใช้งาน" : "ปิดใช้"}</td>
-      <td>${s.id !== me.id ? `<button class="btn small" type="button" data-staff-toggle="${s.id}">${s.active ? "ปิดใช้" : "เปิดใช้"}</button>` : ""}</td></tr>`).join("");
+      <td>${s.id !== me.id ? `<button class="btn small" type="button" data-staff-toggle="${s.id}">${s.active ? "ปิดใช้" : "เปิดใช้"}</button>` : ""}</td></tr>`).join("")
+      + invites.map(i => `<tr><td>${esc(i.full_name || i.email)}<br><small class="mono">${esc(i.email)}</small></td><td>${ROLES[i.role]}</td><td>รอสมัครบัญชี</td><td></td></tr>`).join("");
     $("#pList").innerHTML = "<tr><th>ชื่อ</th><th>SLA</th><th>ค่าเริ่มต้นของฟอร์ม</th><th></th></tr>" + prios.map(p => `<tr><td>${esc(p.name)}</td><td>${dur(p.sla_minutes)}</td>
       <td>${p.is_default ? "✓" : `<button class="btn small" type="button" data-prio-default="${p.id}">ตั้งเป็นค่าเริ่มต้น</button>`}</td><td><button class="btn small" type="button" data-del="priorities:${p.id}">ลบ</button></td></tr>`).join("");
     $("#oList").innerHTML = "<tr><th>อาคาร</th><th>ชั้น</th><th>แผนก</th><th></th></tr>" + locs.map(l => `<tr><td>${esc(l.building)}</td><td>${esc(l.floor)}</td><td>${esc(l.department)}</td>
-      <td><button class="btn small" type="button" data-loc-toggle="${l.id}">${l.active ? "ซ่อน" : "แสดง"}</button></td></tr>`).join("");
+      <td><button class="btn small" type="button" data-loc-rename="${l.id}">แก้ชื่อ</button> <button class="btn small" type="button" data-loc-toggle="${l.id}">${l.active ? "ซ่อน" : "แสดง"}</button></td></tr>`).join("");
     $("#yList").innerHTML = "<tr><th>รหัส</th><th>ชื่อ</th><th>เวลามาตรฐาน</th><th>KPI</th></tr>" + types.map(t => `<tr><td class="mono">${esc(t.code)}</td><td>${esc(t.name)}</td><td>${t.standard_minutes ? dur(t.standard_minutes) : "-"}</td><td>${t.kpi ? "นับ" : "ไม่นับ"}</td></tr>`).join("");
   }
-  $("#fStaff").onsubmit = async e => { e.preventDefault(); const { error } = await sb.rpc("assign_staff", { p_email: $("#sEmail").value, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null }); msg("#sMsg", error, "บันทึกเจ้าหน้าที่แล้ว"); if (!error) { $("#sEmail").value = ""; $("#sName").value = ""; await loadRefs(); render(); } };
+  $("#fStaff").onsubmit = async e => { e.preventDefault(); const { data, error } = await sb.rpc("add_staff", { p_email: $("#sEmail").value, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null }); msg("#sMsg", error, data === "invited" ? "บันทึกแล้ว อีเมลนี้ยังไม่ได้สมัคร ให้เจ้าตัวเปิดหน้านี้แล้วกด “สมัครบัญชี” ด้วยอีเมลนี้ ระบบจะใส่สิทธิ์ให้อัตโนมัติ" : "บันทึกเจ้าหน้าที่แล้ว"); if (!error) { $("#sEmail").value = ""; $("#sName").value = ""; await loadRefs(); render(); } };
   $("#fPrio").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("priorities").insert({ hospital_id: H.id, name: $("#pName").value.trim(), sla_minutes: +$("#pSla").value, is_default: !prios.length }); msg("#pMsg", error, "เพิ่มแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
   $("#fLoc").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("locations").insert({ hospital_id: H.id, building: $("#oB").value.trim(), floor: $("#oF").value.trim(), department: $("#oD").value.trim() }); msg("#oMsg", error, "เพิ่มตำแหน่งแล้ว"); if (!error) { $("#oD").value = ""; await loadRefs(); render(); } };
   $("#fType").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("job_types").insert({ hospital_id: H.id, code: $("#yCode").value.trim(), name: $("#yName").value.trim(), standard_minutes: +$("#yStd").value || null, kpi: $("#yKpi").checked }); msg("#yMsg", error, "เพิ่มประเภทงานแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
   document.addEventListener("click", async e => {
     const t = e.target.closest("button"); if (!t) return; let r;
     if (t.dataset.staffToggle) { const s = staff.find(x => x.id === t.dataset.staffToggle); r = await sb.from("profiles").update({ active: !s.active }).eq("id", s.id); }
+    else if (t.dataset.locRename) { const l = locs.find(x => x.id === t.dataset.locRename); const n = (window.prompt("ชื่อแผนกใหม่", l.department) || "").trim(); if (!n || n === l.department) return; r = await sb.from("locations").update({ department: n }).eq("id", l.id); }
     else if (t.dataset.locToggle) { const l = locs.find(x => x.id === t.dataset.locToggle); r = await sb.from("locations").update({ active: !l.active }).eq("id", l.id); }
     else if (t.dataset.prioDefault) { await sb.from("priorities").update({ is_default: false }).eq("hospital_id", H.id); r = await sb.from("priorities").update({ is_default: true }).eq("id", t.dataset.prioDefault); }
     else if (t.dataset.del) { const [tb, id] = t.dataset.del.split(":"); r = await sb.from(tb).delete().eq("id", id); }
