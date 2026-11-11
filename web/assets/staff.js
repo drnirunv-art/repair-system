@@ -25,7 +25,8 @@
       : `<div class="note ok">สมัครแล้ว ถ้ามีอีเมลยืนยันให้กดลิงก์ในอีเมลก่อน จากนั้นแจ้งหัวหน้าให้เพิ่มสิทธิ์</div>`;
   };
   $("#logout").onclick = () => sb.auth.signOut();
-  sb.auth.onAuthStateChange((_e, session) => boot(session));
+  // run outside the auth callback: awaiting Supabase calls inside it deadlocks the auth lock
+  sb.auth.onAuthStateChange((_e, session) => { setTimeout(() => boot(session), 0); });
 
   async function boot(session) {
     ["#login", "#pending", "#tab-jobs", "#tab-dash", "#tab-setup"].forEach(s => $(s).hidden = true);
