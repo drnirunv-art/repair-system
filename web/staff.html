@@ -10,7 +10,7 @@
 <body>
 <header><div class="wrap">
   <div class="top"><span class="tag">RS</span><h1 id="title">ระบบใบงาน งานวิศวกรรมอาคาร</h1>
-    <div class="who"><span id="who"></span><button class="btn small" id="logout" hidden>ออกจากระบบ</button></div></div>
+    <div class="who"><span id="who"></span><button class="btn small" id="bell" type="button" hidden>🔕 เสียงเตือน: ปิด</button><button class="btn small" id="logout" hidden>ออกจากระบบ</button></div></div>
   <nav role="tablist" id="tabs" hidden>
     <button role="tab" data-tab="jobs" aria-selected="true">ใบงาน</button>
     <button role="tab" data-tab="dash" aria-selected="false">Dashboard</button>
@@ -34,7 +34,9 @@
 
   <section id="tab-jobs" hidden>
     <h2>จัดการใบงาน</h2>
-    <p class="sub">ใบงานที่เกิน SLA มีแถบแดงด้านซ้าย เรียงงานเร่งด่วนขึ้นก่อน อัปเดตอัตโนมัติเมื่อมีใบงานใหม่</p>
+    <p class="sub">ใบงานที่เกิน SLA หรือเกินกำหนดมีแถบแดงด้านซ้าย เรียงงานเร่งด่วนขึ้นก่อน อัปเดตอัตโนมัติเมื่อมีใบงานใหม่ (เวลา SLA ไม่นับช่วงพักงาน)</p>
+    <div id="alerts" class="alerts" hidden></div>
+    <div id="wViews" class="chips" role="group" aria-label="มุมมอง"></div>
     <div class="filters">
       <select id="wStatus"></select><select id="wTech"></select><select id="wType"></select><input id="wQ" placeholder="ค้นหาเลขใบงาน ชื่อ แผนก">
     </div>
@@ -43,12 +45,13 @@
 
   <section id="tab-dash" hidden>
     <h2>Dashboard</h2>
-    <div class="filters" style="max-width:420px"><label>ตั้งแต่<input id="dFrom" type="date"></label><label>ถึง<input id="dTo" type="date"></label></div>
+    <div class="filters" style="max-width:620px"><label>ตั้งแต่<input id="dFrom" type="date"></label><label>ถึง<input id="dTo" type="date"></label><button class="btn" type="button" id="dExport" style="align-self:end">ดาวน์โหลด Excel (CSV)</button></div>
     <div class="kpis" id="dKpi"></div>
     <div class="two">
       <div class="panel"><h3>ใบงานตามประเภทงาน</h3><div id="dType"></div></div>
       <div class="panel"><h3>งานค้างตามช่าง</h3><div id="dTech"></div></div>
       <div class="panel"><h3>ใบงานตามอาคาร</h3><div id="dBld"></div></div>
+      <div class="panel"><h3>งานพักตามเหตุผล</h3><div id="dHold"></div></div>
       <div class="panel"><h3>SLA ตามความเร่งด่วน</h3><div class="scroll"><table id="dSla"></table></div></div>
     </div>
   </section>
@@ -72,16 +75,29 @@
       <form class="panel" id="fLoc"><h3>ตำแหน่ง (อาคาร / ชั้น / แผนก)</h3>
         <div class="grid">
           <label>อาคาร<input id="oB" required></label><label>ชั้น<input id="oF" required></label><label>แผนก<input id="oD" required></label></div>
-        <div class="row" style="margin-top:10px"><button class="btn primary">เพิ่มตำแหน่ง</button></div>
+        <div class="row" style="margin-top:10px"><button class="btn primary">เพิ่มตำแหน่ง</button><a class="btn" id="oQrAll" target="_blank" rel="noopener">พิมพ์ QR ทุกแผนก</a></div>
         <div id="oMsg"></div><div class="scroll" style="margin-top:12px;max-height:360px"><table id="oList"></table></div></form>
       <form class="panel" id="fType"><h3>ประเภทงาน (Job Code)</h3>
         <div class="grid">
           <label>รหัส<input id="yCode" required placeholder="EE"></label><label>ชื่อ<input id="yName" required placeholder="ไฟฟ้า"></label><label>เวลามาตรฐาน (นาที)<input id="yStd" type="number" min="0"></label></div>
         <div class="row" style="margin-top:10px"><label style="flex-direction:row;align-items:center;gap:6px"><input id="yKpi" type="checkbox" checked style="width:auto">นับ KPI</label><button class="btn primary">เพิ่มประเภทงาน</button></div>
         <div id="yMsg"></div><div class="scroll" style="margin-top:12px"><table id="yList"></table></div></form>
+      <form class="panel" id="fSet"><h3>การทำงานและการแจ้งเตือน</h3>
+        <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+          <label>แนบรูป/วิดีโอได้สูงสุด (ไฟล์)<input name="gMax" type="number" min="1" max="10" required></label>
+          <label>เตือนงานใหม่ไม่มีคนรับ หลัง (นาที)<input name="gUn" type="number" min="1" required></label>
+          <label>เตือนรับงานแล้วไม่เริ่ม หลัง (นาที)<input name="gNs" type="number" min="1" required></label>
+          <label>เตือนเลยเวลานัด หลัง (นาที)<input name="gGrace" type="number" min="1" required></label>
+          <label class="check"><input name="gReqPhoto" type="checkbox">ต้องแนบรูปหลังซ่อมก่อนกดซ่อมเสร็จ</label>
+          <label class="check"><input name="gApprove" type="checkbox">พักงานต้องให้ Owner / Admin / Chief Engineer อนุมัติ</label>
+        </div><div class="row" style="margin-top:10px"><button class="btn primary">บันทึกการตั้งค่า</button></div><div id="gMsg"></div></form>
+      <form class="panel" id="fReason"><h3>เหตุผลพักงาน (On-Hold)</h3>
+        <div class="grid" style="grid-template-columns:minmax(0,1fr) auto"><label>เหตุผลใหม่<input id="hName" required placeholder="เช่น รอซ่อมจากศูนย์บริการ"></label><div class="row" style="align-self:end"><button class="btn primary">เพิ่ม</button></div></div>
+        <div id="hMsg"></div><div class="scroll" style="margin-top:12px"><table id="hList"></table></div></form>
     </div>
   </section>
 </main>
+<div id="toast" class="toast" role="status" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="assets/config.js"></script>
 <script src="assets/common.js"></script>

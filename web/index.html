@@ -16,7 +16,9 @@
 <main class="wrap">
   <section id="tab-report">
     <h2>แบบฟอร์มแจ้งซ่อม</h2>
-    <p class="sub">เลือกตำแหน่งและบอกอาการ ระบบจะออกเลขใบงานให้ทันที</p>
+    <p class="sub">เลือกตำแหน่งและบอกอาการ ระบบจะออกเลขใบงานและใบรับแจ้งพร้อม QR ให้ทันที</p>
+    <div id="lineWarn" class="note" hidden>คุณเปิดหน้านี้จากในแอป LINE ถ้าแนบรูปไม่ได้หรือบันทึกใบรับแจ้งไม่ได้ ให้กดเมนู ⋮ มุมขวาบน แล้วเลือก “เปิดในเบราว์เซอร์” (Chrome หรือ Safari)</div>
+    <div id="locNote" class="note ok" hidden></div>
     <form id="fReport" class="panel">
       <div class="grid">
         <label>อาคาร<select id="rBuilding" required></select></label>
@@ -28,11 +30,12 @@
         <label class="full">รายละเอียดปัญหา<textarea id="rDetail" required placeholder="อาการที่พบ เริ่มเป็นเมื่อไร กระทบผู้ป่วยหรือไม่"></textarea></label>
         <label>ชื่อ-นามสกุล *<input id="rName" required autocomplete="name"></label>
         <label>เบอร์โทร / ต่อภายใน *<input id="rPhone" required inputmode="tel"></label>
-        <label>รูปภาพ (ไม่บังคับ)<input id="rPhoto" type="file" accept="image/*" capture="environment"></label>
+        <label><span id="rPhotoLabel">รูปภาพ / วิดีโอ (ไม่บังคับ สูงสุด 6 ไฟล์)</span><input id="rPhoto" type="file" accept="image/*,video/*" multiple></label>
       </div>
       <div class="row" style="margin-top:16px"><button class="btn primary" id="rSubmit">ส่งเรื่องแจ้งซ่อม</button><button class="btn" type="button" id="rReload">โหลดข้อมูลตำแหน่งใหม่</button></div>
       <div id="rMsg"></div>
     </form>
+    <div id="receipt" class="panel receipt" hidden></div>
   </section>
   <section id="tab-track" hidden>
     <h2>ติดตามสถานะงานซ่อม</h2>
@@ -42,6 +45,7 @@
   </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="assets/config.js"></script>
 <script src="assets/common.js"></script>
 <script src="assets/public.js"></script>

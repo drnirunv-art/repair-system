@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR แจ้งซ่อมประจำแผนก</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  .qcard{background:#fff;color:#17212b;border:1px solid #d9dfe5;border-radius:10px;padding:14px;text-align:center;break-inside:avoid}
+  .qcard img{width:170px;height:170px;image-rendering:pixelated}
+  .qcard b{display:block;font-size:16px}.qcard small{display:block;color:#5b6876}
+  .qcard .h{font-size:12px;color:#d9620f;font-weight:700;letter-spacing:.04em}
+  @media print{header,.noprint{display:none!important}body{background:#fff}.sheet{grid-template-columns:repeat(3,1fr)}main{padding:0}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><div class="top"><span class="tag">RS</span><h1>QR แจ้งซ่อมประจำแผนก</h1></div></div></header>
+<main class="wrap">
+  <div class="noprint">
+    <p class="sub">แปะ QR ไว้ที่แต่ละแผนก ผู้แจ้งสแกนแล้วฟอร์มจะเลือกอาคาร ชั้น และแผนกให้เอง</p>
+    <div class="filters"><select id="qB"></select><select id="qF"></select><button class="btn primary" type="button" onclick="print()" style="flex:0">พิมพ์</button></div>
+  </div>
+  <div id="sheet" class="sheet"></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script>
+(async () => {
+  const { sb, $, esc, opts } = RS, p = new URLSearchParams(location.search), code = p.get("h"), one = p.get("loc");
+  const { data: h } = await sb.from("hospitals").select("id,code,name").eq("code", code).maybeSingle();
+  if (!h) { $("#sheet").innerHTML = '<div class="empty">ไม่พบโรงพยาบาล</div>'; return; }
+  const { data: locs } = await sb.from("locations").select("id,building,floor,department").eq("hospital_id", h.id).order("building").order("floor").order("department");
+  const base = new URL("index.html", location.href);
+  const img = loc => { const u = new URL(base); u.searchParams.set("h", h.code); u.searchParams.set("loc", loc.id); const q = qrcode(0, "M"); q.addData(u.toString()); q.make(); return q.createDataURL(6, 2); };
+  const draw = () => {
+    const list = one ? locs.filter(l => l.id === one) : locs.filter(l => (!$("#qB").value || l.building === $("#qB").value) && (!$("#qF").value || l.floor === $("#qF").value));
+    $("#sheet").innerHTML = list.map(l => `<div class="qcard"><div class="h">${esc(h.name)} · แจ้งซ่อม</div><img src="${img(l)}" alt="QR ${esc(l.department)}"><b>${esc(l.department)}</b><small>${esc(l.building)} · ${esc(l.floor)}</small><small>สแกนเพื่อแจ้งซ่อมงานวิศวกรรม</small></div>`).join("") || '<div class="empty">ไม่มีแผนก</div>';
+  };
+  if (one) { $(".filters").hidden = true; }
+  opts($("#qB"), [["", "ทุกอาคาร"], ...[...new Set(locs.map(l => l.building))].map(b => [b, b])]);
+  const fl = () => opts($("#qF"), [["", "ทุกชั้น"], ...[...new Set(locs.filter(l => !$("#qB").value || l.building === $("#qB").value).map(l => l.floor))].map(f => [f, f])]);
+  fl(); $("#qB").onchange = () => { fl(); draw(); }; $("#qF").onchange = draw; draw();
+})();
+</script>
+</body>
+</html>
