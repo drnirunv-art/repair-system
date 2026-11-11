@@ -19,7 +19,7 @@
 <header><div class="wrap"><div class="top"><span class="tag">RS</span><h1>QR แจ้งซ่อมประจำแผนก</h1></div></div></header>
 <main class="wrap">
   <div class="noprint">
-    <p class="sub">แปะ QR ไว้ที่แต่ละแผนก ผู้แจ้งสแกนแล้วฟอร์มจะเลือกอาคาร ชั้น และแผนกให้เอง</p>
+    <p class="sub">แปะ QR ไว้ที่แต่ละแผนก ผู้แจ้งสแกนแล้วฟอร์มจะเลือกอาคาร ชั้น และแผนกให้เอง และกด “ดูงานซ่อมของแผนกนี้” เพื่อดูสถานะงานทั้งหมดของแผนกได้</p>
     <div class="filters"><select id="qB"></select><select id="qF"></select><button class="btn primary" type="button" onclick="print()" style="flex:0">พิมพ์</button></div>
   </div>
   <div id="sheet" class="sheet"></div>
@@ -38,7 +38,7 @@
   const img = loc => { const u = new URL(base); u.searchParams.set("h", h.code); u.searchParams.set("loc", loc.id); const q = qrcode(0, "M"); q.addData(u.toString()); q.make(); return q.createDataURL(6, 2); };
   const draw = () => {
     const list = one ? locs.filter(l => l.id === one) : locs.filter(l => (!$("#qB").value || l.building === $("#qB").value) && (!$("#qF").value || l.floor === $("#qF").value));
-    $("#sheet").innerHTML = list.map(l => `<div class="qcard"><div class="h">${esc(h.name)} · แจ้งซ่อม</div><img src="${img(l)}" alt="QR ${esc(l.department)}"><b>${esc(l.department)}</b><small>${esc(l.building)} · ${esc(l.floor)}</small><small>สแกนเพื่อแจ้งซ่อมงานวิศวกรรม</small></div>`).join("") || '<div class="empty">ไม่มีแผนก</div>';
+    $("#sheet").innerHTML = list.map(l => `<div class="qcard"><div class="h">${esc(h.name)} · แจ้งซ่อม</div><img src="${img(l)}" alt="QR ${esc(l.department)}"><b>${esc(l.department)}</b><small>${esc(l.building)} · ${esc(l.floor)}</small><small>สแกนเพื่อแจ้งซ่อม หรือดูสถานะงานซ่อมของแผนก</small></div>`).join("") || '<div class="empty">ไม่มีแผนก</div>';
   };
   if (one) { $(".filters").hidden = true; }
   opts($("#qB"), [["", "ทุกอาคาร"], ...[...new Set(locs.map(l => l.building))].map(b => [b, b])]);

@@ -1,7 +1,7 @@
 (() => {
   const { sb, $, esc, fmt, fmtDate, pill, statusLabel, errText, opts, uploadMedia, isVideo, signed } = RS;
   const params = new URLSearchParams(location.search);
-  let H = null, locs = [], equip = [], S = { max_photos: 6, require_photo: false }, wantLoc = params.get("loc");
+  let deptLoc = null, H = null, locs = [], equip = [], S = { max_photos: 6, require_photo: false }, wantLoc = params.get("loc");
 
   if (/\bLine\//i.test(navigator.userAgent)) $("#lineWarn").hidden = false;
 
@@ -9,7 +9,7 @@
     document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === name));
     document.querySelectorAll("main>section").forEach(s => s.hidden = s.id !== "tab-" + name);
   }
-  document.querySelectorAll("nav button").forEach(b => b.onclick = () => tab(b.dataset.tab));
+  document.querySelectorAll("nav button").forEach(b => b.onclick = () => { tab(b.dataset.tab); if (b.dataset.tab === "dept") dept(); });
 
   async function loadHospitals() {
     const { data, error } = await sb.from("hospitals").select("id,code,name").order("code");
@@ -40,7 +40,10 @@
     const pre = wantLoc && locs.find(x => x.id === wantLoc);
     if (pre) {
       cascade(); $("#rBuilding").value = pre.building; cascade(); $("#rFloor").value = pre.floor; cascade(); $("#rDept").value = pre.id;
-      $("#locNote").hidden = false; $("#locNote").textContent = `ตำแหน่งจาก QR: ${pre.building} · ${pre.floor} · ${pre.department} (เปลี่ยนได้ถ้าไม่ถูก)`;
+      $("#locNote").hidden = false; $("#locNote").innerHTML = `ตำแหน่งจาก QR: ${esc(pre.building)} · ${esc(pre.floor)} · ${esc(pre.department)} (เปลี่ยนได้ถ้าไม่ถูก) · <a href="#" id="locSeeJobs">ดูงานซ่อมของแผนกนี้</a>`;
+      deptLoc = pre; $("#deptTabBtn").hidden = false;
+      $("#dTitle").textContent = `งานซ่อมของ ${pre.department} (${pre.building} · ${pre.floor})`;
+      $("#locSeeJobs").onclick = e => { e.preventDefault(); tab("dept"); dept(); };
     }
     cascade();
   }
@@ -173,6 +176,36 @@
   });
   $("#fTrack").onsubmit = e => { e.preventDefault(); track(); };
 
+  /* ---------- department status (from the department QR) ---------- */
+  const OPEN_ST = ["register", "assign", "work_on", "on_hold", "clear"];
+  async function dept() {
+    if (!H || !deptLoc) return;
+    $("#dList").innerHTML = `<div class="empty">กำลังโหลด…</div>`;
+    const { data, error } = await sb.rpc("track_location_jobs", { p_hospital_code: H.code, p_location_id: deptLoc.id });
+    if (error) { $("#dList").innerHTML = `<div class="note bad">${esc(errText(error))}</div>`; return; }
+    const open = data.filter(j => OPEN_ST.includes(j.status));
+    const cnt = s => data.filter(j => j.status === s).length;
+    $("#dSummary").textContent = `ยังไม่ปิด ${open.length} งาน (รอช่าง ${cnt("register") + cnt("assign")} · กำลังซ่อม ${cnt("work_on")} · พักงาน ${cnt("on_hold")} · ซ่อมเสร็จรอตรวจ ${cnt("clear")}) · ปิดแล้วใน 60 วัน ${cnt("close") + cnt("evaluated")} งาน`;
+    const list = $("#dFilter").value === "open" ? open : data;
+    $("#dList").innerHTML = list.length ? list.map(j => `<article class="job">
+      <div><div class="meta"><span class="mono">${esc(j.job_no)}</span><span>${fmt(j.created_at)}</span><span>ผู้แจ้ง ${esc(j.reporter_masked)}</span></div>
+        <h4>${esc(j.detail)}</h4><div class="meta">${j.technician ? `<span>ช่าง ${esc(j.technician)}</span>` : "<span>ยังไม่มีช่างรับงาน</span>"}</div>
+        ${j.status === "on_hold" ? `<div class="meta">พักงาน: ${esc(j.hold_category || "")}${j.hold_until ? " · นัด " + fmtDate(j.hold_until) : ""}</div>` : ""}
+        ${j.appointment_at && !j.closed_at ? `<div class="meta">นัดเข้าทำงาน ${fmt(j.appointment_at)}</div>` : ""}
+        ${j.rating ? `<div class="meta">คะแนน ${"★".repeat(j.rating)}${"☆".repeat(5 - j.rating)}</div>` : ""}
+        <div class="row" style="margin-top:6px"><button class="btn small" type="button" data-detail="${esc(j.job_no)}">ดูรายละเอียด${j.can_rate ? " / ให้คะแนน" : ""}</button></div></div>
+      <div class="side">${pill(j.status, statusLabel(j))}${j.cleared_at ? `<span class="meta">ซ่อมเสร็จ ${fmt(j.cleared_at)}</span>` : ""}${j.closed_at ? `<span class="meta">ปิด ${fmt(j.closed_at)}</span>` : ""}</div></article>`).join("")
+      : `<div class="empty">${$("#dFilter").value === "open" ? "ไม่มีงานค้างของแผนกนี้" : "ยังไม่มีงานในช่วง 60 วัน"}</div>`;
+  }
+  $("#dFilter").onchange = dept; $("#dRefresh").onclick = dept;
+  document.addEventListener("click", e => {
+    const b = e.target.closest("[data-detail]"); if (!b) return;
+    $("#tQ").value = b.dataset.detail; tab("track"); track();
+  });
+
   function showErr(e) { $("#rMsg").innerHTML = `<div class="note bad">${esc(errText(e))}</div>`; }
-  loadHospitals().then(() => { if (params.get("q")) { $("#tQ").value = params.get("q"); tab("track"); track(); } });
+  loadHospitals().then(() => {
+    if (params.get("q")) { $("#tQ").value = params.get("q"); tab("track"); track(); }
+    else if (params.get("view") === "dept" && deptLoc) { tab("dept"); dept(); }
+  });
 })();

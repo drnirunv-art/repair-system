@@ -11,7 +11,7 @@
 <header><div class="wrap">
   <div class="top"><span class="tag">RS</span><h1>แจ้งซ่อม งานวิศวกรรมอาคาร</h1>
     <div class="who"><select id="hospital" aria-label="โรงพยาบาล" style="width:auto"></select><a href="staff.html" id="staffLink">เจ้าหน้าที่</a></div></div>
-  <nav role="tablist"><button role="tab" data-tab="report" aria-selected="true">แจ้งซ่อม</button><button role="tab" data-tab="track" aria-selected="false">ติดตามสถานะ</button></nav>
+  <nav role="tablist"><button role="tab" data-tab="report" aria-selected="true">แจ้งซ่อม</button><button role="tab" data-tab="track" aria-selected="false">ติดตามสถานะ</button><button role="tab" data-tab="dept" aria-selected="false" id="deptTabBtn" hidden>งานของแผนกนี้</button></nav>
 </div></header>
 <main class="wrap">
   <section id="tab-report">
@@ -42,6 +42,13 @@
     <p class="sub">ค้นด้วยเลขใบงาน เบอร์โทร หรือชื่อผู้แจ้ง (อย่างน้อย 3 ตัวอักษร)</p>
     <form id="fTrack" class="filters"><input id="tQ" placeholder="เช่น PT1-6911-0012 หรือ 0812345678"><button class="btn primary" style="flex:0">ค้นหา</button></form>
     <div id="tList" class="jobs"><div class="empty">พิมพ์คำค้นแล้วกดค้นหา</div></div>
+  </section>
+  <section id="tab-dept" hidden>
+    <h2 id="dTitle">งานซ่อมของแผนกนี้</h2>
+    <p class="sub">งานที่ยังไม่ปิดทั้งหมด และงานที่ปิดแล้วในช่วง 60 วันล่าสุด ชื่อผู้แจ้งจะแสดงบางส่วน</p>
+    <div class="filters"><select id="dFilter"><option value="open">เฉพาะงานที่ยังไม่ปิด</option><option value="all">ทั้งหมด (60 วัน)</option></select><button class="btn" type="button" id="dRefresh" style="flex:0">โหลดใหม่</button></div>
+    <div id="dSummary" class="meta" style="margin:8px 0"></div>
+    <div id="dList" class="jobs"><div class="empty">กำลังโหลด…</div></div>
   </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
