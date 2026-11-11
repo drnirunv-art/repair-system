@@ -1,3 +1,4 @@
+-- SUPERSEDED: never applied. Parts/PR moved to 0014_phase_b_parts_docs.sql; eval/shift/KPI will come in later phases.
 -- Phase 2 (additive only): spare parts, purchase orders, job evaluation,
 -- shift schedule, monthly KPI per contract TOR.
 

@@ -6,6 +6,13 @@
   const APPROVER = ["owner", "admin", "chief_engineer"];
   const HOLD_STATUS = { pending: "รอ Owner อนุมัติ", ack: "รับทราบแล้ว", ack_memo: "รับทราบ + ขอ Memo", rejected: "ไม่อนุมัติ" };
   let invites = [], me = null, H = null, staff = [], prios = [], types = [], locs = [], jobs = [], assignees = [], reasons = [];
+  let parts = [], moves = [], prs = [], prItems = [], memos = [], docForm = null;
+  const PR_STATUS = { requested: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ไม่อนุมัติ", ordered: "สั่งซื้อแล้ว", received: "ได้รับของแล้ว", cancel: "ยกเลิก" };
+  const MEMO_STATUS = { submitted: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ไม่อนุมัติ", cancel: "ยกเลิก" };
+  const MOVE = { receive: "รับเข้า", issue: "เบิก", return: "คืน", adjust: "ปรับยอด" };
+  const baht = n => Number(n || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const qtyf = n => Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 });
+  const TABS = ["jobs", "inbox", "parts", "docs", "dash", "report", "setup"];
   let S = { require_photo: false, max_photos: 6, alert_unassigned_min: 5, alert_not_started_min: 10, appointment_grace_min: 120, hold_needs_approval: true };
   let editing = null, channel = null, view = "all", seenAlerts = new Set(), firstAlertRun = true;
   const isMgr = () => me && MANAGER.includes(me.role);
@@ -37,7 +44,7 @@
   sb.auth.onAuthStateChange((_e, session) => { setTimeout(() => boot(session), 0); });
 
   async function boot(session) {
-    ["#login", "#pending", "#tab-jobs", "#tab-dash", "#tab-setup"].forEach(s => $(s).hidden = true);
+    ["#login", "#pending", ...TABS.map(x => "#tab-" + x)].forEach(s => $(s).hidden = true);
     $("#tabs").hidden = true; $("#logout").hidden = !session; $("#bell").hidden = !session; $("#who").textContent = "";
     if (channel) { sb.removeChannel(channel); channel = null; }
     if (!session) { $("#login").hidden = false; return; }
@@ -49,11 +56,15 @@
     $("#who").textContent = `${me.full_name || session.user.email} · ${ROLES[me.role]}`;
     $("#tabs").hidden = false;
     document.querySelectorAll("[data-manager]").forEach(b => b.hidden = !isMgr());
+    document.querySelectorAll("[data-approver]").forEach(b => b.hidden = !isApprover());
     view = store.get("rs-view", MANAGER.includes(me.role) ? "all" : "mine");
-    await loadRefs(); await loadJobs();
+    await loadRefs(); await loadDocs(); await loadJobs();
     channel = sb.channel("jobs-" + H.id)
       .on("postgres_changes", { event: "*", schema: "public", table: "jobs", filter: "hospital_id=eq." + H.id }, () => loadJobs())
-      .on("postgres_changes", { event: "*", schema: "public", table: "job_assignees" }, () => loadJobs()).subscribe();
+      .on("postgres_changes", { event: "*", schema: "public", table: "job_assignees" }, () => loadJobs())
+      .on("postgres_changes", { event: "*", schema: "public", table: "parts", filter: "hospital_id=eq." + H.id }, () => loadDocs().then(render))
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_requests", filter: "hospital_id=eq." + H.id }, () => loadDocs().then(render))
+      .on("postgres_changes", { event: "*", schema: "public", table: "memos", filter: "hospital_id=eq." + H.id }, () => loadDocs().then(render)).subscribe();
     show(store.get("rs-staff-tab", "jobs"));
     bellLabel();
   }
@@ -61,9 +72,9 @@
   /* ---------- tabs and quick views ---------- */
   document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => show(b.dataset.tab));
   function show(t) {
-    if (t === "setup" && !isMgr()) t = "jobs";
+    if ((t === "setup" && !isMgr()) || (t === "inbox" && !isApprover()) || !TABS.includes(t)) t = "jobs";
     document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
-    ["jobs", "dash", "setup"].forEach(x => $("#tab-" + x).hidden = x !== t);
+    TABS.forEach(x => $("#tab-" + x).hidden = x !== t);
     store.set("rs-staff-tab", t);
     render();
   }
@@ -106,6 +117,20 @@
       if (a.data) assignees.push(...a.data);
     }
     render(); checkAlerts();
+  }
+  // parts, stock moves, purchase requests and memos (phase B)
+  async function loadDocs() {
+    const since = new Date(Date.now() - 400 * 864e5).toISOString();
+    const [p, m, r, mm] = await Promise.all([
+      sb.from("parts").select("*").eq("hospital_id", H.id).order("code"),
+      sb.from("part_moves").select("*").eq("hospital_id", H.id).gte("created_at", since).order("created_at", { ascending: false }).limit(5000),
+      sb.from("purchase_requests").select("*").eq("hospital_id", H.id).order("created_at", { ascending: false }).limit(1000),
+      sb.from("memos").select("*").eq("hospital_id", H.id).order("created_at", { ascending: false }).limit(1000)]);
+    parts = p.data || []; moves = m.data || []; prs = r.data || []; memos = mm.data || [];
+    prItems = [];
+    const ids = prs.map(x => x.id);
+    for (let i = 0; i < ids.length; i += 150) { const it = await sb.from("pr_items").select("*").in("pr_id", ids.slice(i, i + 150)).order("id"); if (it.data) prItems.push(...it.data); }
+    inboxBadge();
   }
 
   /* ---------- workload, used when assigning ---------- */
@@ -152,10 +177,41 @@
         <label>ชื่อผู้แจ้ง<input id="eName" value="${esc(j.reporter_name)}"></label><label>เบอร์โทร<input id="ePhone" value="${esc(j.reporter_phone)}"></label>
         <label>เหตุผลที่แก้ *<input id="iNote" placeholder="เช่น ผู้แจ้งเลือกแผนกผิด"></label>${ok("edit")}`;
     }
+    if (a === "parts") return `<label class="span2">อะไหล่ *<select id="iPart">${partOpts(editing.part)}</select></label>
+        <label>รายการ<select id="iKind"><option value="issue">เบิกใช้กับงานนี้</option><option value="return">คืนเข้าคลัง</option></select></label>
+        <label>จำนวน *<input id="iQty" type="number" min="0" step="any" value="1"></label><label class="span2">หมายเหตุ<input id="iNote" placeholder="ไม่บังคับ"></label>
+        ${parts.some(p => p.active) ? ok("parts") : `<div class="full note">ยังไม่มีอะไหล่ในคลัง ให้หัวหน้าเพิ่มที่แท็บ “อะไหล่” ก่อน หรือกด “ขอซื้อ”</div><div class="row"><button class="btn small" type="button" data-cancel>ปิด</button></div>`}`;
+    if (a === "pr") return prForm(j.id, ok("pr"));
+    if (a === "memo") return memoForm(j, null, ok("memo"));
     if (a === "reopen" || a === "cancel") return `<label class="span2">เหตุผล *<input id="iNote"></label>${ok(a)}`;
     if (a === "history") return `<div class="full" id="hist-${j.id}">กำลังโหลด…</div><div class="row"><button class="btn small" type="button" data-cancel>ปิด</button></div>`;
     return "";
   }
+  /* ---------- phase B forms shared by job cards and the documents tab ---------- */
+  const partOpts = (sel, withStock = true) => parts.filter(p => p.active).map(p => `<option value="${p.id}" ${p.id === sel ? "selected" : ""}>${esc(p.code)} · ${esc(p.name)}${withStock ? ` (เหลือ ${qtyf(p.qty)} ${esc(p.unit)})` : ""}</option>`).join("");
+  const prRow = () => `<tr><td><select data-pr-part><option value="">— พิมพ์เอง —</option>${partOpts(null, false)}</select></td><td><input data-pr-desc placeholder="ชื่อรายการ"></td>
+    <td style="width:80px"><input data-pr-qty type="number" min="0" step="any" value="1"></td><td style="width:80px"><input data-pr-unit value="ชิ้น"></td><td style="width:110px"><input data-pr-price type="number" min="0" step="any" value="0"></td>
+    <td><button class="btn small" type="button" data-pr-del>ลบ</button></td></tr>`;
+  const prForm = (jobId, ok) => `<label class="span2">เหตุผลที่ขอซื้อ *<input id="prReason" placeholder="เช่น คอมเพรสเซอร์เสีย ไม่มีในสต็อก"></label>
+    <label>ต้องการภายในวันที่<input id="prNeed" type="date"></label><label>ผู้ขาย / ร้าน (ถ้าทราบ)<input id="prSup"></label>
+    ${jobId ? "" : `<label class="span2">ผูกกับใบงาน (ไม่บังคับ)<select id="prJob"><option value="">ไม่ผูกใบงาน</option>${jobs.filter(j => OPEN.includes(j.status)).map(j => `<option value="${j.id}">${esc(j.job_no)} · ${esc((j.detail || "").slice(0, 40))}</option>`).join("")}</select></label>`}
+    <div class="full scroll"><table class="items"><thead><tr><th>อะไหล่ในคลัง</th><th>รายการ *</th><th>จำนวน *</th><th>หน่วย</th><th>ราคา/หน่วย</th><th></th></tr></thead><tbody id="prRows">${prRow()}</tbody></table>
+      <div class="row" style="margin-top:6px"><button class="btn small" type="button" data-pr-add>+ เพิ่มรายการ</button><span class="meta" id="prSum"></span></div></div>${ok}`;
+  const memoForm = (job, prId, ok) => `<label class="span2">เรื่อง *<input id="mSubj" value="${esc(job ? "ขออนุมัติดำเนินการซ่อม " + job.job_no : "")}"></label><label>เรียน *<input id="mTo" placeholder="เช่น ผู้อำนวยการโรงพยาบาล"></label>
+    <label class="full">รายละเอียด *<textarea id="mBody">${esc(job ? `ตามใบงานแจ้งซ่อมเลขที่ ${job.job_no} (${[job.building, job.floor, job.department].filter(Boolean).join(" ")}) อาการ: ${job.detail}${job.hold_category ? `\nสถานะ: พักงาน (${job.hold_category}${job.hold_reason ? " - " + job.hold_reason : ""})` : ""}\n\nจึงเรียนมาเพื่อโปรดพิจารณาอนุมัติ` : "")}</textarea></label>
+    <label>จำนวนเงิน (บาท ถ้ามี)<input id="mAmt" type="number" min="0" step="any"></label>
+    <label class="span2">อ้างอิงใบขอซื้อ<select id="mPr"><option value="">ไม่อ้างอิง</option>${prs.filter(x => x.status !== "cancel" && (!job || x.job_id === job.id || !x.job_id)).map(x => `<option value="${x.id}" ${x.id === prId ? "selected" : ""}>${esc(x.pr_no)} · ${baht(x.total)} บาท</option>`).join("")}</select></label>${ok}`;
+  function prItemsFromForm() {
+    return [...document.querySelectorAll("#prRows tr")].map(r => ({ part_id: r.querySelector("[data-pr-part]").value || null, description: r.querySelector("[data-pr-desc]").value.trim(),
+      qty: +r.querySelector("[data-pr-qty]").value, unit: r.querySelector("[data-pr-unit]").value.trim(), unit_price: +r.querySelector("[data-pr-price]").value || 0 }))
+      .filter(x => x.part_id || x.description);
+  }
+  function prSum() { const s = prItemsFromForm().reduce((a, x) => a + (x.qty || 0) * (x.unit_price || 0), 0); if ($("#prSum")) $("#prSum").textContent = "รวม " + baht(s) + " บาท"; }
+  const jobParts = j => {
+    const m = {}; moves.filter(x => x.job_id === j.id && (x.kind === "issue" || x.kind === "return")).forEach(x => { m[x.part_id] = m[x.part_id] || { q: 0, c: 0 }; m[x.part_id].q -= x.qty; m[x.part_id].c -= x.qty * x.unit_cost; });
+    return Object.entries(m).filter(([, v]) => v.q > 0).map(([id, v]) => { const p = parts.find(x => x.id === id) || {}; return { name: p.name || "?", unit: p.unit || "", q: v.q, c: v.c }; });
+  };
+
   function card(j) {
     const pr = prioOf(j), crit = pr && pr.sla_minutes <= 60, crew = crewOf(j), od = overDue(j);
     const b = (a, t, p) => `<button class="btn small${p ? " primary" : ""}" data-act="${a}" data-id="${j.id}">${t}</button>`;
@@ -169,6 +225,8 @@
       if (j.status === "work_on") acts += b("clear", "ซ่อมเสร็จ", 1) + b("on_hold", "พักงาน");
       if (j.status === "clear" && isMgr()) acts += b("close", "ตรวจแล้ว ปิดงาน", 1) + b("reopen", "ส่งกลับแก้ไข");
       if (["register", "assign", "work_on", "on_hold"].includes(j.status)) acts += b("appoint", "นัดหมาย");
+      if (!["close", "cancel"].includes(j.status)) acts += b("parts", "เบิกอะไหล่");
+      if (OPEN.includes(j.status)) acts += b("pr", "ขอซื้อ") + b("memo", "เขียน Memo", j.memo_requested && !memos.some(m => m.job_id === j.id && m.status !== "cancel"));
       if (OPEN.includes(j.status) && isMgr()) acts += b("edit", "แก้ไขใบงาน") + b("cancel", "ยกเลิกใบงาน");
       acts += b("history", "ประวัติ");
     }
@@ -181,7 +239,11 @@
         <div class="meta"><span>${[j.building, j.floor, j.department].map(esc).join(" · ")}</span><span>ผู้แจ้ง ${esc(j.reporter_name)} ${esc(j.reporter_phone)}${j.reporter_email ? " · " + esc(j.reporter_email) : ""}</span>${crew.length ? `<span>ช่าง ${crew.map((id, i) => esc(nameOf(id)) + (i === 0 && crew.length > 1 ? " (หัวหน้างาน)" : "")).join(", ")}</span>` : ""}</div>
         ${j.status === "on_hold" ? `<div class="meta" style="color:var(--s-on_hold)">พักงาน: ${esc(j.hold_category || "")}${j.hold_reason ? " · " + esc(j.hold_reason) : ""} · นัด ${fmtDate(j.hold_until)}${j.hold_status ? ` · <b>${HOLD_STATUS[j.hold_status]}</b>` : ""}${graceOver(j.hold_until && j.hold_until + "T00:00:00+07:00") ? ' · <b style="color:var(--bad)">เลยวันนัด</b>' : ""}</div>` : ""}
         ${j.appointment_at && OPEN.includes(j.status) ? `<div class="meta">นัดเข้าทำงาน ${fmt(j.appointment_at)}${graceOver(j.appointment_at) && j.status !== "work_on" ? ' · <b style="color:var(--bad)">เลยนัด</b>' : ""}</div>` : ""}
-        ${j.memo_requested ? `<div class="meta"><b>ขอ Memo</b> สำหรับงานนี้</div>` : ""}
+        ${j.memo_requested && !memos.some(m => m.job_id === j.id && m.status !== "cancel") ? `<div class="meta"><b>ขอ Memo</b> สำหรับงานนี้ (ยังไม่ได้เขียน)</div>` : ""}
+        ${(() => { const u = jobParts(j); return u.length ? `<div class="meta">อะไหล่ที่ใช้: ${u.map(x => `${esc(x.name)} ${qtyf(x.q)} ${esc(x.unit)}`).join(", ")} · รวม ${baht(u.reduce((s, x) => s + x.c, 0))} บาท</div>` : ""; })()}
+        ${(() => { const d = [...prs.filter(x => x.job_id === j.id).map(x => `<a href="doc.html?pr=${x.id}" target="_blank" rel="noopener" class="mono">${esc(x.pr_no)}</a> <span class="st ${x.status}">${PR_STATUS[x.status]}</span>`),
+          ...memos.filter(x => x.job_id === j.id).map(x => `<a href="doc.html?memo=${x.id}" target="_blank" rel="noopener" class="mono">${esc(x.memo_no)}</a> <span class="st ${x.status}">${MEMO_STATUS[x.status]}</span>`)];
+          return d.length ? `<div class="meta">เอกสาร: ${d.join(" ")}</div>` : ""; })()}
         ${j.summary ? `<div class="meta">สรุปการซ่อม: ${esc(j.summary)}${j.uses_parts ? " · ใช้อะไหล่" : ""}</div>` : ""}
         ${j.rating ? `<div class="meta">ผู้แจ้งให้คะแนน ${"★".repeat(j.rating)}${"☆".repeat(5 - j.rating)}${j.rating_comment ? " · " + esc(j.rating_comment) : ""}</div>` : ""}
         <div class="meta">${photoLinks("ผู้แจ้ง", j.photo_paths)}${photoLinks("ก่อนซ่อม", j.before_photo_paths)}${photoLinks("หลังซ่อม", j.close_photo_paths)}</div></div>
@@ -268,6 +330,13 @@
         }
         if (a === "appoint") await act(id, "appoint", { at: v("#iAt") ? new Date(v("#iAt") + ":00+07:00").toISOString() : "", note: v("#iNote") });
         if (a === "edit") { if (!v("#iNote")) throw new Error("ใส่เหตุผลที่แก้"); await act(id, "edit", { detail: v("#eDetail"), location_id: v("#eLoc"), equipment_text: v("#eEquip"), reporter_name: v("#eName"), reporter_phone: v("#ePhone"), note: v("#iNote") }); }
+        if (a === "parts") {
+          if (!(+v("#iQty") > 0)) throw new Error("ใส่จำนวนให้ถูกต้อง");
+          const { error } = await sb.rpc("part_move", { p_part_id: v("#iPart"), p_kind: v("#iKind"), p_qty: +v("#iQty"), p_job_id: id, p_note: v("#iNote") || null });
+          if (error) throw error; editing = null; await loadDocs(); await loadJobs(); toast("บันทึกการเบิกอะไหล่แล้ว");
+        }
+        if (a === "pr") await savePr(id);
+        if (a === "memo") await saveMemo(id);
         if (a === "reopen") { if (!v("#iNote")) throw new Error("ใส่เหตุผล"); await transition(id, "work_on", { p_note: "ส่งกลับ: " + v("#iNote") }); }
         if (a === "cancel") { if (!v("#iNote")) throw new Error("ใส่เหตุผล"); await transition(id, "cancel", { p_note: "ยกเลิก: " + v("#iNote") }); }
       } catch (err) { alertBar(errText(err)); t.disabled = false; t.textContent = "บันทึก"; }
@@ -433,11 +502,243 @@
     if (r && r.error) alert(errText(r.error)); await loadRefs(); render();
   });
 
+  /* ---------- phase B: shared helpers ---------- */
+  function toast(m) { $("#toast").textContent = m; $("#toast").hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => $("#toast").hidden = true, 6000); }
+  function csv(name, head, rows) {
+    const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const blob = new Blob(["﻿" + [head.map(q).join(","), ...rows.map(r => r.map(q).join(","))].join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  const jobNo = id => (jobs.find(j => j.id === id) || {}).job_no || "";
+  async function savePr(jobId) {
+    const items = prItemsFromForm(), reason = $("#prReason").value.trim();
+    if (!reason) throw new Error("ใส่เหตุผลที่ขอซื้อ");
+    if (!items.length) throw new Error("ใส่รายการที่จะซื้ออย่างน้อย 1 รายการ");
+    if (items.some(x => !(x.qty > 0))) throw new Error("จำนวนต้องมากกว่า 0");
+    const { data, error } = await sb.rpc("pr_create", { p_job_id: jobId || ($("#prJob") && $("#prJob").value) || null, p_reason: reason,
+      p_supplier: $("#prSup").value.trim() || null, p_need_by: $("#prNeed").value || null, p_items: items });
+    if (error) throw error;
+    editing = null; docForm = null; await loadDocs(); await loadJobs(); toast(`สร้างใบขอซื้อ ${data} แล้ว รอ Owner อนุมัติ`);
+  }
+  async function saveMemo(jobId) {
+    const s = $("#mSubj").value.trim(), to = $("#mTo").value.trim(), body = $("#mBody").value.trim();
+    if (!s || !to || !body) throw new Error("ใส่เรื่อง เรียน และรายละเอียดให้ครบ");
+    const { data, error } = await sb.rpc("memo_create", { p_job_id: jobId || null, p_pr_id: $("#mPr").value || null, p_subject: s, p_to: to, p_body: body, p_amount: $("#mAmt").value === "" ? null : +$("#mAmt").value });
+    if (error) throw error;
+    editing = null; docForm = null; await loadDocs(); await loadJobs(); toast(`สร้าง Memo ${data} แล้ว รอ Owner อนุมัติ`);
+  }
+  document.addEventListener("click", e => {
+    const t = e.target.closest("[data-pr-add],[data-pr-del]"); if (!t) return;
+    e.preventDefault();
+    if (t.dataset.prAdd !== undefined) $("#prRows").insertAdjacentHTML("beforeend", prRow());
+    else if (document.querySelectorAll("#prRows tr").length > 1) t.closest("tr").remove();
+    prSum();
+  });
+  document.addEventListener("change", e => {
+    if (e.target.dataset.prPart === undefined) return;
+    const p = parts.find(x => x.id === e.target.value), r = e.target.closest("tr");
+    if (p) { r.querySelector("[data-pr-desc]").value = p.name; r.querySelector("[data-pr-unit]").value = p.unit; r.querySelector("[data-pr-price]").value = p.unit_cost || 0; }
+    prSum();
+  });
+  document.addEventListener("input", e => { if (e.target.closest("#prRows")) prSum(); });
+
+  /* ---------- phase B: approver inbox ---------- */
+  const memoMissing = () => jobs.filter(j => j.memo_requested && OPEN.includes(j.status) && !memos.some(m => m.job_id === j.id && m.status !== "cancel"));
+  function inboxBadge() {
+    if (!isApprover()) return;
+    const n = jobs.filter(j => j.status === "on_hold" && j.hold_status === "pending").length + prs.filter(x => x.status === "requested").length + memos.filter(x => x.status === "submitted").length;
+    $("#inboxN").textContent = n; $("#inboxN").hidden = !n;
+  }
+  const decideBox = (kind, id) => `<div class="row" style="margin-top:8px"><input data-dnote="${kind}:${id}" placeholder="หมายเหตุ (ไม่บังคับ)" style="flex:1;min-width:180px">
+    ${kind === "hold" ? `<button class="btn small primary" data-decide="hold:${id}:ack">รับทราบ</button><button class="btn small" data-decide="hold:${id}:ack_memo">รับทราบ + ขอ Memo</button><button class="btn small" data-decide="hold:${id}:rejected">ไม่อนุมัติ</button>`
+      : `<button class="btn small primary" data-decide="${kind}:${id}:approve">อนุมัติ</button><button class="btn small" data-decide="${kind}:${id}:reject">ไม่อนุมัติ</button>`}</div>`;
+  function renderInbox() {
+    inboxBadge();
+    const holds = jobs.filter(j => j.status === "on_hold" && j.hold_status === "pending"), pr = prs.filter(x => x.status === "requested"), mm = memos.filter(x => x.status === "submitted"), miss = memoMissing();
+    let h = "";
+    h += `<h3 class="grp">พักงานรออนุมัติ (${holds.length})</h3>` + (holds.map(j => `<div class="ib"><div class="meta"><span class="mono">${esc(j.job_no)}</span><span>${esc([j.building, j.floor, j.department].join(" · "))}</span><span>ช่าง ${esc(crewOf(j).map(nameOf).join(", "))}</span></div>
+      <h4>${esc(j.detail)}</h4><div class="meta" style="color:var(--s-on_hold)">${esc(j.hold_category || "")} · ${esc(j.hold_reason || "")} · นัดกลับมาทำ ${fmtDate(j.hold_until)} · พักตั้งแต่ ${fmt(j.hold_started_at)}</div>${decideBox("hold", j.id)}</div>`).join("") || `<div class="empty">ไม่มี</div>`);
+    h += `<h3 class="grp">ใบขอซื้อรออนุมัติ (${pr.length})</h3>` + (pr.map(x => `<div class="ib"><div class="meta"><a class="mono" href="doc.html?pr=${x.id}" target="_blank" rel="noopener">${esc(x.pr_no)}</a><span>${fmt(x.created_at)}</span><span>ผู้ขอ ${esc(nameOf(x.requested_by))}</span>${x.job_id ? `<span>ใบงาน ${esc(jobNo(x.job_id))}</span>` : ""}</div>
+      <h4>${esc(x.reason)} · ${baht(x.total)} บาท</h4><div class="meta">${prItems.filter(i => i.pr_id === x.id).map(i => `${esc(i.description)} ${qtyf(i.qty)} ${esc(i.unit)} × ${baht(i.unit_price)}`).join(" · ")}${x.need_by ? ` · ต้องการภายใน ${fmtDate(x.need_by)}` : ""}${x.supplier ? ` · ร้าน ${esc(x.supplier)}` : ""}</div>${decideBox("pr", x.id)}</div>`).join("") || `<div class="empty">ไม่มี</div>`);
+    h += `<h3 class="grp">Memo รออนุมัติ (${mm.length})</h3>` + (mm.map(x => `<div class="ib"><div class="meta"><a class="mono" href="doc.html?memo=${x.id}" target="_blank" rel="noopener">${esc(x.memo_no)}</a><span>${fmt(x.created_at)}</span><span>ผู้เขียน ${esc(nameOf(x.created_by))}</span>${x.job_id ? `<span>ใบงาน ${esc(jobNo(x.job_id))}</span>` : ""}</div>
+      <h4>${esc(x.subject)}${x.amount != null ? ` · ${baht(x.amount)} บาท` : ""}</h4><div class="meta">เรียน ${esc(x.to_whom)} · ${esc(x.body.slice(0, 160))}${x.body.length > 160 ? "…" : ""}</div>${decideBox("memo", x.id)}</div>`).join("") || `<div class="empty">ไม่มี</div>`);
+    if (miss.length) h += `<h3 class="grp">งานที่ขอ Memo แล้วแต่ยังไม่มี Memo (${miss.length})</h3>` + miss.map(j => `<div class="ib"><div class="meta"><a href="#" data-goto="${j.id}" class="mono">${esc(j.job_no)}</a><span>${esc(j.department || "")}</span><span>ช่าง ${esc(crewOf(j).map(nameOf).join(", "))}</span></div><h4>${esc(j.detail)}</h4></div>`).join("");
+    $("#ibList").innerHTML = h;
+  }
+  document.addEventListener("click", async e => {
+    const t = e.target.closest("[data-decide]"); if (!t) return;
+    e.preventDefault();
+    const [kind, id, d] = t.dataset.decide.split(":"), note = (document.querySelector(`[data-dnote="${kind}:${id}"]`) || {}).value || "";
+    t.disabled = true;
+    const { error } = kind === "hold" ? await sb.rpc("job_action", { p_job_id: id, p_action: "hold_decide", p_data: { decision: d, note } })
+      : await sb.rpc(kind === "pr" ? "pr_action" : "memo_action", { [kind === "pr" ? "p_pr_id" : "p_memo_id"]: id, p_action: d, p_note: note || null });
+    if (error) { t.disabled = false; alert(errText(error)); return; }
+    await loadDocs(); await loadJobs(); toast("บันทึกผลการพิจารณาแล้ว");
+  });
+
+  /* ---------- phase B: parts store ---------- */
+  ["#ptQ", "#ptF", "#pcFrom", "#pcTo"].forEach(s => $(s).addEventListener(s === "#ptQ" ? "input" : "change", render));
+  if (!$("#pcFrom").value) { $("#pcTo").value = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }); $("#pcFrom").value = new Date(Date.now() - 89 * 864e5).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }); }
+  let partOpen = null; // { id, act: receive|adjust|issue|edit|hist }
+  function renderParts() {
+    const q = $("#ptQ").value.trim().toLowerCase(), f = $("#ptF").value;
+    const low = p => p.active && p.min_qty > 0 && p.qty <= p.min_qty;
+    const list = parts.filter(p => (f === "off" ? !p.active : f === "low" ? low(p) : p.active) && (!q || [p.code, p.name, p.category, p.store].some(x => String(x || "").toLowerCase().includes(q))));
+    const act = parts.filter(p => p.active);
+    $("#ptKpi").innerHTML = [["รายการอะไหล่", act.length], ["ต่ำกว่าขั้นต่ำ", act.filter(low).length, 1], ["มูลค่าคงคลัง (บาท)", baht(act.reduce((s, p) => s + p.qty * p.unit_cost, 0))],
+      ["เบิกใช้ 30 วัน (บาท)", baht(moves.filter(m => m.kind === "issue" && mins(m.created_at) < 43200).reduce((s, m) => s - m.qty * m.unit_cost, 0) - moves.filter(m => m.kind === "return" && mins(m.created_at) < 43200).reduce((s, m) => s + m.qty * m.unit_cost, 0))],
+      ["ใบขอซื้อรออนุมัติ", prs.filter(x => x.status === "requested").length], ["รอรับของ", prs.filter(x => ["approved", "ordered"].includes(x.status)).length]]
+      .map(([a, b, red]) => `<div class="kpi"><b style="${red && b > 0 ? "color:var(--bad)" : ""}">${b}</b><span>${a}</span></div>`).join("");
+    const mgr = isMgr();
+    $("#ptList").innerHTML = `<tr><th>รหัส</th><th>ชื่อ</th><th>หมวด / ที่เก็บ</th><th class="num">คงเหลือ</th><th class="num">ขั้นต่ำ</th><th class="num">ราคา/หน่วย</th><th class="num">มูลค่า</th><th></th></tr>` +
+      (list.map(p => `<tr class="${low(p) ? "low" : ""}"><td class="mono">${esc(p.code)}</td><td>${esc(p.name)}${low(p) ? ' <b style="color:var(--bad)">ต่ำกว่าขั้นต่ำ</b>' : ""}</td><td>${esc([p.category, p.store].filter(Boolean).join(" · ") || "-")}</td>
+        <td class="num">${qtyf(p.qty)} ${esc(p.unit)}</td><td class="num">${qtyf(p.min_qty)}</td><td class="num">${baht(p.unit_cost)}</td><td class="num">${baht(p.qty * p.unit_cost)}</td>
+        <td><div class="row" style="flex-wrap:nowrap">${can() ? `<button class="btn small" data-pt="${p.id}:issue">เบิก</button>` : ""}${mgr ? `<button class="btn small" data-pt="${p.id}:receive">รับเข้า</button><button class="btn small" data-pt="${p.id}:adjust">ปรับยอด</button><button class="btn small" data-pt="${p.id}:edit">แก้ไข</button>` : ""}<button class="btn small" data-pt="${p.id}:hist">ประวัติ</button></div></td></tr>
+        ${partOpen && partOpen.id === p.id ? `<tr><td colspan="8">${partPanel(p)}</td></tr>` : ""}`).join("") || `<tr><td colspan="8"><div class="empty">${parts.length ? "ไม่พบรายการ" : "ยังไม่มีอะไหล่ในคลัง" + (mgr ? " เพิ่มได้จากฟอร์มด้านบน" : "")}</div></td></tr>`);
+    // cost by equipment over a date range
+    const f1 = $("#pcFrom").value, t1 = $("#pcTo").value, dd = d => new Date(d).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+    const used = moves.filter(m => (m.kind === "issue" || m.kind === "return") && m.job_id && (!f1 || dd(m.created_at) >= f1) && (!t1 || dd(m.created_at) <= t1));
+    const g = {};
+    used.forEach(m => { const k = m.equipment_text || "(ไม่ระบุเครื่อง)"; g[k] = g[k] || { c: 0, jobs: new Set() }; g[k].c -= m.qty * m.unit_cost; g[k].jobs.add(m.job_id); });
+    const rows = Object.entries(g).sort((a, b) => b[1].c - a[1].c);
+    $("#pcList").innerHTML = `<tr><th>เครื่อง / อุปกรณ์</th><th class="num">จำนวนใบงาน</th><th class="num">ต้นทุนอะไหล่ (บาท)</th></tr>` + (rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v.jobs.size}</td><td class="num">${baht(v.c)}</td></tr>`).join("") || `<tr><td colspan="3"><div class="empty">ยังไม่มีการเบิกอะไหล่ในช่วงนี้</div></td></tr>`);
+  }
+  function partPanel(p) {
+    const a = partOpen.act, ok = `<div class="row" style="align-self:end"><button class="btn primary small" data-ptok="${p.id}:${a}">บันทึก</button><button class="btn small" type="button" data-ptclose>ปิด</button></div>`;
+    if (a === "hist") {
+      const h = moves.filter(m => m.part_id === p.id).slice(0, 100);
+      return `<table><tr><th>วันที่</th><th>รายการ</th><th class="num">จำนวน</th><th class="num">คงเหลือ</th><th>ใบงาน / เอกสาร</th><th>หมายเหตุ</th><th>ผู้ทำ</th></tr>${h.map(m => `<tr><td>${fmt(m.created_at)}</td><td>${MOVE[m.kind]}</td><td class="num">${m.qty > 0 ? "+" : ""}${qtyf(m.qty)}</td><td class="num">${qtyf(m.qty_after)}</td>
+        <td class="mono">${esc(jobNo(m.job_id) || (prs.find(x => x.id === m.pr_id) || {}).pr_no || "")}</td><td>${esc(m.note || "")}</td><td>${esc(nameOf(m.actor_id))}</td></tr>`).join("") || `<tr><td colspan="7">ยังไม่มีการเคลื่อนไหว</td></tr>`}</table>
+        <div class="row" style="margin-top:8px"><button class="btn small" type="button" data-ptclose>ปิด</button></div>`;
+    }
+    if (a === "edit") return `<div class="inline"><label>รหัส<input id="peCode" value="${esc(p.code)}"></label><label class="span2">ชื่อ<input id="peName" value="${esc(p.name)}"></label><label>หน่วย<input id="peUnit" value="${esc(p.unit)}"></label>
+      <label>หมวด<input id="peCat" value="${esc(p.category || "")}"></label><label>ที่เก็บ<input id="peStore" value="${esc(p.store || "")}"></label><label>ขั้นต่ำ<input id="peMin" type="number" min="0" step="any" value="${p.min_qty}"></label>
+      <label>ราคา/หน่วย<input id="peCost" type="number" min="0" step="any" value="${p.unit_cost}"></label><label class="check"><input id="peAct" type="checkbox" ${p.active ? "checked" : ""}>ใช้งาน (ไม่ติ๊ก = ซ่อน)</label>${ok}</div>`;
+    const lab = { receive: "จำนวนที่รับเข้า", adjust: "ยอดที่นับได้จริง", issue: "จำนวนที่เบิก" }[a];
+    return `<div class="inline"><label>${lab} (${esc(p.unit)}) *<input id="pmQty" type="number" min="0" step="any" value="${a === "adjust" ? p.qty : 1}"></label>
+      ${a === "receive" ? `<label>ราคาต่อหน่วยครั้งนี้ (บาท)<input id="pmCost" type="number" min="0" step="any" value="${p.unit_cost}"></label>` : ""}
+      ${a === "issue" ? `<label>ใช้กับใบงาน<select id="pmJob"><option value="">ไม่ผูกใบงาน</option>${jobs.filter(j => !["close", "cancel"].includes(j.status)).map(j => `<option value="${j.id}">${esc(j.job_no)} · ${esc((j.detail || "").slice(0, 30))}</option>`).join("")}</select></label>` : ""}
+      <label class="${a === "adjust" ? "span2" : ""}">หมายเหตุ ${a === "adjust" ? "* (เหตุผลที่ปรับ)" : ""}<input id="pmNote" placeholder="${a === "receive" ? "เช่น เลขที่ใบส่งของ" : ""}"></label>${ok}</div>`;
+  }
+  document.addEventListener("click", async e => {
+    const t = e.target.closest("[data-pt],[data-ptok],[data-ptclose]"); if (!t) return;
+    e.preventDefault();
+    if (t.dataset.ptclose !== undefined) { partOpen = null; return renderParts(); }
+    if (t.dataset.pt) { const [id, act] = t.dataset.pt.split(":"); partOpen = partOpen && partOpen.id === id && partOpen.act === act ? null : { id, act }; return renderParts(); }
+    const [id, a] = t.dataset.ptok.split(":"), v = s => ($(s) ? $(s).value.trim() : "");
+    let r;
+    if (a === "edit") r = await sb.from("parts").update({ code: v("#peCode"), name: v("#peName"), unit: v("#peUnit") || "ชิ้น", category: v("#peCat") || null, store: v("#peStore") || null,
+      min_qty: +v("#peMin") || 0, unit_cost: +v("#peCost") || 0, active: $("#peAct").checked }).eq("id", id);
+    else {
+      if (v("#pmQty") === "" || +v("#pmQty") < 0) return alert("ใส่จำนวนให้ถูกต้อง");
+      if (a === "adjust" && !v("#pmNote")) return alert("ใส่เหตุผลที่ปรับยอด");
+      r = await sb.rpc("part_move", { p_part_id: id, p_kind: a, p_qty: +v("#pmQty"), p_job_id: v("#pmJob") || null, p_note: v("#pmNote") || null, p_unit_cost: a === "receive" ? +v("#pmCost") || null : null });
+    }
+    if (r.error) return alert(errText(r.error));
+    partOpen = null; await loadDocs(); if (a === "issue") await loadJobs(); render(); toast("บันทึกแล้ว");
+  });
+  $("#fPart").onsubmit = async e => {
+    e.preventDefault(); const f = e.target, opening = +f.opening.value || 0;
+    const { data, error } = await sb.from("parts").insert({ hospital_id: H.id, code: f.code.value.trim(), name: f.name.value.trim(), unit: f.unit.value.trim() || "ชิ้น",
+      category: f.category.value.trim() || null, store: f.store.value.trim() || null, min_qty: +f.min_qty.value || 0, unit_cost: +f.unit_cost.value || 0 }).select("id").single();
+    if (error) return msg("#ptMsg", error.code === "23505" ? { message: "รหัสนี้มีอยู่แล้ว" } : error);
+    if (opening > 0) { const r = await sb.rpc("part_move", { p_part_id: data.id, p_kind: "receive", p_qty: opening, p_note: "ยอดยกมา", p_unit_cost: +f.unit_cost.value || null }); if (r.error) return msg("#ptMsg", r.error); }
+    msg("#ptMsg", null, "เพิ่มอะไหล่แล้ว"); f.reset(); f.unit.value = "ชิ้น"; await loadDocs(); render();
+  };
+  $("#ptExport").onclick = () => csv(`สต็อกอะไหล่-${H.code}.csv`, ["รหัส", "ชื่อ", "หมวด", "ที่เก็บ", "หน่วย", "คงเหลือ", "ขั้นต่ำ", "ราคา/หน่วย", "มูลค่า", "สถานะ"],
+    parts.map(p => [p.code, p.name, p.category, p.store, p.unit, p.qty, p.min_qty, p.unit_cost, p.qty * p.unit_cost, !p.active ? "ซ่อน" : p.min_qty > 0 && p.qty <= p.min_qty ? "ต่ำกว่าขั้นต่ำ" : "ปกติ"]));
+  $("#pcExport").onclick = () => {
+    const f1 = $("#pcFrom").value, t1 = $("#pcTo").value, dd = d => new Date(d).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+    csv(`การเคลื่อนไหวอะไหล่-${H.code}-${f1}-${t1}.csv`, ["วันที่", "รายการ", "รหัส", "อะไหล่", "จำนวน", "คงเหลือหลังทำ", "ราคา/หน่วย", "มูลค่า", "ใบงาน", "เครื่อง/อุปกรณ์", "ใบขอซื้อ", "หมายเหตุ", "ผู้ทำ"],
+      moves.filter(m => (!f1 || dd(m.created_at) >= f1) && (!t1 || dd(m.created_at) <= t1)).map(m => { const p = parts.find(x => x.id === m.part_id) || {};
+        return [fmt(m.created_at), MOVE[m.kind], p.code, p.name, m.qty, m.qty_after, m.unit_cost, m.qty * m.unit_cost, jobNo(m.job_id), m.equipment_text, (prs.find(x => x.id === m.pr_id) || {}).pr_no, m.note, nameOf(m.actor_id)]; }));
+  };
+
+  /* ---------- phase B: purchase requests and memos ---------- */
+  $("#dcF").addEventListener("change", render);
+  $("#newPr").onclick = () => { docForm = docForm === "pr" ? null : "pr"; renderDocs(); };
+  $("#newMemo").onclick = () => { docForm = docForm === "memo" ? null : "memo"; renderDocs(); };
+  let docOpen = null;
+  function renderDocs() {
+    const ok = k => `<div class="row" style="align-self:end"><button class="btn primary small" data-dcok="${k}">บันทึก</button><button class="btn small" type="button" data-dcclose>ยกเลิก</button></div>`;
+    const keep = $("#dcForm").dataset.k === (docForm || "");
+    if (!keep) $("#dcForm").innerHTML = docForm ? `<div class="panel" style="margin-bottom:16px"><h3>${docForm === "pr" ? "ใบขอซื้อใหม่" : "Memo ใหม่"}</h3><div class="inline" style="background:none;padding:0">${docForm === "pr" ? prForm(null, ok("pr")) : memoForm(null, null, ok("memo"))}</div></div>` : "";
+    $("#dcForm").dataset.k = docForm || "";
+    const f = $("#dcF").value, mgr = isMgr();
+    const pl = prs.filter(x => !f || ["requested", "approved", "ordered"].includes(x.status));
+    $("#prList").innerHTML = `<tr><th>เลขที่</th><th>วันที่</th><th>ใบงาน</th><th>เหตุผล / รายการ</th><th class="num">รวม (บาท)</th><th>สถานะ</th><th></th></tr>` + (pl.map(x => {
+      const its = prItems.filter(i => i.pr_id === x.id);
+      let b = `<a class="btn small" href="doc.html?pr=${x.id}" target="_blank" rel="noopener">พิมพ์</a>`;
+      if (mgr && x.status === "approved") b += `<button class="btn small" data-dc="pr:${x.id}:ordered">สั่งซื้อแล้ว</button>`;
+      if (mgr && ["approved", "ordered"].includes(x.status)) b += `<button class="btn small primary" data-dc="pr:${x.id}:received">ได้รับของ (เข้าคลัง)</button>`;
+      if ((mgr || x.requested_by === me.id) && !["received", "cancel"].includes(x.status)) b += `<button class="btn small" data-dc="pr:${x.id}:cancel">ยกเลิก</button>`;
+      if (x.status !== "cancel") b += `<button class="btn small" data-dc="pr:${x.id}:memo">เขียน Memo</button>`;
+      return `<tr><td class="mono">${esc(x.pr_no)}</td><td>${fmt(x.created_at)}<br><small>${esc(nameOf(x.requested_by))}</small></td><td class="mono">${esc(jobNo(x.job_id))}</td>
+        <td>${esc(x.reason)}<br><small>${its.map(i => `${esc(i.description)} ${qtyf(i.qty)} ${esc(i.unit)}`).join(", ")}</small>${x.decision_note ? `<br><small>หมายเหตุผู้อนุมัติ: ${esc(x.decision_note)}</small>` : ""}</td>
+        <td class="num">${baht(x.total)}</td><td><span class="st ${x.status}">${PR_STATUS[x.status]}</span>${x.decided_by ? `<br><small>${esc(nameOf(x.decided_by))}</small>` : ""}</td><td><div class="row">${b}</div></td></tr>`;
+    }).join("") || `<tr><td colspan="7"><div class="empty">ยังไม่มีใบขอซื้อ</div></td></tr>`);
+    const ml = memos.filter(x => !f || x.status === "submitted");
+    $("#memoList").innerHTML = `<tr><th>เลขที่</th><th>วันที่</th><th>เรื่อง</th><th>อ้างอิง</th><th class="num">จำนวนเงิน</th><th>สถานะ</th><th></th></tr>` + (ml.map(x => `<tr><td class="mono">${esc(x.memo_no)}</td><td>${fmt(x.created_at)}<br><small>${esc(nameOf(x.created_by))}</small></td>
+      <td>${esc(x.subject)}<br><small>เรียน ${esc(x.to_whom)}</small>${x.decision_note ? `<br><small>หมายเหตุผู้อนุมัติ: ${esc(x.decision_note)}</small>` : ""}</td><td class="mono">${esc([jobNo(x.job_id), (prs.find(p => p.id === x.pr_id) || {}).pr_no].filter(Boolean).join(" "))}</td>
+      <td class="num">${x.amount != null ? baht(x.amount) : "-"}</td><td><span class="st ${x.status}">${MEMO_STATUS[x.status]}</span>${x.decided_by ? `<br><small>${esc(nameOf(x.decided_by))}</small>` : ""}</td>
+      <td><div class="row"><a class="btn small" href="doc.html?memo=${x.id}" target="_blank" rel="noopener">พิมพ์</a>${(mgr || x.created_by === me.id) && x.status === "submitted" ? `<button class="btn small" data-dc="memo:${x.id}:cancel">ยกเลิก</button>` : ""}</div></td></tr>`).join("") || `<tr><td colspan="7"><div class="empty">ยังไม่มี Memo</div></td></tr>`);
+    if (docOpen) { const fm = $("#dcForm"); if (fm) fm.scrollIntoView({ behavior: "smooth" }); docOpen = null; }
+  }
+  document.addEventListener("click", async e => {
+    const t = e.target.closest("[data-dc],[data-dcok],[data-dcclose]"); if (!t) return;
+    e.preventDefault();
+    if (t.dataset.dcclose !== undefined) { docForm = null; return renderDocs(); }
+    if (t.dataset.dcok) {
+      t.disabled = true;
+      try { if (t.dataset.dcok === "pr") await savePr(null); else await saveMemo(null); render(); }
+      catch (err) { alert(errText(err)); t.disabled = false; }
+      return;
+    }
+    const [kind, id, a] = t.dataset.dc.split(":");
+    if (a === "memo") { docForm = "memo"; $("#dcForm").dataset.k = ""; renderDocs(); $("#mPr").value = id; const x = prs.find(p => p.id === id); $("#mSubj").value = "ขออนุมัติจัดซื้อตาม " + x.pr_no; $("#mAmt").value = x.total; $("#mBody").value = `ตามใบขอซื้อเลขที่ ${x.pr_no} เหตุผล: ${x.reason}\nรายการ: ${prItems.filter(i => i.pr_id === id).map(i => `${i.description} ${qtyf(i.qty)} ${i.unit}`).join(", ")}\nรวมเป็นเงิน ${baht(x.total)} บาท\n\nจึงเรียนมาเพื่อโปรดพิจารณาอนุมัติ`; docOpen = 1; $("#dcForm").scrollIntoView({ behavior: "smooth" }); return; }
+    let note = null;
+    if (a === "cancel") { note = window.prompt("เหตุผลที่ยกเลิก"); if (note === null) return; }
+    if (a === "received" && !window.confirm("ยืนยันว่าได้รับของครบแล้ว รายการที่ผูกกับอะไหล่ในคลังจะถูกบวกเข้าสต็อกทันที")) return;
+    const { error } = await sb.rpc(kind === "pr" ? "pr_action" : "memo_action", { [kind === "pr" ? "p_pr_id" : "p_memo_id"]: id, p_action: a, p_note: note });
+    if (error) return alert(errText(error));
+    await loadDocs(); render(); toast("บันทึกแล้ว");
+  });
+  $("#prExport").onclick = () => csv(`ทะเบียนใบขอซื้อ-${H.code}.csv`, ["เลขที่", "วันที่", "ผู้ขอ", "ใบงาน", "เหตุผล", "รายการ", "ผู้ขาย", "ต้องการภายใน", "รวม (บาท)", "สถานะ", "ผู้พิจารณา", "วันที่พิจารณา", "หมายเหตุผู้อนุมัติ", "สั่งซื้อ", "รับของ"],
+    prs.map(x => [x.pr_no, fmt(x.created_at), nameOf(x.requested_by), jobNo(x.job_id), x.reason, prItems.filter(i => i.pr_id === x.id).map(i => `${i.description} ${i.qty} ${i.unit} x ${i.unit_price}`).join("; "), x.supplier, x.need_by, x.total, PR_STATUS[x.status], nameOf(x.decided_by), fmt(x.decided_at), x.decision_note, fmt(x.ordered_at), fmt(x.received_at)]));
+  $("#memoExport").onclick = () => csv(`ทะเบียน Memo-${H.code}.csv`, ["เลขที่", "วันที่", "ผู้เขียน", "เรื่อง", "เรียน", "รายละเอียด", "จำนวนเงิน", "ใบงาน", "ใบขอซื้อ", "สถานะ", "ผู้พิจารณา", "วันที่พิจารณา", "หมายเหตุผู้อนุมัติ"],
+    memos.map(x => [x.memo_no, fmt(x.created_at), nameOf(x.created_by), x.subject, x.to_whom, x.body, x.amount, jobNo(x.job_id), (prs.find(p => p.id === x.pr_id) || {}).pr_no, MEMO_STATUS[x.status], nameOf(x.decided_by), fmt(x.decided_at), x.decision_note]));
+
+  /* ---------- phase B: open-jobs report grouped by reason ---------- */
+  $("#rpG").addEventListener("change", render);
+  const daysOpen = j => Math.floor(mins(j.created_at) / 1440);
+  function reportGroups() {
+    const g = $("#rpG").value, open = jobs.filter(j => OPEN.includes(j.status));
+    const key = j => g === "reason" ? (j.status === "on_hold" ? j.hold_category || "พักงาน (ไม่ระบุเหตุผล)" : "ยังไม่พักงาน: " + statusLabel(j))
+      : g === "status" ? statusLabel(j) : g === "tech" ? (crewOf(j).map(nameOf).join(", ") || "ยังไม่มอบหมาย") : (j.department || "ไม่ระบุแผนก");
+    const m = {}; open.forEach(j => (m[key(j)] = m[key(j)] || []).push(j));
+    return Object.entries(m).map(([k, l]) => [k, l.sort((a, b) => a.created_at.localeCompare(b.created_at))]).sort((a, b) => (a[0].startsWith("ยังไม่พักงาน") - b[0].startsWith("ยังไม่พักงาน")) || b[1].length - a[1].length);
+  }
+  function renderReport() {
+    const gs = reportGroups(), total = gs.reduce((s, x) => s + x[1].length, 0);
+    $("#rpBody").innerHTML = `<p class="meta">${esc(H.name)} · ข้อมูล ณ ${fmt(new Date().toISOString())} · ใบงานค้างทั้งหมด ${total} ใบ</p>` + (gs.map(([k, l]) => `<h3 class="grp">${esc(k)} (${l.length})</h3>
+      <div class="scroll"><table><tr><th>เลขใบงาน</th><th>วันที่แจ้ง</th><th class="num">ค้าง (วัน)</th><th>แผนก</th><th>รายละเอียด</th><th>ช่าง</th><th>เหตุผล / หมายเหตุ</th><th>นัด</th></tr>${l.map(j => `<tr${isLate(j) ? ' class="low"' : ""}><td class="mono">${esc(j.job_no)}</td><td>${fmt(j.created_at)}</td><td class="num">${daysOpen(j)}</td>
+        <td>${esc(j.department || "")}</td><td>${esc(j.detail)}</td><td>${esc(crewOf(j).map(nameOf).join(", "))}</td><td>${esc([j.hold_category, j.hold_reason].filter(Boolean).join(" · ") || statusLabel(j))}</td><td>${j.hold_until ? fmtDate(j.hold_until) : j.appointment_at ? fmt(j.appointment_at) : "-"}</td></tr>`).join("")}</table></div>`).join("") || `<div class="empty">ไม่มีงานค้าง</div>`);
+  }
+  $("#rpPrint").onclick = () => window.print();
+  $("#rpExport").onclick = () => csv(`รายงานงานค้าง-${H.code}-${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })}.csv`, ["กลุ่ม", "เลขใบงาน", "วันที่แจ้ง", "ค้าง (วัน)", "อาคาร", "ชั้น", "แผนก", "รายละเอียด", "ช่าง", "สถานะ", "เหตุผลพักงาน", "หมายเหตุพักงาน", "วันนัด", "เกิน SLA"],
+    reportGroups().flatMap(([k, l]) => l.map(j => [k, j.job_no, fmt(j.created_at), daysOpen(j), j.building, j.floor, j.department, j.detail, crewOf(j).map(nameOf).join(", "), statusLabel(j), j.hold_category, j.hold_reason, j.hold_until || fmt(j.appointment_at), isLate(j) ? "เกิน" : ""])));
+
   function render() {
     if (!H) return;
+    inboxBadge();
     if (!$("#tab-jobs").hidden) renderJobs();
+    if (!$("#tab-inbox").hidden) renderInbox();
+    if (!$("#tab-parts").hidden) renderParts();
+    if (!$("#tab-docs").hidden) renderDocs();
+    if (!$("#tab-report").hidden) renderReport();
     if (!$("#tab-dash").hidden) renderDash();
     if (!$("#tab-setup").hidden) renderSetup();
   }
-  setInterval(() => { if (!editing) render(); checkAlerts(); }, 30000);
+  setInterval(() => { if (!editing && !partOpen && !docForm) render(); checkAlerts(); }, 30000);
 })();

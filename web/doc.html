@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>พิมพ์เอกสาร | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .paper{background:#fff;color:#111;max-width:800px;margin:0 auto;padding:40px 48px;border:1px solid #d9dfe5;border-radius:6px;font-size:15px;line-height:1.7}
+  .paper h2{text-align:center;font-size:22px;margin:0 0 4px}
+  .paper .org{text-align:center;color:#444;margin-bottom:22px}
+  .paper table{font-size:14px}.paper th,.paper td{border:1px solid #999;padding:6px 8px}.paper th{background:#f3f3f3;color:#111}
+  .kv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:4px 12px;margin-bottom:16px}.kv b{font-weight:600}
+  .body{white-space:pre-wrap;margin:14px 0 24px;text-indent:0}
+  .sign{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin-top:48px;text-align:center;font-size:14px}
+  .sign div{padding-top:36px;border-top:1px dotted #555}
+  .stamp{display:inline-block;border:2px solid currentColor;border-radius:6px;padding:2px 10px;font-weight:700}
+  .stamp.approved,.stamp.received{color:#0f8a6a}.stamp.rejected{color:#c2352b}.stamp.requested,.stamp.submitted{color:#b7791f}.stamp.ordered{color:#1f6fb2}.stamp.cancel{color:#8a95a1}
+  @media print{header,.noprint{display:none!important}body{background:#fff}main{padding:0}.paper{border:0;padding:0;max-width:none}@page{size:A4;margin:18mm}}
+  @media (max-width:600px){.paper{padding:20px 16px}.sign{grid-template-columns:minmax(0,1fr)}.kv{grid-template-columns:90px minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<header class="noprint"><div class="wrap"><div class="top"><span class="tag">RS</span><h1>พิมพ์เอกสาร</h1><div class="who"><button class="btn primary small" type="button" onclick="print()">พิมพ์ / บันทึกเป็น PDF</button></div></div></div></header>
+<main class="wrap"><div id="out" class="paper">กำลังโหลด…</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script>
+(async () => {
+  const { sb, $, esc, errText } = RS;
+  const q = new URLSearchParams(location.search), out = $("#out");
+  const thDate = d => d ? new Date(d).toLocaleDateString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "long", year: "numeric" }) : "-";
+  const baht = n => Number(n || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const PR = { requested: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ไม่อนุมัติ", ordered: "สั่งซื้อแล้ว", received: "ได้รับของแล้ว", cancel: "ยกเลิก" };
+  const MEMO = { submitted: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ไม่อนุมัติ", cancel: "ยกเลิก" };
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { out.innerHTML = `ต้องเข้าสู่ระบบก่อน <a href="staff.html">ไปหน้าเจ้าหน้าที่</a>`; return; }
+  const { data: me } = await sb.from("profiles").select("hospitals(name)").eq("id", session.user.id).maybeSingle();
+  const hosp = me && me.hospitals ? me.hospitals.name : "";
+  const names = async ids => { ids = [...new Set(ids.filter(Boolean))]; if (!ids.length) return {}; const { data } = await sb.from("profiles").select("id,full_name").in("id", ids); return Object.fromEntries((data || []).map(p => [p.id, p.full_name || ""])); };
+  const jobNo = async id => { if (!id) return ""; const { data } = await sb.from("jobs").select("job_no,building,floor,department,detail").eq("id", id).maybeSingle(); return data; };
+  try {
+    if (q.get("pr")) {
+      const { data: x, error } = await sb.from("purchase_requests").select("*").eq("id", q.get("pr")).single(); if (error) throw error;
+      const { data: items } = await sb.from("pr_items").select("*").eq("pr_id", x.id).order("id");
+      const n = await names([x.requested_by, x.decided_by]), j = await jobNo(x.job_id);
+      document.title = x.pr_no;
+      out.innerHTML = `<h2>ใบขอซื้อ (Purchase Request)</h2><div class="org">${esc(hosp)} · งานวิศวกรรมอาคาร</div>
+        <div class="kv"><b>เลขที่</b><span class="mono">${esc(x.pr_no)}</span><b>วันที่</b><span>${thDate(x.created_at)}</span>
+          ${j ? `<b>อ้างอิงใบงาน</b><span><span class="mono">${esc(j.job_no)}</span> ${esc([j.building, j.floor, j.department].filter(Boolean).join(" "))} · ${esc(j.detail)}</span>` : ""}
+          <b>เหตุผล</b><span>${esc(x.reason)}</span>${x.supplier ? `<b>ผู้ขาย / ร้าน</b><span>${esc(x.supplier)}</span>` : ""}${x.need_by ? `<b>ต้องการภายใน</b><span>${thDate(x.need_by)}</span>` : ""}
+          <b>สถานะ</b><span><span class="stamp ${x.status}">${PR[x.status]}</span></span></div>
+        <table><tr><th style="width:40px">ที่</th><th>รายการ</th><th class="num">จำนวน</th><th>หน่วย</th><th class="num">ราคา/หน่วย</th><th class="num">จำนวนเงิน</th></tr>
+          ${(items || []).map((i, k) => `<tr><td>${k + 1}</td><td>${esc(i.description)}</td><td class="num">${i.qty}</td><td>${esc(i.unit)}</td><td class="num">${baht(i.unit_price)}</td><td class="num">${baht(i.qty * i.unit_price)}</td></tr>`).join("")}
+          <tr><td colspan="5" class="num"><b>รวมทั้งสิ้น</b></td><td class="num"><b>${baht(x.total)}</b></td></tr></table>
+        ${x.decision_note ? `<p>หมายเหตุผู้พิจารณา: ${esc(x.decision_note)}</p>` : ""}
+        <div class="sign"><div>ผู้ขอซื้อ<br>${esc(n[x.requested_by] || "")}<br>${thDate(x.created_at)}</div><div>ผู้ตรวจสอบ<br><br>วันที่ ........................</div>
+          <div>ผู้อนุมัติ<br>${["approved", "ordered", "received"].includes(x.status) ? esc(n[x.decided_by] || "") + "<br>" + thDate(x.decided_at) : "<br>วันที่ ........................"}</div></div>`;
+    } else if (q.get("memo")) {
+      const { data: m, error } = await sb.from("memos").select("*").eq("id", q.get("memo")).single(); if (error) throw error;
+      const n = await names([m.created_by, m.decided_by]), j = await jobNo(m.job_id);
+      let prNo = ""; if (m.pr_id) { const { data } = await sb.from("purchase_requests").select("pr_no").eq("id", m.pr_id).maybeSingle(); prNo = data ? data.pr_no : ""; }
+      document.title = m.memo_no;
+      out.innerHTML = `<h2>บันทึกข้อความ</h2><div class="org">${esc(hosp)}</div>
+        <div class="kv"><b>ส่วนงาน</b><span>งานวิศวกรรมอาคาร ${esc(hosp)}</span><b>ที่</b><span class="mono">${esc(m.memo_no)}</span><b>วันที่</b><span>${thDate(m.created_at)}</span>
+          <b>เรื่อง</b><span>${esc(m.subject)}</span><b>เรียน</b><span>${esc(m.to_whom)}</span>
+          ${j || prNo ? `<b>อ้างถึง</b><span>${[j ? "ใบงาน " + esc(j.job_no) : "", prNo ? "ใบขอซื้อ " + esc(prNo) : ""].filter(Boolean).join(" · ")}</span>` : ""}
+          ${m.amount != null ? `<b>จำนวนเงิน</b><span>${baht(m.amount)} บาท</span>` : ""}<b>สถานะ</b><span><span class="stamp ${m.status}">${MEMO[m.status]}</span></span></div>
+        <div class="body">${esc(m.body)}</div>
+        <div class="sign"><div>ผู้เสนอ<br>${esc(n[m.created_by] || "")}<br>${thDate(m.created_at)}</div><div>ผู้ตรวจสอบ<br><br>วันที่ ........................</div>
+          <div>ผู้อนุมัติ<br>${m.status === "approved" || m.status === "rejected" ? esc(n[m.decided_by] || "") + "<br>" + (m.status === "approved" ? "อนุมัติ" : "ไม่อนุมัติ") + " " + thDate(m.decided_at) : "<br>วันที่ ........................"}</div></div>
+        ${m.decision_note ? `<p style="margin-top:20px">ความเห็นผู้อนุมัติ: ${esc(m.decision_note)}</p>` : ""}`;
+    } else out.textContent = "ไม่ได้ระบุเอกสาร";
+  } catch (e) { out.innerHTML = `<div class="note bad">${esc(errText(e))}</div>`; }
+})();
+</script>
+</body>
+</html>
