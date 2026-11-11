@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>บันทึกประจำวัน OP | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .fld{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:8px;align-items:center;border-top:1px solid var(--line);padding:9px 0}
+  .fld.bad{background:color-mix(in srgb,var(--bad) 7%,transparent)}
+  .fld .yn{display:flex;gap:6px}
+  .fld .yn label{flex-direction:row;gap:4px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer}
+  .fld .yn input{width:auto;margin:0}
+  table.op{font-size:11px;border-collapse:collapse;width:100%}
+  table.op th,table.op td{border:1px solid var(--line);padding:3px 4px;text-align:center;white-space:nowrap}
+  table.op td.bad{color:var(--bad);font-weight:700}
+  table.op th{font-weight:600}
+  .stk{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+  .stk div{border:1px dashed var(--line);border-radius:8px;padding:8px;text-align:center;background:#fff;color:#111;break-inside:avoid}
+  .stk img{width:120px;height:120px}.stk b{display:block}.stk small{display:block;font-size:11px}
+  @media (max-width:560px){.fld{grid-template-columns:minmax(0,1fr)}}
+  @media print{@page{size:A4 landscape;margin:8mm}table.op{font-size:9px}table.op th,table.op td{border-color:#999}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">OP</span><h1 id="title">บันทึกประจำวัน (OP Check Sheet)</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าใบงาน</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="today" aria-selected="true">บันทึกวันนี้</button>
+    <button role="tab" data-tab="sheet" aria-selected="false">ตารางรายเดือน</button>
+    <button role="tab" data-tab="meter" aria-selected="false">สรุปมิเตอร์น้ำไฟ</button>
+    <button role="tab" data-tab="points" aria-selected="false">จุดตรวจ &amp; มิเตอร์</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+
+  <section id="tab-today" hidden>
+    <div class="filters noprint" style="max-width:820px"><label>วันที่<input id="tDate" type="date"></label><label>ค้นหา<input id="tQ" placeholder="ชื่อจุด อาคาร แบบฟอร์ม"></label><select id="tForm" style="align-self:end"></select></div>
+    <div class="kpis" id="tKpi"></div>
+    <div id="tEntry"></div>
+    <div class="jobs" id="tList"></div>
+  </section>
+
+  <section id="tab-sheet" hidden>
+    <div class="filters noprint" style="max-width:900px"><label>จุดตรวจ<select id="sPoint"></select></label><label>เดือน<input id="sMonth" type="month"></label>
+      <button class="btn" type="button" id="sCsv" style="align-self:end">Excel (CSV)</button><button class="btn primary" type="button" id="sPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+    <div id="sBody"></div>
+  </section>
+
+  <section id="tab-meter" hidden>
+    <h2 class="noprint">สรุปการใช้น้ำ-ไฟจากมิเตอร์</h2>
+    <p class="sub noprint">ปริมาณใช้ต่อวัน = (เลขวันนี้ − เลขครั้งก่อน) × ตัวคูณ CT ของมิเตอร์ เทียบ 3 ระดับ: วันนี้กับเมื่อวาน · วันเดียวกันสัปดาห์ก่อน · เดือนนี้กับเดือนก่อน (เฉลี่ยต่อวัน)</p>
+    <div class="filters noprint" style="max-width:700px"><label>วันที่<input id="mDate" type="date"></label><button class="btn" type="button" id="mCsv" style="align-self:end">Excel (CSV)</button><button class="btn primary" type="button" id="mPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+    <div class="scroll"><table id="mTable"></table></div>
+  </section>
+
+  <section id="tab-points" hidden>
+    <h2>จุดตรวจและทะเบียนมิเตอร์</h2>
+    <p class="sub">1 จุด = 1 เครื่อง / ตู้ / มิเตอร์ / จุดเก็บน้ำ ที่ต้องบันทึกทุกวัน ใช้แบบฟอร์ม OP ตามชนิด มิเตอร์ใส่เลขมิเตอร์และตัวคูณ CT ช่างกรอกเลขหน้าปัด ระบบคูณให้เอง</p>
+    <form class="panel noprint" id="fPt" data-manager hidden style="margin-bottom:14px"><h3 id="pTitle">เพิ่มจุดตรวจ</h3>
+      <div class="grid"><label class="span2">แบบฟอร์ม *<select id="pForm" required></select></label><label>ชื่อจุด *<input id="pName" required placeholder="เช่น MDB อาคาร A / มิเตอร์ไตเทียม A2"></label>
+        <label>อาคาร<input id="pB"></label><label>ชั้น<input id="pF"></label><label>สถานที่<input id="pP"></label>
+        <label>เลขมิเตอร์ / No.<input id="pNo"></label><label>ตัวคูณ CT<input id="pMul" type="number" step="any" value="1" min="0"></label><label>ยี่ห้อ / รุ่น<input id="pBrand"></label></div>
+      <div class="row" style="margin-top:10px"><button class="btn primary" id="pSave">บันทึก</button><button class="btn" type="button" id="pReset">ล้างฟอร์ม</button></div><div id="pMsg"></div></form>
+    <div class="filters noprint"><button class="btn" type="button" id="pQr">พิมพ์ QR ของทุกจุด</button></div>
+    <div class="scroll"><table id="pTable"></table></div>
+    <div class="stk" id="pGrid" style="margin-top:14px"></div>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/op.js"></script>
+</body>
+</html>
