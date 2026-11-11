@@ -21,7 +21,8 @@
   .sig{display:flex;gap:8px;flex-wrap:wrap;font-size:13px}
   .sig span{border:1px solid var(--line);border-radius:6px;padding:2px 8px}
   .sig span.on{border-color:var(--s-work_on);color:var(--s-work_on)}
-  @media print{.stk div{border:1px solid #999}}
+  .stk div{cursor:pointer}.stk div.sel{outline:3px solid var(--accent);border-style:solid}
+  @media print{.stk div{border:1px solid #999;outline:none!important}.stk.pick div:not(.sel){display:none}}
 </style>
 </head>
 <body>
@@ -98,8 +99,8 @@
 
   <section id="tab-qr" hidden>
     <h2 class="noprint">พิมพ์สติกเกอร์ QR</h2>
-    <p class="sub noprint">กรองแล้วกดพิมพ์ ติด 1 ดวงต่อ 1 เครื่อง ช่างใช้กล้องมือถือสแกนแล้วเปิดใบตรวจของเดือนนั้นได้ทันที</p>
-    <div class="filters noprint"><select id="qB"></select><select id="qF"></select><select id="qT"></select><button class="btn primary" type="button" id="qPrint">พิมพ์</button></div>
+    <p class="sub noprint">ค้นหาหรือกรอง แล้วแตะดวงที่ต้องการเพื่อเลือกพิมพ์เฉพาะเครื่องนั้น (ไม่เลือก = พิมพ์ทุกดวงที่แสดง) ติด 1 ดวงต่อ 1 เครื่อง ช่างใช้กล้องมือถือสแกนแล้วเปิดใบตรวจของเดือนนั้นได้ทันที</p>
+    <div class="filters noprint"><input id="qQ" placeholder="ค้นหา TAG หรือชื่อเครื่อง"><select id="qB"></select><select id="qF"></select><select id="qT"></select><button class="btn" type="button" id="qClear">ล้างที่เลือก</button><button class="btn primary" type="button" id="qPrint">พิมพ์</button></div>
     <div id="qInfo" class="meta noprint"></div>
     <div class="stk" id="qGrid"></div>
   </section>

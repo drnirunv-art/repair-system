@@ -432,14 +432,21 @@
 
   /* ---------- QR stickers ---------- */
   const tagUrl = e => { const u = new URL("pm.html", location.href); u.search = ""; u.searchParams.set("h", H.code); u.searchParams.set("tag", e.tag); return u.toString(); };
+  const qSel = new Set();
   function renderQr() {
-    const l = equip.filter(e => e.tag && (!$("#qB").value || e.building === $("#qB").value) && (!$("#qF").value || e.floor === $("#qF").value) && (!$("#qT").value || e.eq_type === $("#qT").value));
+    const qq = $("#qQ").value.trim().toLowerCase();
+    const l = equip.filter(e => e.tag && (!qq || (e.tag + " " + e.name).toLowerCase().includes(qq)) && (!$("#qB").value || e.building === $("#qB").value) && (!$("#qF").value || e.floor === $("#qF").value) && (!$("#qT").value || e.eq_type === $("#qT").value));
     const noTag = equip.filter(e => !e.tag).length;
-    $("#qInfo").textContent = `${l.length} ดวง${l.length > 300 ? " (แสดง 300 ดวงแรก กรองเพิ่มเพื่อพิมพ์ทีละชุด)" : ""}${noTag ? ` · มี ${noTag} เครื่องที่ยังไม่มี TAG จึงยังพิมพ์ไม่ได้` : ""}`;
+    qSel.forEach(id => { if (!l.some(e => e.id === id)) qSel.delete(id); });
+    $("#qGrid").classList.toggle("pick", qSel.size > 0);
+    $("#qInfo").textContent = `${qSel.size ? "เลือกไว้ " + qSel.size + " ดวง · " : ""}${l.length} ดวง${l.length > 300 ? " (แสดง 300 ดวงแรก กรองเพิ่มเพื่อพิมพ์ทีละชุด)" : ""}${noTag ? ` · มี ${noTag} เครื่องที่ยังไม่มี TAG จึงยังพิมพ์ไม่ได้` : ""}`;
     $("#qGrid").innerHTML = l.slice(0, 300).map(e => { const q = qrcode(0, "M"); q.addData(tagUrl(e)); q.make();
-      return `<div><small>${esc(H.name)} · PM2</small><img src="${q.createDataURL(4, 2)}" alt="QR ${esc(e.tag)}"><b>${esc(e.tag)}</b><small>${esc(e.name)}</small><small>${esc(where(e))}</small></div>`; }).join("") || '<div class="empty">ไม่มีเครื่องที่มี TAG ตามตัวกรอง</div>';
+      return `<div data-q="${e.id}" class="${qSel.has(e.id) ? "sel" : ""}"><small>${esc(H.name)} · PM2</small><img src="${q.createDataURL(4, 2)}" alt="QR ${esc(e.tag)}"><b>${esc(e.tag)}</b><small>${esc(e.name)}</small><small>${esc(where(e))}</small></div>`; }).join("") || '<div class="empty">ไม่มีเครื่องที่มี TAG ตามตัวกรอง</div>';
   }
   ["#qB", "#qF", "#qT"].forEach(s => $(s).onchange = renderQr);
+  $("#qQ").oninput = renderQr;
+  $("#qClear").onclick = () => { qSel.clear(); renderQr(); };
+  $("#qGrid").onclick = ev => { const d = ev.target.closest("[data-q]"); if (!d) return; qSel.has(d.dataset.q) ? qSel.delete(d.dataset.q) : qSel.add(d.dataset.q); renderQr(); };
   $("#qPrint").onclick = () => window.print();
 
   /* ---------- check-sheet templates ---------- */
