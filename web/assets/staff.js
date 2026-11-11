@@ -228,6 +228,7 @@
       if (!["close", "cancel"].includes(j.status)) acts += b("parts", "เบิกอะไหล่");
       if (OPEN.includes(j.status)) acts += b("pr", "ขอซื้อ") + b("memo", "เขียน Memo", j.memo_requested && !memos.some(m => m.job_id === j.id && m.status !== "cancel"));
       if (OPEN.includes(j.status) && isMgr()) acts += b("edit", "แก้ไขใบงาน") + b("cancel", "ยกเลิกใบงาน");
+      if (["clear", "close"].includes(j.status) && j.summary) acts += `<a class="btn small" href="ops.html?tab=kb&job=${j.id}">บันทึกเป็นวิธีแก้</a>`;
       acts += b("history", "ประวัติ");
     }
     const inline = editing && editing.id === j.id ? `<div class="inline">${inlineForm(j)}</div>` : "";

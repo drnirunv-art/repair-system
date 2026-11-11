@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>รายงานกะและเดือน | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">RS</span><h1 id="title">รายงานกะและรายงานประจำเดือน</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าใบงาน</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="shift" aria-selected="true">ส่งเวร 3 กะ</button>
+    <button role="tab" data-tab="daily" aria-selected="false">สรุปรับแจ้งรายวัน</button>
+    <button role="tab" data-tab="roster" aria-selected="false">ตารางกะ</button>
+    <button role="tab" data-tab="month" aria-selected="false">รายงานประจำเดือน</button>
+    <button role="tab" data-tab="kb" aria-selected="false">คลังวิธีแก้</button>
+    <button role="tab" data-tab="exec" aria-selected="false" hidden id="execTab">ภาพรวม 12 รพ.</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+
+  <section id="tab-shift" hidden>
+    <h2>รายงานประจำวัน 3 กะ และส่งเวร</h2>
+    <p class="sub">ตัวเลขงานซ่อมของแต่ละกะเติมให้อัตโนมัติจากประวัติใบงาน คนในกะเขียนเหตุการณ์และงานที่ต้องตามต่อ แล้วกด “ส่งรายงานกะ” คนในกะถัดไปกด “รับเวร”</p>
+    <div class="filters noprint" style="max-width:520px"><label>วันที่<input id="shDate" type="date"></label><button class="btn" type="button" id="shPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+    <div id="shMine"></div>
+    <div id="shBody"></div>
+  </section>
+
+  <section id="tab-daily" hidden>
+    <h2>สรุปงานรับแจ้งรายวัน</h2>
+    <div class="filters noprint" style="max-width:860px"><label>วันที่<input id="dyDate" type="date"></label><button class="btn" type="button" id="dyExport" style="align-self:end">ดาวน์โหลด Excel (CSV)</button><button class="btn primary" type="button" id="dyPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+    <div id="dyBody"></div>
+  </section>
+
+  <section id="tab-roster" hidden>
+    <h2>ตารางกะ</h2>
+    <p class="sub">หัวหน้าจัดคนเข้ากะ ช่างกด “ลงเวลาเข้างาน” เมื่อมาถึง ถ้าลงเวลาหลังเวลาเริ่มกะเกินที่ตั้งไว้จะนับว่า “สาย”</p>
+    <div class="filters noprint" style="max-width:520px"><label>สัปดาห์ที่มีวันที่<input id="roDate" type="date"></label></div>
+    <div id="roMine"></div>
+    <form class="panel noprint" id="roAdd" data-manager hidden style="margin-bottom:14px"><h3>เพิ่มคนเข้ากะ</h3>
+      <div class="grid"><label>วันที่<input id="raDate" type="date" required></label><label>กะ<select id="raShift"></select></label><label>เจ้าหน้าที่<select id="raStaff"></select></label></div>
+      <div class="row" style="margin-top:10px"><button class="btn primary">เพิ่ม</button><button class="btn" type="button" id="roCopy">คัดลอกตารางจากสัปดาห์ก่อน</button>
+        <label style="flex-direction:row;align-items:center;gap:6px">สายได้ไม่เกิน<input id="roGrace" type="number" min="0" style="width:80px">นาที</label><button class="btn small" type="button" id="roGraceSave">บันทึก</button></div>
+      <div id="roMsg"></div></form>
+    <div class="scroll"><table id="roTable"></table></div>
+    <h3 style="margin-top:22px">สรุปการลงเวลาเดือนนี้</h3>
+    <div class="scroll"><table id="roLate"></table></div>
+  </section>
+
+  <section id="tab-month" hidden>
+    <h2 class="noprint">รายงานประจำเดือน (Monthly Report Book)</h2>
+    <div class="filters noprint" style="max-width:860px"><label>เดือน<input id="moMonth" type="month"></label><button class="btn" type="button" id="moExport" style="align-self:end">ใบงานของเดือน (CSV)</button><button class="btn primary" type="button" id="moPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+    <div id="moBody"></div>
+  </section>
+
+  <section id="tab-kb" hidden>
+    <h2>คลังวิธีแก้ (Knowledge Base)</h2>
+    <p class="sub">เก็บวิธีแก้ปัญหาที่เคยเจอ ค้นได้จากอาการ เครื่อง หรือคำสำคัญ ติ๊ก “แชร์ให้ทุกโรงพยาบาล” เพื่อให้ช่างโรงอื่นเห็นด้วย</p>
+    <div class="filters noprint"><input id="kbQ" placeholder="ค้นหาอาการ เครื่อง วิธีแก้"><select id="kbT"></select><select id="kbS"><option value="">ทุกเรื่องที่เห็นได้</option><option value="own">เฉพาะโรงนี้</option><option value="shared">ที่โรงอื่นแชร์</option></select></div>
+    <details class="panel noprint" id="kbBox" style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600" id="kbSum">+ เพิ่มวิธีแก้</summary><form id="fKb" style="margin-top:12px">
+      <div class="grid"><label class="span2">ดึงข้อมูลจากใบงานที่ซ่อมเสร็จ (ไม่บังคับ)<select id="kbJob"></select></label><label>ประเภทงาน<select id="kbType"></select></label>
+        <label class="span2">หัวข้อ *<input id="kbTitle" required placeholder="เช่น แอร์ Split ไม่เย็น น้ำหยด"></label><label>เครื่อง / อุปกรณ์<input id="kbEquip"></label>
+        <label class="span2">อาการ<textarea id="kbSym" rows="2"></textarea></label><label>สาเหตุ<textarea id="kbCause" rows="2"></textarea></label>
+        <label class="full" style="grid-column:1/-1">วิธีแก้ *<textarea id="kbSol" rows="4" required></textarea></label>
+        <label class="span2">คำสำคัญ (คั่นด้วยเว้นวรรค)<input id="kbTags" placeholder="แอร์ ฟิลเตอร์ ท่อน้ำทิ้ง"></label><label class="check"><input id="kbShared" type="checkbox">แชร์ให้ทุกโรงพยาบาล</label></div>
+      <div class="row" style="margin-top:10px"><button class="btn primary" id="kbSave">บันทึก</button><button class="btn" type="button" id="kbReset">ล้างฟอร์ม</button></div><div id="kbMsg"></div></form></details>
+    <div id="kbList"></div>
+  </section>
+
+  <section id="tab-exec" hidden>
+    <h2>ภาพรวม 12 โรงพยาบาล</h2>
+    <p class="sub">ตัวเลขสรุปของทุกโรง (ไม่แสดงชื่อผู้แจ้งหรือรายละเอียดรายใบ) เห็นเฉพาะผู้บริหารที่ได้รับสิทธิ์</p>
+    <div class="filters noprint" style="max-width:860px"><label>ตั้งแต่<input id="exFrom" type="date"></label><label>ถึง<input id="exTo" type="date"></label><button class="btn" type="button" id="exExport" style="align-self:end">ดาวน์โหลด Excel (CSV)</button><button class="btn primary" type="button" id="exPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+    <div class="kpis" id="exKpi"></div>
+    <div class="scroll"><table id="exTable"></table></div>
+    <div class="two" style="margin-top:14px"><div class="panel"><h3>งานค้างตอนนี้</h3><div id="exOpen"></div></div><div class="panel"><h3>% ซ่อมเสร็จทัน SLA</h3><div id="exSla"></div></div></div>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/ops.js"></script>
+</body>
+</html>
