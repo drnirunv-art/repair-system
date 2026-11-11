@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Monthly Report ระบบต้นไม้ | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .roots{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+  .root{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface);cursor:pointer;text-align:left;font:inherit;color:inherit}
+  .root b{font-size:15px}.root .st{font-weight:700;font-size:13px}
+  .root.ok{border-color:var(--s-close)}.root.ok .st{color:var(--s-close)}
+  .root.red{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 6%,var(--surface))}.root.red .st{color:var(--bad)}
+  .root.wait .st{color:var(--s-on_hold)}
+  .root[aria-pressed=true]{outline:2px solid var(--accent)}
+  .steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+  .step{border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px}
+  .step.done{border-color:var(--s-close)}.step b{display:block}
+  @media (max-width:760px){.steps{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">MR</span><h1 id="title">Monthly Report (ระบบต้นไม้)</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="ops.html?tab=month">เล่มรายงานเดือน ↗</a><a class="btn small" href="staff.html">← กลับหน้าใบงาน</a></div></div>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <section id="main" hidden>
+    <p class="sub">ทุกคนลงข้อมูลรากของตัวเองทันทีที่มีตลอดเดือน ปิดรอบวันที่ 2 ของเดือนถัดไป รากที่ยังไม่ครบหลังเส้นตายขึ้น <b style="color:var(--bad)">ใบแดง</b> · R1–R4 ระบบดึงจากใบงาน PM และมิเตอร์ให้เอง ไม่ต้องอัปโหลดไฟล์</p>
+    <div class="filters noprint" style="max-width:560px"><label>เดือนของเล่ม<input id="bMonth" type="month"></label><button class="btn" type="button" id="bPrint" style="align-self:end">พิมพ์สรุป / PDF</button></div>
+    <h3>รอบการทำงานของเดือนนี้</h3>
+    <div class="steps" id="bSteps"></div>
+    <h3 style="margin-top:18px">ราก R1–R10</h3>
+    <div class="roots" id="bRoots"></div>
+    <div id="bRoot" style="margin-top:14px"></div>
+    <h3 style="margin-top:18px">ตัวชี้วัดที่ระบบคิดให้ (ประกอบคะแนน KPI)</h3>
+    <div class="scroll"><table id="bKpi"></table></div>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/book.js"></script>
+</body>
+</html>
