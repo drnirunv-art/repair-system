@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PM2 บำรุงรักษาตามแผน | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .lv{display:flex;gap:6px;flex-wrap:wrap}
+  .lv label{flex-direction:row;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;font-weight:500}
+  .lv input{width:auto;margin:0}
+  .item{border-top:1px solid var(--line);padding:12px 0}
+  .item.bad{background:color-mix(in srgb,var(--bad) 7%,transparent)}
+  .stk{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+  .stk div{border:1px dashed var(--line);border-radius:8px;padding:8px;text-align:center;break-inside:avoid;background:#fff;color:#111}
+  .stk svg,.stk img{width:120px;height:120px}
+  .stk b{display:block;font-family:"IBM Plex Mono",monospace;font-size:14px}
+  .stk small{display:block;font-size:11px;line-height:1.3}
+  .dots{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:1px;white-space:nowrap}
+  .sig{display:flex;gap:8px;flex-wrap:wrap;font-size:13px}
+  .sig span{border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+  .sig span.on{border-color:var(--s-work_on);color:var(--s-work_on)}
+  @media print{.stk div{border:1px solid #999}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">PM2</span><h1 id="title">บำรุงรักษาตามแผน (PM2)</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าใบงาน</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="work" aria-selected="true">งานเดือนนี้</button>
+    <button role="tab" data-tab="sign" aria-selected="false" id="signTab">รอเซ็น <b id="signN"></b></button>
+    <button role="tab" data-tab="result" aria-selected="false">ตรวจผล &amp; สรุป</button>
+    <button role="tab" data-tab="reg" aria-selected="false">ทะเบียน &amp; แผนปี</button>
+    <button role="tab" data-tab="qr" aria-selected="false">สติกเกอร์ QR</button>
+    <button role="tab" data-tab="tpl" aria-selected="false">Check sheet</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a id="gateLink" href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบด้วยบัญชีเดียวกับระบบแจ้งซ่อม จากนั้นสแกน QR ที่เครื่องอีกครั้ง</p></div></section>
+
+  <section id="tab-work" hidden>
+    <div class="filters noprint" style="max-width:900px">
+      <label>เดือน<input id="wMonth" type="month"></label>
+      <label>ค้นหา<input id="wQ" placeholder="TAG ชื่อเครื่อง ที่ตั้ง"></label>
+      <button class="btn primary" type="button" id="wScan" style="align-self:end">📷 สแกน QR</button>
+      <input id="wScanFile" type="file" accept="image/*" capture="environment" hidden>
+    </div>
+    <div class="chips" id="wWeeks"></div>
+    <div class="chips" id="wStat"></div>
+    <div id="wMsg"></div>
+    <div class="jobs" id="wList"></div>
+  </section>
+
+  <section id="tab-sheet" hidden>
+    <div class="row noprint" style="margin-bottom:10px"><button class="btn" type="button" id="shBack">← กลับ</button></div>
+    <div id="shBody"></div>
+  </section>
+
+  <section id="tab-sign" hidden>
+    <h2>รอเซ็นรับรอง</h2>
+    <p class="sub">ช่างเซ็น 1/3 ตอนส่งผล · หัวหน้าช่างเซ็น 2/3 · วิศวกร / Chief Engineer เซ็น 3/3 · ติ๊กหลายใบแล้วกด “ลงชื่อเป็นชุด” ได้เฉพาะใบที่ได้ 100 คะแนนและไม่มีข้อผิดปกติ ใบอื่นระบบจะข้ามให้เปิดดูทีละใบ</p>
+    <div class="filters noprint" style="max-width:700px"><label>เดือน<input id="sMonth" type="month"></label>
+      <button class="btn primary" type="button" id="sBatch" style="align-self:end">ลงชื่อเป็นชุด</button><button class="btn" type="button" id="sAll" style="align-self:end">เลือกใบ 100 คะแนนทั้งหมด</button></div>
+    <div id="sMsg"></div>
+    <div class="jobs" id="sList"></div>
+  </section>
+
+  <section id="tab-result" hidden>
+    <h2 class="noprint">ตรวจผล PM ประจำเดือน</h2>
+    <div class="filters noprint" style="max-width:860px"><label>เดือน<input id="rMonth" type="month"></label>
+      <button class="btn" type="button" id="rCsv" style="align-self:end">ดาวน์โหลด Excel (CSV)</button><button class="btn primary" type="button" id="rPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+    <h2 class="printonly" id="rTitle"></h2>
+    <div class="kpis k7" id="rKpi"></div>
+    <div class="two" style="margin-top:14px"><div class="panel"><h3>ความคืบหน้ารายสัปดาห์</h3><div id="rWeek"></div></div><div class="panel"><h3>ชนิดเครื่องที่ยังค้างมากที่สุด</h3><div id="rType"></div></div></div>
+    <h3 style="margin-top:18px">ใบตรวจทั้งหมดของเดือน</h3>
+    <div class="scroll"><table id="rTable"></table></div>
+  </section>
+
+  <section id="tab-reg" hidden>
+    <h2>ทะเบียนเครื่อง &amp; แผน PM รายปี</h2>
+    <p class="sub">ตั้ง TAG ชนิดเครื่อง ที่ตั้ง ความถี่ (M รายเดือน · Q ราย 3 เดือน · H ราย 6 เดือน · Y รายปี) เดือนที่เริ่ม สัปดาห์ที่ทำ (W1 วันที่ 1–7 · W2 8–14 · W3 15–21 · W4 22–สิ้นเดือน) และผู้ทำ TW หรือ MA</p>
+    <div class="panel noprint" data-manager hidden style="margin-bottom:14px">
+      <h3>สร้างงาน PM ของเดือนจากแผน</h3>
+      <div class="row"><label>เดือน<input id="gMonth" type="month"></label><button class="btn primary" type="button" id="gRun" style="align-self:end">สร้างงานเดือนนี้</button></div>
+      <p class="meta">กดซ้ำได้ เครื่องที่มีงานของเดือนนั้นอยู่แล้วจะไม่ซ้ำ</p><div id="gMsg"></div>
+    </div>
+    <details class="panel noprint" data-manager hidden style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">นำเข้าแผนจากไฟล์ Excel (CSV)</summary>
+      <p class="meta" style="margin-top:10px">บันทึกไฟล์ Excel เป็น CSV (UTF-8) คอลัมน์ตามลำดับ: TAG, ชื่อเครื่อง, ชนิด, อาคาร, ชั้น, ที่ตั้ง, ความถี่ (M/Q/H/Y), เดือนที่เริ่ม (1–12), สัปดาห์ (1–4), ผู้ทำ (TW/MA) · แถวที่ TAG ตรงกับทะเบียนจะอัปเดต แถวใหม่จะเพิ่มเครื่อง</p>
+      <div class="row"><button class="btn small" type="button" id="iTpl">ดาวน์โหลดแบบฟอร์ม CSV</button><input id="iFile" type="file" accept=".csv,text/csv"></div>
+      <div id="iPrev"></div></details>
+    <div class="filters noprint"><input id="eQ" placeholder="ค้นหา TAG ชื่อ ที่ตั้ง"><select id="eT"></select><select id="eB"></select><select id="eP"><option value="">ทุกเครื่อง</option><option value="plan">อยู่ในแผน PM</option><option value="noplan">ยังไม่มีแผน</option><option value="notag">ยังไม่มี TAG</option></select><button class="btn" type="button" id="eCsv">ดาวน์โหลดทะเบียน (CSV)</button></div>
+    <div id="eEdit"></div>
+    <div class="scroll"><table id="eTable"></table></div>
+    <div id="eMore"></div>
+  </section>
+
+  <section id="tab-qr" hidden>
+    <h2 class="noprint">พิมพ์สติกเกอร์ QR</h2>
+    <p class="sub noprint">กรองแล้วกดพิมพ์ ติด 1 ดวงต่อ 1 เครื่อง ช่างใช้กล้องมือถือสแกนแล้วเปิดใบตรวจของเดือนนั้นได้ทันที</p>
+    <div class="filters noprint"><select id="qB"></select><select id="qF"></select><select id="qT"></select><button class="btn primary" type="button" id="qPrint">พิมพ์</button></div>
+    <div id="qInfo" class="meta noprint"></div>
+    <div class="stk" id="qGrid"></div>
+  </section>
+
+  <section id="tab-tpl" hidden>
+    <h2>Check sheet ตามชนิดเครื่อง</h2>
+    <p class="sub">มาตรฐานกลางใช้ทุกโรงพยาบาล หัวหน้า / Admin ปรับเป็นฉบับของโรงได้ ชนิดที่ยังไม่มี check sheet ระบบใช้แบบ “ทั่วไป” ไปก่อน</p>
+    <div class="filters noprint"><select id="tSel"></select></div>
+    <div id="tBody"></div>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/pm.js"></script>
+</body>
+</html>
