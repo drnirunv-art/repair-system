@@ -6,6 +6,11 @@
   const APPROVER = ["owner", "admin", "chief_engineer"];
   const HOLD_STATUS = { pending: "รอ Owner อนุมัติ", ack: "รับทราบแล้ว", ack_memo: "รับทราบ + ขอ Memo", rejected: "ไม่อนุมัติ" };
   let invites = [], me = null, H = null, staff = [], prios = [], types = [], locs = [], jobs = [], assignees = [], reasons = [];
+  const grpOf = name => (reasons.find(r => r.name === name) || {}).grp || "";
+  function reasonOptions() {
+    const act = reasons.filter(r => r.active), groups = [...new Set(act.map(r => r.grp || "อื่น ๆ"))];
+    return groups.map(g => `<optgroup label="${esc(g)}">${act.filter(r => (r.grp || "อื่น ๆ") === g).map(r => `<option>${esc(r.name)}</option>`).join("")}</optgroup>`).join("");
+  }
   let parts = [], moves = [], prs = [], prItems = [], memos = [], docForm = null;
   const PR_STATUS = { requested: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ไม่อนุมัติ", ordered: "สั่งซื้อแล้ว", received: "ได้รับของแล้ว", cancel: "ยกเลิก" };
   const MEMO_STATUS = { submitted: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ไม่อนุมัติ", cancel: "ยกเลิก" };
@@ -161,7 +166,7 @@
         <label class="span2">หมายเหตุถึงช่าง<input id="iNote" placeholder="ไม่บังคับ"></label>${ok("assign")}`;
     }
     if (a === "start") return `${fileInput("iFiles")}<label class="span2">หมายเหตุ<input id="iNote" placeholder="ไม่บังคับ เช่น ตรวจพบว่า..."></label>${ok("start")}`;
-    if (a === "on_hold") return `<label>เหตุผลที่พักงาน *<select id="iCat">${reasons.filter(r => r.active).map(r => `<option>${esc(r.name)}</option>`).join("")}</select></label>
+    if (a === "on_hold") return `<label>เหตุผลที่พักงาน *<select id="iCat">${reasonOptions()}</select></label>
         <label>วันนัดกลับมาทำ *<input id="iUntil" type="date"></label><label class="full">หมายเหตุ * (รออะไร จากใคร)<input id="iNote" placeholder="เช่น รอคอมเพรสเซอร์ สั่งแล้ว ของถึง 20 พ.ย."></label>
         ${S.hold_needs_approval ? `<div class="full meta">ใบงานจะขึ้นใน “รออนุมัติพักงาน” ให้ Owner / Admin / Chief Engineer พิจารณา เวลาช่วงพักงานไม่นับใน SLA</div>` : ""}${ok("on_hold")}`;
     if (a === "decide") return `<label>ผลการพิจารณา *<select id="iDec"><option value="ack">รับทราบ (อนุมัติพักงาน)</option><option value="ack_memo">รับทราบ + ขอ Memo</option><option value="rejected">ไม่อนุมัติ (ให้ทำต่อ)</option></select></label>
@@ -437,7 +442,7 @@
     bars($("#dType"), count(inR, j => typeOf(j.job_type_id)));
     bars($("#dTech"), count(open.filter(j => crewOf(j).length), j => crewOf(j).map(nameOf)));
     bars($("#dBld"), count(inR, j => j.building));
-    bars($("#dHold"), count(open.filter(j => j.status === "on_hold"), j => j.hold_category || "ไม่ระบุ"));
+    bars($("#dHold"), count(open.filter(j => j.status === "on_hold"), j => grpOf(j.hold_category) || j.hold_category || "ไม่ระบุ"));
     $("#dSla").innerHTML = "<tr><th>ความเร่งด่วน</th><th>SLA</th><th>ซ่อมเสร็จ</th><th>ทันเวลา</th><th>ค้างเกิน</th></tr>" + prios.map(p => {
       const done = inR.filter(j => j.priority_id === p.id && j.cleared_at), ok = done.filter(j => workMins(j, j.cleared_at) <= p.sla_minutes).length;
       return `<tr><td>${esc(p.name)}</td><td>${dur(p.sla_minutes)}</td><td>${done.length}</td><td>${done.length ? Math.round(ok / done.length * 100) + "%" : "-"}</td><td>${open.filter(j => j.priority_id === p.id && isLate(j)).length}</td></tr>`;
@@ -468,7 +473,7 @@
     $("#oQrAll").href = `qr.html?h=${encodeURIComponent(H.code)}`;
     $("#yList").innerHTML = "<tr><th>รหัส</th><th>ชื่อ</th><th>เวลามาตรฐาน</th><th>KPI</th><th></th></tr>" + types.map(t => `<tr><td class="mono">${esc(t.code)}</td><td>${esc(t.name)}</td><td>${t.standard_minutes ? dur(t.standard_minutes) : "-"}</td><td>${t.kpi ? "นับ" : "ไม่นับ"}</td>
       <td><button class="btn small" type="button" data-type-edit="${t.id}">แก้ไข</button> <button class="btn small" type="button" data-type-kpi="${t.id}">${t.kpi ? "ไม่นับ KPI" : "นับ KPI"}</button></td></tr>`).join("");
-    $("#hList").innerHTML = "<tr><th>เหตุผลพักงาน</th><th></th></tr>" + reasons.map(r => `<tr><td>${esc(r.name)}${r.active ? "" : " <small>(ซ่อน)</small>"}</td><td><button class="btn small" type="button" data-reason-toggle="${r.id}">${r.active ? "ซ่อน" : "แสดง"}</button></td></tr>`).join("");
+    $("#hList").innerHTML = "<tr><th>หมวด</th><th>เหตุผลพักงาน</th><th></th></tr>" + reasons.map(r => `<tr><td><small>${esc(r.grp || "")}</small></td><td>${esc(r.name)}${r.active ? "" : " <small>(ซ่อน)</small>"}</td><td><button class="btn small" type="button" data-reason-toggle="${r.id}">${r.active ? "ซ่อน" : "แสดง"}</button></td></tr>`).join("");
     const f = $("#fSet");
     f.gReqPhoto.checked = S.require_photo; f.gMax.value = S.max_photos; f.gUn.value = S.alert_unassigned_min; f.gNs.value = S.alert_not_started_min;
     f.gGrace.value = S.appointment_grace_min; f.gApprove.checked = S.hold_needs_approval;
@@ -483,7 +488,7 @@
   $("#fPrio").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("priorities").insert({ hospital_id: H.id, name: $("#pName").value.trim(), sla_minutes: +$("#pSla").value, is_default: !prios.length }); msg("#pMsg", error, "เพิ่มแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
   $("#fLoc").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("locations").insert({ hospital_id: H.id, building: $("#oB").value.trim(), floor: $("#oF").value.trim(), department: $("#oD").value.trim() }); msg("#oMsg", error, "เพิ่มตำแหน่งแล้ว"); if (!error) { $("#oD").value = ""; await loadRefs(); render(); } };
   $("#fType").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("job_types").insert({ hospital_id: H.id, code: $("#yCode").value.trim(), name: $("#yName").value.trim(), standard_minutes: +$("#yStd").value || null, kpi: $("#yKpi").checked }); msg("#yMsg", error, "เพิ่มประเภทงานแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
-  $("#fReason").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("hold_reasons").insert({ hospital_id: H.id, name: $("#hName").value.trim(), sort: reasons.length + 1 }); msg("#hMsg", error, "เพิ่มเหตุผลแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
+  $("#fReason").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("hold_reasons").insert({ hospital_id: H.id, name: $("#hName").value.trim(), grp: $("#hGrp").value || null, sort: 900 + reasons.length }); msg("#hMsg", error, "เพิ่มเหตุผลแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
   document.addEventListener("click", async e => {
     const t = e.target.closest("button"); if (!t) return; let r;
     if (t.dataset.staffToggle) { const s = staff.find(x => x.id === t.dataset.staffToggle); r = await sb.from("profiles").update({ active: !s.active }).eq("id", s.id); }
@@ -715,7 +720,7 @@
   const daysOpen = j => Math.floor(mins(j.created_at) / 1440);
   function reportGroups() {
     const g = $("#rpG").value, open = jobs.filter(j => OPEN.includes(j.status));
-    const key = j => g === "reason" ? (j.status === "on_hold" ? j.hold_category || "พักงาน (ไม่ระบุเหตุผล)" : "ยังไม่พักงาน: " + statusLabel(j))
+    const key = j => g === "reason" ? (j.status === "on_hold" ? grpOf(j.hold_category) || j.hold_category || "พักงาน (ไม่ระบุเหตุผล)" : "ยังไม่พักงาน: " + statusLabel(j))
       : g === "status" ? statusLabel(j) : g === "tech" ? (crewOf(j).map(nameOf).join(", ") || "ยังไม่มอบหมาย") : (j.department || "ไม่ระบุแผนก");
     const m = {}; open.forEach(j => (m[key(j)] = m[key(j)] || []).push(j));
     return Object.entries(m).map(([k, l]) => [k, l.sort((a, b) => a.created_at.localeCompare(b.created_at))]).sort((a, b) => (a[0].startsWith("ยังไม่พักงาน") - b[0].startsWith("ยังไม่พักงาน")) || b[1].length - a[1].length);

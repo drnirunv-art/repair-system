@@ -140,7 +140,7 @@
           <label class="check"><input name="gApprove" type="checkbox">พักงานต้องให้ Owner / Admin / Chief Engineer อนุมัติ</label>
         </div><div class="row" style="margin-top:10px"><button class="btn primary">บันทึกการตั้งค่า</button></div><div id="gMsg"></div></form>
       <form class="panel" id="fReason"><h3>เหตุผลพักงาน (On-Hold)</h3>
-        <div class="grid" style="grid-template-columns:minmax(0,1fr) auto"><label>เหตุผลใหม่<input id="hName" required placeholder="เช่น รอซ่อมจากศูนย์บริการ"></label><div class="row" style="align-self:end"><button class="btn primary">เพิ่ม</button></div></div>
+        <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto"><label>หมวด<select id="hGrp"><option>เข้าพื้นที่ไม่ได้ (Access)</option><option>ทรัพย์สิน/อุปกรณ์ (Equipment)</option><option>รออะไหล่/วัสดุ (Parts)</option><option>รออนุมัติ/ใบอนุญาต (Permit)</option><option>คน/เครื่องมือ/งบ (Resource)</option><option>อื่น ๆ</option></select></label><label>เหตุผลใหม่<input id="hName" required placeholder="เช่น รอซ่อมจากศูนย์บริการ"></label><div class="row" style="align-self:end"><button class="btn primary">เพิ่ม</button></div></div>
         <div id="hMsg"></div><div class="scroll" style="margin-top:12px"><table id="hList"></table></div></form>
     </div>
   </section>
