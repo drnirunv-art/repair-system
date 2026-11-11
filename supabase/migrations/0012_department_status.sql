@@ -21,3 +21,23 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function public.track_location_jobs(text, uuid) from public;
 grant execute on function public.track_location_jobs(text, uuid) to anon, authenticated;
+
+-- optional reporter e-mail (asked 2026-11-11). Stored now; sending is set up later. ---------------
+alter table public.jobs add column if not exists reporter_email text
+  check (reporter_email is null or reporter_email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+-- the public form calls this right after submit_job; phone must match and the job must be fresh
+create or replace function public.set_reporter_email(p_job_no text, p_phone text, p_email text)
+returns void language plpgsql security definer set search_path = public as $$
+declare j jobs;
+begin
+  if nullif(trim(coalesce(p_email,'')), '') is null then return; end if;
+  if trim(p_email) !~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'รูปแบบอีเมลไม่ถูกต้อง'; end if;
+  select * into j from jobs where job_no = trim(p_job_no);
+  if j.id is null then raise exception 'ไม่พบใบงาน'; end if;
+  if regexp_replace(j.reporter_phone, '\D', '', 'g') <> regexp_replace(coalesce(p_phone,''), '\D', '', 'g')
+     or j.created_at < now() - interval '30 minutes' then raise exception 'บันทึกอีเมลไม่ได้'; end if;
+  update jobs set reporter_email = lower(trim(p_email)) where id = j.id;
+end $$;
+revoke execute on function public.set_reporter_email(text, text, text) from public;
+grant execute on function public.set_reporter_email(text, text, text) to anon, authenticated;

@@ -82,6 +82,11 @@
       if (error) throw error;
       const no = data[0].job_no;
       $("#rMsg").innerHTML = `<div class="note ok">ส่งเรื่องแล้ว เลขใบงาน <b class="mono">${esc(no)}</b> บันทึกใบรับแจ้งด้านล่างไว้ติดตามสถานะ</div>`;
+      const mail = $("#rEmail").value.trim();
+      if (mail) {
+        const r = await sb.rpc("set_reporter_email", { p_job_no: no, p_phone: $("#rPhone").value, p_email: mail });
+        $("#rMsg").innerHTML += r.error ? `<div class="note bad">บันทึกอีเมลไม่สำเร็จ: ${esc(errText(r.error))} (ใบงานส่งแล้ว)</div>` : `<div class="note ok">บันทึกอีเมล ${esc(mail)} ไว้รับแจ้งสถานะแล้ว</div>`;
+      }
       await receipt(no, where, detail, $("#rName").value.trim());
       $("#rDetail").value = ""; $("#rEquip").value = ""; $("#rPhoto").value = "";
       if (newDept) { const d = $("#rDeptNew").value.trim(); $("#rDeptNew").value = ""; await loadRefs(); const o = [...$("#rDept").options].find(x => x.text === d); if (o) { $("#rDept").value = o.value; cascade(); } }

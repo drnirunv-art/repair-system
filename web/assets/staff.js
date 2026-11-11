@@ -178,7 +178,7 @@
     return `<article class="job${isLate(j) || od > 1 ? " late" : ""}">
       <div><div class="meta"><span class="mono">${esc(j.job_no)}</span><span>${fmt(j.created_at)}</span><span>${esc(typeOf(j.job_type_id))}</span>${j.edited_at ? "<span>แก้ไขแล้ว</span>" : ""}</div>
         <h4>${esc(j.detail)}${j.equipment_text ? ` <span style="color:var(--muted);font-weight:500">(${esc(j.equipment_text)})</span>` : ""}</h4>
-        <div class="meta"><span>${[j.building, j.floor, j.department].map(esc).join(" · ")}</span><span>ผู้แจ้ง ${esc(j.reporter_name)} ${esc(j.reporter_phone)}</span>${crew.length ? `<span>ช่าง ${crew.map((id, i) => esc(nameOf(id)) + (i === 0 && crew.length > 1 ? " (หัวหน้างาน)" : "")).join(", ")}</span>` : ""}</div>
+        <div class="meta"><span>${[j.building, j.floor, j.department].map(esc).join(" · ")}</span><span>ผู้แจ้ง ${esc(j.reporter_name)} ${esc(j.reporter_phone)}${j.reporter_email ? " · " + esc(j.reporter_email) : ""}</span>${crew.length ? `<span>ช่าง ${crew.map((id, i) => esc(nameOf(id)) + (i === 0 && crew.length > 1 ? " (หัวหน้างาน)" : "")).join(", ")}</span>` : ""}</div>
         ${j.status === "on_hold" ? `<div class="meta" style="color:var(--s-on_hold)">พักงาน: ${esc(j.hold_category || "")}${j.hold_reason ? " · " + esc(j.hold_reason) : ""} · นัด ${fmtDate(j.hold_until)}${j.hold_status ? ` · <b>${HOLD_STATUS[j.hold_status]}</b>` : ""}${graceOver(j.hold_until && j.hold_until + "T00:00:00+07:00") ? ' · <b style="color:var(--bad)">เลยวันนัด</b>' : ""}</div>` : ""}
         ${j.appointment_at && OPEN.includes(j.status) ? `<div class="meta">นัดเข้าทำงาน ${fmt(j.appointment_at)}${graceOver(j.appointment_at) && j.status !== "work_on" ? ' · <b style="color:var(--bad)">เลยนัด</b>' : ""}</div>` : ""}
         ${j.memo_requested ? `<div class="meta"><b>ขอ Memo</b> สำหรับงานนี้</div>` : ""}
@@ -378,7 +378,7 @@
     const rows = jobs.filter(j => { const d = day(j.created_at); return (!f || d >= f) && (!t || d <= t); });
     const head = ["เลขใบงาน", "วันที่แจ้ง", "อาคาร", "ชั้น", "แผนก", "อุปกรณ์", "รายละเอียด", "ผู้แจ้ง", "เบอร์", "ประเภทงาน", "ความเร่งด่วน", "สถานะ", "ช่าง", "เหตุผลพักงาน", "หมายเหตุพักงาน", "วันนัด", "สรุปการซ่อม", "ใช้อะไหล่", "เวลาทำงาน (นาที)", "SLA (นาที)", "ทัน SLA", "ปิดงาน", "คะแนน"];
     const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const body = rows.map(j => [j.job_no, fmt(j.created_at), j.building, j.floor, j.department, j.equipment_text, j.detail, j.reporter_name, j.reporter_phone, typeOf(j.job_type_id), (prioOf(j) || {}).name, statusLabel(j),
+    const body = rows.map(j => [j.job_no, fmt(j.created_at), j.building, j.floor, j.department, j.equipment_text, j.detail, j.reporter_name, j.reporter_phone + (j.reporter_email ? " " + j.reporter_email : ""), typeOf(j.job_type_id), (prioOf(j) || {}).name, statusLabel(j),
       crewOf(j).map(nameOf).join(", "), j.hold_category, j.hold_reason, j.hold_until, j.summary, j.uses_parts ? "ใช้" : "", workMins(j), slaOf(j), workMins(j) <= slaOf(j) ? "ทัน" : "ไม่ทัน", fmt(j.closed_at), j.rating || ""].map(q).join(","));
     const blob = new Blob(["﻿" + [head.map(q).join(","), ...body].join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `ใบงาน-${H.code}-${f || "all"}-${t || ""}.csv` });
