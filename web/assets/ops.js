@@ -5,7 +5,7 @@
   const MANAGER = ["owner", "admin", "chief_engineer", "supervisor"];
   const TABS = ["shift", "daily", "roster", "month", "kb", "exec"];
   const REP = { draft: "ร่าง", submitted: "ส่งแล้ว รอรับเวร", received: "รับเวรแล้ว" };
-  let me = null, H = null, staff = [], types = [], prios = [], shifts = [], S = { late_grace_min: 15 }, exec = false, channel = null, kbEdit = null;
+  let me = null, H = null, staff = [], types = [], prios = [], shifts = [], S = { late_grace_min: 15 }, exec = false, channel = null, kbEdit = null, contract = [];
   const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
   const isMgr = () => me && MANAGER.includes(me.role);
   const can = () => me && me.role !== "observer";
@@ -44,14 +44,15 @@
     if (!me || !me.hospital_id) { $("#gate").hidden = false; return; }
     H = me.hospitals;
     $("#title").textContent = "รายงานกะและเดือน · " + H.name; $("#who").textContent = me.full_name || session.user.email;
-    const [s, t, p, sh, st, ex] = await Promise.all([
+    const [s, t, p, sh, st, ex, cs] = await Promise.all([
       sb.from("profiles").select("id,full_name,role,active").eq("hospital_id", H.id).order("full_name"),
       sb.from("job_types").select("*").eq("hospital_id", H.id).order("code"),
       sb.from("priorities").select("*").eq("hospital_id", H.id).order("sort").order("sla_minutes"),
       sb.from("shifts").select("*").eq("hospital_id", H.id).eq("active", true).order("sort"),
       sb.from("hospital_settings").select("*").eq("hospital_id", H.id).maybeSingle(),
-      sb.rpc("am_exec")]);
-    staff = s.data || []; types = t.data || []; prios = p.data || []; shifts = sh.data || []; if (st.data) S = st.data; exec = !!ex.data;
+      sb.rpc("am_exec"),
+      sb.from("contract_staffing").select("*").eq("hospital_id", H.id).order("sort")]);
+    staff = s.data || []; types = t.data || []; prios = p.data || []; shifts = sh.data || []; if (st.data) S = st.data; exec = !!ex.data; contract = cs.data || [];
     $("#execTab").hidden = !exec;
     document.querySelectorAll("[data-manager]").forEach(b => b.hidden = !isMgr());
     $("#tabs").hidden = false;
@@ -203,9 +204,10 @@
       sb.from("shift_roster").select("*").eq("hospital_id", H.id).gte("work_date", m0).lte("work_date", m1)]);
     if (r.error) return fail("#roTable", r.error);
     const rows = r.data || [], now = new Date();
-    $("#roTable").innerHTML = `<tr><th>กะ</th>${days.map(d => `<th${d === today() ? ' style="color:var(--accent)"' : ""}>${thDay(d)}</th>`).join("")}</tr>` + shifts.map(sh => `<tr><td><b>${esc(sh.name)}</b><br><small>${hm(sh.start_time)}–${hm(sh.end_time)}</small></td>${days.map(d => {
-      const w = win(d, sh);
-      return `<td style="vertical-align:top;min-width:120px">${rows.filter(x => x.work_date === d && x.shift_id === sh.id).map(x => {
+    renderContract();
+    $("#roTable").innerHTML = `<tr><th>กะ</th>${days.map(d => `<th${d === today() ? ' style="color:var(--accent)"' : ""}>${thDay(d)}</th>`).join("")}</tr>` + shifts.map(sh => `<tr><td><b>${esc(sh.name)}</b><br><small>${hm(sh.start_time)}–${hm(sh.end_time)}</small>${sh.min_staff ? `<br><small class="meta">สัญญา ${sh.min_staff} คน</small>` : ""}</td>${days.map(d => {
+      const w = win(d, sh), cell = rows.filter(x => x.work_date === d && x.shift_id === sh.id), short = sh.min_staff && cell.length < sh.min_staff;
+      return `<td style="vertical-align:top;min-width:120px${short ? ";background:color-mix(in srgb,var(--bad) 8%,transparent)" : ""}">${sh.min_staff ? `<small style="display:block;color:${short ? "var(--bad)" : "var(--s-work_on)"}">จัดแล้ว ${cell.length}/${sh.min_staff}${short ? " ขาด " + (sh.min_staff - cell.length) : ""}</small>` : ""}${cell.map(x => {
         const lm = lateMin(x, w[0]), miss = !x.check_in_at && now > w[1];
         return `<div style="white-space:nowrap">${esc(nameOf(x.profile_id))}${x.check_in_at ? ` <small style="color:${lm ? "var(--bad)" : "var(--s-work_on)"}">✓${new Date(x.check_in_at).toLocaleTimeString("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" })}${lm ? " สาย " + lm + "น." : ""}</small>` : miss ? ' <small style="color:var(--bad)">ไม่ได้ลงเวลา</small>' : ""}
           ${x.profile_id === me.id && !x.check_in_at && now >= new Date(w[0].getTime() - 2 * 36e5) && now < w[1] ? `<button class="btn small primary" data-checkin="${x.id}">ลงเวลา</button>` : ""}
@@ -216,6 +218,12 @@
       if (x.check_in_at) { const lm = lateMin(x, w[0]); if (lm) { g[k].late++; g[k].lateMin += lm; } else g[k].ok++; } else if (now > w[1]) g[k].miss++; });
     $("#roLate").innerHTML = `<tr><th>เจ้าหน้าที่</th><th class="num">กะที่ผ่านมา</th><th class="num">ตรงเวลา</th><th class="num">สาย</th><th class="num">รวมนาทีที่สาย</th><th class="num">ไม่ได้ลงเวลา</th></tr>` +
       (Object.entries(g).sort((a, b) => b[1].late - a[1].late).map(([id, v]) => `<tr><td>${esc(nameOf(id))}</td><td class="num">${v.n}</td><td class="num">${v.ok}</td><td class="num"${v.late ? ' style="color:var(--bad)"' : ""}>${v.late}</td><td class="num">${v.lateMin}</td><td class="num">${v.miss}</td></tr>`).join("") || `<tr><td colspan="6"><div class="empty">ยังไม่มีข้อมูลเดือนนี้</div></td></tr>`);
+  }
+  function renderContract() {
+    const total = S.contract_headcount, per = [...new Set(shifts.map(x => x.note).filter(n => n && n !== "ตามสัญญา เอกสารแนบ 3"))];
+    $("#roContract").innerHTML = contract.length ? `<details class="panel" open style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">อัตรากำลังตามสัญญา (เอกสารแนบ 3)${total ? ` · รวม ${total} คน` : ""}</summary>
+      <div class="scroll" style="margin-top:10px"><table><tr><th>ตำแหน่ง</th><th class="num">จำนวน</th><th>เวลาทำงาน</th><th>วันทำงาน</th></tr>${contract.map(c => `<tr><td>${esc(c.position)}</td><td class="num">${esc(c.headcount || "")}</td><td>${esc(c.hours || "")}</td><td>${esc(c.days || "")}</td></tr>`).join("")}</table></div>
+      <p class="meta" style="margin-top:8px">กะในตารางด้านล่างตั้งตามเวลาในสัญญา ช่องที่มีตัวเลข “จัดแล้ว n/m” คือกะที่สัญญากำหนดจำนวนช่างขั้นต่ำ ถ้าจัดไม่ครบช่องจะเป็นสีแดง${per.map(n => `<br>หมายเหตุ: ${esc(n)}`).join("")}</p></details>` : "";
   }
   $("#roAdd").onsubmit = async e => {
     e.preventDefault();

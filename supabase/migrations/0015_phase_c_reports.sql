@@ -21,10 +21,148 @@ create policy "shifts managers edit" on public.shifts for update to authenticate
   using (hospital_id = public.my_hospital() and public.is_manager()) with check (hospital_id = public.my_hospital());
 grant select, insert, update on public.shifts to authenticated;
 
+-- shift times per hospital from each contract (เอกสารแนบท้ายสัญญาหมายเลข 3); min_staff = technicians the contract puts on that shift, where it says so
+alter table public.shifts add column if not exists min_staff int, add column if not exists note text;
+insert into public.shifts (hospital_id, name, start_time, end_time, sort, min_staff, note)
+select h.id, s.name, s.st::time, s.en::time, s.sort, s.min_staff, s.note
+from public.hospitals h join (values
+  ('PT1','เช้า','08:00','17:00',1,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PT1','บ่าย','15:00','00:00',2,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PT1','ดึก','23:00','08:00',3,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PT2','เช้า','08:00','17:00',1,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PT2','บ่าย','15:30','00:30',2,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PT2','ดึก','23:30','08:30',3,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PT3','เช้า','08:00','17:00',1,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PT3','บ่าย','14:00','23:00',2,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PT3','ดึก','23:00','08:00',3,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTN','เช้า','08:00','17:00',1,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTN','บ่าย','15:30','00:30',2,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTN','ดึก','23:30','08:30',3,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTW','เช้า','08:00','17:00',1,2,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTW','บ่าย','15:30','00:30',2,2,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTP','เช้า','08:00','17:00',1,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTP','บ่าย','15:30','00:30',2,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTP','ดึก','23:30','08:30',3,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTS','เช้าตรู่','07:00','16:00',1,4,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTS','เช้า','08:00','17:00',2,5,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTS','บ่าย','15:00','00:00',3,6,'ตามสัญญา เอกสารแนบ 3'),
+  ('PTS','ดึก','00:00','09:00',4,4,'ตามสัญญา เอกสารแนบ 3'),
+  ('PLD','เช้า','08:00','17:00',1,2,'ตามสัญญา เอกสารแนบ 3'),
+  ('PLD','บ่าย','15:00','00:00',2,2,'ตามสัญญา เอกสารแนบ 3'),
+  ('PLD','ดึก','00:00','09:00',3,2,'ตามสัญญา เอกสารแนบ 3'),
+  ('PLR','เช้า','08:00','17:00',1,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PLR','บ่าย','16:00','00:00',2,null,'สัญญาระบุช่าง 11 คน 24 ชั่วโมง ไม่ได้แบ่งเวลากะ กะบ่าย/ดึกนี้ตั้งไว้ให้ก่อน แก้ได้'),
+  ('PLR','ดึก','00:00','08:00',3,null,'สัญญาระบุช่าง 11 คน 24 ชั่วโมง ไม่ได้แบ่งเวลากะ กะบ่าย/ดึกนี้ตั้งไว้ให้ก่อน แก้ได้'),
+  ('PLS','เช้า','08:00','17:00',1,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PLS','บ่าย','15:00','00:00',2,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PLS','ดึก','23:00','08:00',3,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PLK','เช้า','08:00','17:00',1,null,'ตามสัญญา เอกสารแนบ 3'),
+  ('PLC','เช้า','08:00','17:00',1,4,'ตามสัญญา เอกสารแนบ 3'),
+  ('PLC','บ่าย','15:30','00:30',2,3,'ตามสัญญา เอกสารแนบ 3'),
+  ('PLC','ดึก','00:00','08:00',3,3,'ตามสัญญา เอกสารแนบ 3')
+) s(code, name, st, en, sort, min_staff, note) on s.code = h.code
+on conflict (hospital_id, name) do nothing;
+-- hospitals not in the contract list get three 8-hour shifts
 insert into public.shifts (hospital_id, name, start_time, end_time, sort)
 select h.id, s.name, s.st::time, s.en::time, s.sort
 from public.hospitals h cross join (values ('เช้า', '08:00', '16:00', 1), ('บ่าย', '16:00', '00:00', 2), ('ดึก', '00:00', '08:00', 3)) s(name, st, en, sort)
+where not exists (select 1 from public.shifts x where x.hospital_id = h.id)
 on conflict (hospital_id, name) do nothing;
+
+-- staffing table from the contract (เอกสารแนบ 3), shown on the roster page
+create table if not exists public.contract_staffing (
+  id bigint generated always as identity primary key,
+  hospital_id uuid not null references public.hospitals(id) on delete cascade,
+  sort int not null default 0,
+  position text not null, headcount text not null, hours text, days text
+);
+alter table public.contract_staffing enable row level security;
+create policy "contract staffing staff read" on public.contract_staffing for select to authenticated using (hospital_id = public.my_hospital());
+grant select on public.contract_staffing to authenticated;
+alter table public.hospital_settings add column if not exists contract_headcount int;
+insert into public.contract_staffing (hospital_id, sort, position, headcount, hours, days)
+select h.id, s.sort, s.position, s.n, s.hours, s.days
+from public.hospitals h join (values
+  ('PT1',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PT1',2,'Supervisor','2','08.00-17.00 / 15.00-00.00','จันทร์-อาทิตย์'),
+  ('PT1',3,'Technician','12','08.00-17.00 / 15.00-00.00 / 23.00-08.00','จันทร์-อาทิตย์'),
+  ('PT1',4,'Secretary / Admins','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PT1',5,'Quality Supervisor','1','08.00-17.00','สัปดาห์ละ 1 ครั้ง'),
+  ('PT2',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PT2',2,'Supervisor','4','08.00-17.00 / 15.30-00.30 / 23.30-08.30','จันทร์-อาทิตย์'),
+  ('PT2',3,'Technician','13','08.00-17.00 / 15.30-00.30 / 23.30-08.30','จันทร์-อาทิตย์'),
+  ('PT2',4,'Secretary / Admins','3','08.00-17.00','จันทร์-เสาร์'),
+  ('PT3',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PT3',2,'Supervisor','3','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PT3',3,'Technician','11','08.00-17.00 / 14.00-23.00 / 23.00-08.00','จันทร์-อาทิตย์'),
+  ('PT3',4,'Secretary / Admins','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PT3',5,'Quality Supervisor','1','08.00-17.00','สัปดาห์ละ 1 ครั้ง'),
+  ('PTN',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PTN',2,'Supervisor','2','08.00-17.00 / 15.30-00.30','จันทร์-อาทิตย์'),
+  ('PTN',3,'Senior Technician','2','08.00-17.00 / 15.30-00.30','จันทร์-อาทิตย์'),
+  ('PTN',4,'Technician','9','08.00-17.00 / 15.30-00.30 / 23.30-08.30','จันทร์-อาทิตย์'),
+  ('PTN',5,'Secretary / Admins','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PTN',6,'Quality Supervisor','1','08.00-17.00','สัปดาห์ละ 1 ครั้ง'),
+  ('PTW',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PTW',2,'Supervisor','1','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PTW',3,'Senior Technician','1','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PTW',4,'Technician','2','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PTW',5,'Technician','2','15.30-00.30','จันทร์-อาทิตย์'),
+  ('PTW',6,'Secretary / Admins','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PTW',7,'Quality Supervisor','1','08.00-17.00','สัปดาห์ละ 1 ครั้ง'),
+  ('PTP',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PTP',2,'Supervisor','2','08.00-17.00 / 15.30-00.30','จันทร์-อาทิตย์'),
+  ('PTP',3,'Senior Technician','3','08.00-17.00 / 15.30-00.30 / 23.30-08.30','จันทร์-อาทิตย์'),
+  ('PTP',4,'Technician','9','08.00-17.00 / 15.30-00.30 / 23.30-08.30','จันทร์-อาทิตย์'),
+  ('PTP',5,'Secretary / Admins','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PTP',6,'Quality Supervisor (Onsite)','1','08.00-17.00','สัปดาห์ละ 1 ครั้ง'),
+  ('PTS',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PTS',2,'Supervisor','2','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PTS',3,'Senior Technician','1','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PTS',4,'Senior Technician','2','15.00-00.00','จันทร์-อาทิตย์'),
+  ('PTS',5,'Senior Technician','1','00.00-09.00','จันทร์-อาทิตย์'),
+  ('PTS',6,'Technician','4','07.00-16.00','จันทร์-อาทิตย์'),
+  ('PTS',7,'Technician','4','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PTS',8,'Technician','4','15.00-00.00','จันทร์-อาทิตย์'),
+  ('PTS',9,'Technician','3','00.00-09.00','จันทร์-อาทิตย์'),
+  ('PTS',10,'Secretary / Admins','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PTS',11,'Quality Supervisor','1','08.00-17.00','สัปดาห์ละ 1 ครั้ง'),
+  ('PTS',12,'ยานพาหนะ Service Site (PTS Network)','1','24 ชั่วโมง','จันทร์-อาทิตย์'),
+  ('PLD',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PLD',2,'Senior Technician','1','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PLD',3,'Technician','1','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PLD',4,'Technician','2','15.00-00.00','จันทร์-อาทิตย์'),
+  ('PLD',5,'Technician','2','00.00-09.00','จันทร์-อาทิตย์'),
+  ('PLD',6,'Secretary / Admins','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PLD',7,'Quality Supervisor','1','08.00-17.00','สัปดาห์ละ 1 ครั้ง'),
+  ('PLR',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PLR',2,'Supervisor','1','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PLR',3,'Technician','11','24 ชั่วโมง','จันทร์-อาทิตย์'),
+  ('PLR',4,'Secretary / Admins','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PLR',5,'Quality Supervisor (Onsite)','1','08.00-17.00','สัปดาห์ละ 1 ครั้ง'),
+  ('PLS',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PLS',2,'Supervisor','2','08.00-17.00 / 15.00-00.00','จันทร์-อาทิตย์'),
+  ('PLS',3,'Technician','9','08.00-17.00 / 15.00-00.00 / 23.00-08.00','จันทร์-อาทิตย์'),
+  ('PLS',4,'Secretary / Admins','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PLS',5,'Quality Supervisor (Onsite)','1','08.00-17.00','สัปดาห์ละ 1 ครั้ง'),
+  ('PLK',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PLK',2,'Technician','8','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PLK',3,'Secretary / Admins','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PLK',4,'Quality Supervisor (Onsite)','1','08.00-17.00','สัปดาห์ละ 1 ครั้ง'),
+  ('PLC',1,'Chief Engineer','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PLC',2,'Supervisor','2','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PLC',3,'Senior Technician','2','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PLC',4,'Technician','4','08.00-17.00','จันทร์-อาทิตย์'),
+  ('PLC',5,'Technician','3','15.30-00.30','จันทร์-อาทิตย์'),
+  ('PLC',6,'Technician','3','00.00-08.00','จันทร์-อาทิตย์'),
+  ('PLC',7,'Secretary / Admins','1','08.00-17.00','จันทร์-เสาร์'),
+  ('PLC',8,'Quality Supervisor (Onsite)','1','08.00-17.00','สัปดาห์ละ 1 ครั้ง')
+) s(code, sort, position, n, hours, days) on s.code = h.code
+where not exists (select 1 from public.contract_staffing x where x.hospital_id = h.id);
+insert into public.hospital_settings (hospital_id) select id from public.hospitals on conflict do nothing;
+update public.hospital_settings hs set contract_headcount = t.n
+from public.hospitals h join (values ('PT1',17), ('PT2',21), ('PT3',17), ('PTN',16), ('PTW',9), ('PTP',17), ('PTS',25), ('PLD',9), ('PLR',15), ('PLS',14), ('PLK',11), ('PLC',17)) t(code, n) on t.code = h.code
+where hs.hospital_id = h.id and hs.contract_headcount is null;
 
 -- new hospitals get the same three shifts
 create or replace function public.hospitals_default_shifts() returns trigger
