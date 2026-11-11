@@ -1,0 +1,150 @@
+ระบบไฟฟ้าและสำรองไฟ	RMU1	RMU No.1 (ห้องผ้าเปื้อน)
+ระบบไฟฟ้าและสำรองไฟ	RMU2	RMU No.2 (หน้าอาคาร 2)
+ระบบไฟฟ้าและสำรองไฟ	RMU3	RMU No.3 (RMU Rm.)
+ระบบไฟฟ้าและสำรองไฟ	TR 1	OIL IMMERSED TRANSFORMER No.1 หม้อแปลง 1500 KVA
+ระบบไฟฟ้าและสำรองไฟ	TR 2	OIL IMMERSED TRANSFORMER No.2 หม้อแปลง 1000 KVA
+ระบบไฟฟ้าและสำรองไฟ	TR 3	DRY-TYPE TRANSFORMER No.3 หม้อแปลง 1000 KVA
+ระบบไฟฟ้าและสำรองไฟ	MDB 1	MDB No.1
+ระบบไฟฟ้าและสำรองไฟ	MDB 2	MDB No.2
+ระบบไฟฟ้าและสำรองไฟ	MDB 3	MDB No.3
+ระบบไฟฟ้าและสำรองไฟ	MDB 4	MDB No.4 (อาคาร 3)
+ระบบไฟฟ้าและสำรองไฟ	Gen 1	GENERATOR NO.1 706 KVA
+ระบบไฟฟ้าและสำรองไฟ	Gen 2	GENERATOR NO.2 550 KVA
+ระบบไฟฟ้าและสำรองไฟ	Gen 3	GENERATOR NO.3 250 KVA
+ระบบไฟฟ้าและสำรองไฟ	UPS1	UPS Riello MST 160KVA [ MRI ]
+ระบบไฟฟ้าและสำรองไฟ	UPS2	UPS Riello MHT 200KVA [ CT SCAN ]
+ระบบไฟฟ้าและสำรองไฟ	UPS3	UPS BCN I-Power 30KVA [ ER ]
+ระบบไฟฟ้าและสำรองไฟ	UPS4	UPS BCN I-Power 20KVA [ NSY ]
+ระบบไฟฟ้าและสำรองไฟ	UPS5	UPS Emerson ITA 20KVA [ ASU ]
+ระบบไฟฟ้าและสำรองไฟ	UPS6	UPS Emerson ITA 20KVA [ ICU/CCU ]
+ระบบไฟฟ้าและสำรองไฟ	UPS7	UPS BCN I-Power 40KVA [ ไตเทียม ]
+ระบบไฟฟ้าและสำรองไฟ	UPS8	UPS Riello MST 125KVA [ Biplane ]
+ระบบไฟฟ้าและสำรองไฟ	UPS9	UPS Emerson ITA 20KVA [ LR ]
+ระบบไฟฟ้าและสำรองไฟ	UPS10	UPS Emerson Liebert ITA 20KVA [ GI ส่องกล้อง ]
+ระบบไฟฟ้าและสำรองไฟ	UPS11	UPS Riello MPT 80KVA [ OR ]
+ระบบไฟฟ้าและสำรองไฟ	UPS12	UPS Energy 15KVA [ Mammogram ชั้น 7 อาคาร 1 ]
+ระบบไฟฟ้าและสำรองไฟ	UPS13	UPS EATON 9E 15KVA [ Mammogram ชั้น 3 อาคาร 3 ]
+ระบบไฟฟ้าและสำรองไฟ	UPS14	UPS BCN GP810 10KVA [ ห้อง รปภ. อาคาร 3 ]
+ระบบไฟฟ้าและสำรองไฟ	UPS15	UPS BCN GP806 6KVA [ Bone Den ชั้น 7 อาคาร 1 ]
+ระบบไฟฟ้าและสำรองไฟ	UPS16	UPS BCN GP806 6KVA [ Bone Den ชั้น 3 อาคาร 3 ]
+ระบบไฟฟ้าและสำรองไฟ	UPS17	UPS BCN GP806 6KVA [ ศูนย์หัวใจ ชั้น 1 อาคาร 1 ]
+ระบบไฟฟ้าและสำรองไฟ	UPS18	UPS BCN GP806 6KVA [ ศูนย์หัวใจ ชั้น 1 อาคาร 1 ]
+ระบบไฟฟ้าและสำรองไฟ	UPS19	UPS BCN GP806 6KVA [ กายภาพ ห้องโรบอท ชั้น 6 ]
+ระบบสำรองน้ำอาคาร	UT 1	บ่อพักน้ำใต้ดิน อาคาร 1 (ขนาดตามหน้างาน)
+ระบบสำรองน้ำอาคาร	RT 1	ROOF TANK อาคาร 1 (10 ชั้น)
+ระบบสำรองน้ำอาคาร	RT 2	ROOF TANK อาคาร 1 (8 ชั้น)
+ระบบสำรองน้ำอาคาร	RT 3	ROOF TANK อาคาร 2
+ระบบสำรองน้ำอาคาร	RT 4	ROOF TANK อาคาร 3
+ระบบสำรองน้ำอาคาร	RT 5	ROOF TANK อาคารจอดรถ
+ระบบสำรองน้ำอาคาร	WP1	WATER PUMP No.1 (Main) อาคาร 1
+ระบบสำรองน้ำอาคาร	WP2	WATER PUMP No.2 (8 ชั้น) อาคาร 1
+ระบบสำรองน้ำอาคาร	WP3	WATER PUMP No.3 (8 ชั้น) อาคาร 1
+ระบบสำรองน้ำอาคาร	WP4	WATER PUMP No.4 (10 ชั้น) อาคาร 1
+ระบบสำรองน้ำอาคาร	WP5	WATER PUMP No.5 (10 ชั้น) อาคาร 1
+ระบบสำรองน้ำอาคาร	WP6	WATER PUMP No.6 อาคาร 2
+ระบบสำรองน้ำอาคาร	WP7	WATER PUMP No.7 อาคาร 2
+ระบบสำรองน้ำอาคาร	WP8	WATER PUMP No.8 อาคาร 3
+ระบบสำรองน้ำอาคาร	WP9	WATER PUMP No.9 อาคาร 3
+ระบบสำรองน้ำอาคาร	WP10	WATER PUMP No.10 อาคารจอดรถ
+ระบบสำรองน้ำอาคาร	WP11	WATER PUMP No.11 อาคารจอดรถ
+ระบบสำรองน้ำอาคาร	TP1	TRANSFER PUMP No.1 อาคาร 2
+ระบบสำรองน้ำอาคาร	TP2	TRANSFER PUMP No.2 อาคาร 2
+ระบบสำรองน้ำอาคาร	BP1	BOOSTER PUMP No.1 (Ward 8A) GRUNDFOS
+ระบบสำรองน้ำอาคาร	BP2	BOOSTER PUMP No.2 (CSSD) GRUNDFOS
+ระบบสำรองน้ำอาคาร	BP3	BOOSTER PUMP No.3 (CSSD) GRUNDFOS
+ระบบสำรองน้ำอาคาร	BP4	BOOSTER PUMP No.4 อาคาร 3 GRUNDFOS
+ระบบสำรองน้ำอาคาร	BP5	BOOSTER PUMP No.5 อาคาร 3 GRUNDFOS
+ระบบปรับอากาศและระบายอากาศ	CH1	SCREW WATER CHILLER No.1 (350 Ton)
+ระบบปรับอากาศและระบายอากาศ	CH2	SCREW VSD WATER CHILLER No.2 (425 Ton)
+ระบบปรับอากาศและระบายอากาศ	CH3	SCREW WATER CHILLER No.3 (163 Ton)
+ระบบปรับอากาศและระบายอากาศ	CH4	SCREW WATER CHILLER No.4 (163 Ton)
+ระบบปรับอากาศและระบายอากาศ	CT1	COOLING TOWER No.1 (ROOF TOP)
+ระบบปรับอากาศและระบายอากาศ	CT2	COOLING TOWER No.2 (ROOF TOP)
+ระบบปรับอากาศและระบายอากาศ	CT3	COOLING TOWER No.3 (ROOF TOP)
+ระบบปรับอากาศและระบายอากาศ	CT4	COOLING TOWER No.4 (ROOF TOP)
+ระบบปรับอากาศและระบายอากาศ	CT5	COOLING TOWER No.5 (ROOF TOP)
+ระบบปรับอากาศและระบายอากาศ	CHP1	CHILLED WATER PUMPS No.1
+ระบบปรับอากาศและระบายอากาศ	CHP2	CHILLED WATER PUMPS No.2
+ระบบปรับอากาศและระบายอากาศ	CHP3	CHILLED WATER PUMPS No.3
+ระบบปรับอากาศและระบายอากาศ	CHP4	CHILLED WATER PUMPS No.4
+ระบบปรับอากาศและระบายอากาศ	CHP5	CHILLED WATER PUMPS No.5
+ระบบปรับอากาศและระบายอากาศ	CHP6	CHILLED WATER PUMPS No.6
+ระบบปรับอากาศและระบายอากาศ	CDP1	CONDENSER WATER PUMPS No.1
+ระบบปรับอากาศและระบายอากาศ	CDP2	CONDENSER WATER PUMPS No.2
+ระบบปรับอากาศและระบายอากาศ	CDP3	CONDENSER WATER PUMPS No.3
+ระบบปรับอากาศและระบายอากาศ	CDP4	CONDENSER WATER PUMPS No.4
+ระบบปรับอากาศและระบายอากาศ	CDP5	CONDENSER WATER PUMPS No.5
+ระบบปรับอากาศและระบายอากาศ	ACH1	AIR COOL CHILLER No.1 (MRI)
+ระบบปรับอากาศและระบายอากาศ	ACH2	AIR COOL CHILLER No.2 (MRI)
+Special room	ER-ISO	ห้องแยกโรค แผนก ER ชั้น 1 อาคาร 1 (Semi-negative)
+Special room	ER-CPR	ห้องปั๊มหัวใจ แผนก ER ชั้น 1 อาคาร 1 (Semi-negative)
+Special room	ARI 1-4	ห้องตรวจ 1-4 แผนก ARI ชั้น 1 อาคาร 1 (Semi-negative)
+Special room	ARI-SP	ตู้เก็บเสมหะ แผนก ARI (Semi-negative)
+Special room	GI 1-4	ห้องส่องกล้อง 1-4 แผนก GI ชั้น 3 อาคาร 1
+Special room	NSY-ISO	ห้องแยกติดเชื้อ แผนก NSY ชั้น 2 อาคาร 1
+Special room	CCU 8	CCU 8 ROOM ชั้น 2 อาคาร 1
+Special room	543	543 ROOM (ห้องผู้ป่วยติดเชื้อ) ชั้น 5 อาคาร 1
+Special room	OR1-6	ห้องผ่าตัด OR 1-6 ชั้น 2 อาคาร 1
+Special room	LR 1	ห้อง LR 1 แผนก LR ชั้น 2 อาคาร 1
+Special room	LR 2	ห้อง LR 2 แผนก LR ชั้น 2 อาคาร 1
+Special room	CT SCAN	ห้อง CT SCAN แผนก X-RAY ชั้น 1 อาคาร 1
+Special room	MRI	ห้อง MRI แผนก X-RAY ชั้น 1 อาคาร 1
+Special room	BIPLANE	ห้องสวนหัวใจ BIPLANE ชั้น 2 อาคาร 1
+Special room	RECOVERY	ห้องเตรียมคลอด / Recovery ชั้น 2 อาคาร 1
+Special room	NICU	ห้อง NICU แผนก NSY ชั้น 2 อาคาร 1
+Special room	NEW BORN	ห้อง NEW BORN แผนก NSY ชั้น 2 อาคาร 1
+Special room	CSSD	AHU 6-9 แผนก CSSD ชั้น 2 อาคาร 1
+Special room	คลังยา	แอร์คลังยา ชั้น 2 อาคาร 2 (ควบคุม °C/%RH)
+Special room	ห้องยา 9	ห้องยา IPD ชั้น 9 อาคาร 1
+Special room	ห้องยา OPD	ห้องยา OPD ชั้น 1 อาคาร 1
+Special room	ห้องยา CLMV	ห้องยา CLMV ชั้น 4 อาคาร 3
+Special room	SERVER	ห้อง Server ชั้น 5 อาคาร 1
+ลิฟต์และบันไดเลื่อน	LIFT1	ลิฟต์โดยสารผู้ป่วย NO.1
+ลิฟต์และบันไดเลื่อน	LIFT2	ลิฟต์โดยสารผู้ป่วย NO.2
+ลิฟต์และบันไดเลื่อน	LIFT3	ลิฟต์โดยสารผู้ป่วย NO.3
+ลิฟต์และบันไดเลื่อน	LIFT4	ลิฟต์โดยสารผู้ป่วย NO.4
+ลิฟต์และบันไดเลื่อน	LIFT5	ลิฟต์โดยสารผู้ป่วย NO.5
+ลิฟต์และบันไดเลื่อน	LIFT7	ลิฟต์ส่งของ NO.7
+ลิฟต์และบันไดเลื่อน	LIFT8	ลิฟต์โดยสารผู้ป่วย NO.8
+ลิฟต์และบันไดเลื่อน	LIFT9	ลิฟต์โดยสารทั่วไป NO.9
+ลิฟต์และบันไดเลื่อน	LIFT10	ลิฟต์โดยสารทั่วไป NO.10
+ลิฟต์และบันไดเลื่อน	LIFT11	ลิฟต์โดยสารทั่วไป NO.11
+ลิฟต์และบันไดเลื่อน	LIFT12	ลิฟต์โดยสารทั่วไป NO.12
+ลิฟต์และบันไดเลื่อน	LIFT14	ลิฟต์โดยสารผู้ป่วย NO.14
+ลิฟต์และบันไดเลื่อน	DLIFT1	ลิฟต์ส่งยา NO.1
+ลิฟต์และบันไดเลื่อน	ESC1	บันไดเลื่อน No.1 อาคาร 3
+ลิฟต์และบันไดเลื่อน	ESC2	บันไดเลื่อน No.2 อาคาร 3
+ลิฟต์และบันไดเลื่อน	ESC3	บันไดเลื่อน No.3 อาคาร 3
+ลิฟต์และบันไดเลื่อน	ESC4	บันไดเลื่อน No.4 อาคาร 3
+ลิฟต์และบันไดเลื่อน	ESC5	บันไดเลื่อน No.5 อาคาร 3
+ลิฟต์และบันไดเลื่อน	ESC6	บันไดเลื่อน No.6 อาคาร 3
+ลิฟต์และบันไดเลื่อน	ESC7	บันไดเลื่อน No.7 อาคาร 3
+ลิฟต์และบันไดเลื่อน	ESC8	บันไดเลื่อน No.8 อาคาร 3
+ระบบป้องกันอัคคีภัย	FP1	FIRE PUMP 1 อาคาร 1
+ระบบป้องกันอัคคีภัย	FP2	FIRE PUMP 2 อาคารจอดรถ
+ระบบป้องกันอัคคีภัย	FP3	FIRE PUMP 3 อาคาร 3
+ระบบป้องกันอัคคีภัย	JP1	JOCKEY PUMP 1 อาคาร 1
+ระบบป้องกันอัคคีภัย	JP2	JOCKEY PUMP 2 อาคารจอดรถ
+ระบบป้องกันอัคคีภัย	JP3	JOCKEY PUMP 3 อาคาร 3
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SUB1	SUBMERSIBLE PUMP (สูบน้ำเสีย) No.1 อาคารจอดรถ
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SUB2	SUBMERSIBLE PUMP No.2 บ่อเกรอะ อาคาร 3
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SUB3	SUBMERSIBLE PUMP No.3 บ่อเกรอะ อาคาร 3
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SUB4	SUBMERSIBLE PUMP No.4 Food court อาคาร 3
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SUB5	SUBMERSIBLE PUMP No.5 Food court อาคาร 3
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SUB6	SUBMERSIBLE PUMP No.6 OPD อาคาร 1
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SUB7	SUBMERSIBLE PUMP No.7 OPD อาคาร 1
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SUB8	SUBMERSIBLE PUMP No.8 OPD อาคาร 1
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SUB9	SUBMERSIBLE PUMP No.9 ดวงแก้ว อาคาร 1
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SUB10	SUBMERSIBLE PUMP No.10 พระพรม อาคาร 1
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SUB11	SUBMERSIBLE PUMP No.11 พระพรม อาคาร 1
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	AB1	AIR BLOWER No.1 (เติมอากาศ) บ่อบำบัด อาคาร 2
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	AB2	AIR BLOWER No.2 (เติมอากาศ) บ่อบำบัด อาคาร 2
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SSP1	SUBMERSIBLE SEWAGE PUMP No.1 (ดูดตะกอน) บ่อบำบัด อาคาร 2
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SSP2	SUBMERSIBLE SEWAGE PUMP No.2 (ดูดตะกอน) บ่อบำบัด อาคาร 2
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SSP3	SUBMERSIBLE SEWAGE PUMP No.3 (ดูดตะกอน) บ่อบำบัด อาคาร 2
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SSP4	SUBMERSIBLE SEWAGE PUMP No.4 (ดูดตะกอน) บ่อบำบัด อาคาร 2
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SSP5	SUBMERSIBLE SEWAGE PUMP No.5 (ดูดตะกอน) บ่อบำบัด อาคาร 2
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SSP6	SUBMERSIBLE SEWAGE PUMP No.6 (ดูดตะกอน) บ่อบำบัด อาคาร 2
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SSP7	SUBMERSIBLE SEWAGE PUMP No.7 (สูบน้ำทิ้ง) บ่อบำบัด อาคาร 2
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	SSP8	SUBMERSIBLE SEWAGE PUMP No.8 (สูบน้ำทิ้ง) บ่อบำบัด อาคาร 2
+ระบบสุขาภิบาลและบำบัดน้ำเสีย	PFC	PUMP FEED CHLORINE (บ่อบำบัด) อาคาร 2
