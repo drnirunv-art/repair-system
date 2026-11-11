@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ตลาดอะไหล่ 12 รพ. | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+  .card{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface);display:flex;flex-direction:column;gap:4px;min-width:0}
+  .card b{overflow-wrap:anywhere}.card .addrow{display:flex;gap:6px;margin-top:6px}.card .addrow input{width:80px;min-width:0}
+  .mv{display:inline-block;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:700;white-space:nowrap;color:#111}
+  .mv.FAST{background:#9be3b0}.mv.NORMAL{background:#bcd7ff}.mv.SLOW{background:#ffe08a}.mv.NON{background:#ffb3ad}.mv.NEW{background:#ddd}
+  .bar{display:flex;height:16px;border-radius:8px;overflow:hidden;background:var(--line)}
+  .bar i{display:block;height:100%}
+  .flow{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;font-size:11px;margin:8px 0}
+  .flow span{border:1px solid var(--line);border-radius:6px;padding:4px;text-align:center}
+  .flow span.done{border-color:var(--s-close);color:var(--s-close);font-weight:700}.flow span.now{border-color:var(--accent);font-weight:700}
+  table.lines input[type=number]{width:80px}table.lines input[type=text]{width:100%;min-width:120px}
+  #mDoc{display:none}
+  .doc{color:#111;background:#fff;font-size:13px}
+  .doc h2{text-align:center;margin:6px 0}.doc table{width:100%;border-collapse:collapse;margin:8px 0}
+  .doc th,.doc td{border:1px solid #777;padding:4px 6px;text-align:left;vertical-align:top}
+  .doc .signs{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-top:36px;text-align:center}
+  .doc .signs div{border-top:1px solid #555;padding-top:4px;font-size:12px}
+  @media (max-width:760px){.flow{grid-template-columns:repeat(4,minmax(0,1fr))}}
+  @media (max-width:760px){#sCart table,#sCart tbody,#sCart tr,#sCart td{display:block}#sCart tr:first-child{display:none}#sCart td{border:0;padding:3px 0}#sCart tr{border-top:1px solid var(--line);padding:8px 0}#sCart input[type=text],#sCart select{width:100%}}
+  @media print{body.docprint header,body.docprint main>section,body.docprint #toast{display:none!important}body.docprint #mDoc{display:block}@page{size:A4;margin:12mm}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">XH</span><h1 id="title">ตลาดอะไหล่ 12 โรงพยาบาล</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html?tab=parts">← กลับหน้าอะไหล่</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="shop" aria-selected="true">หน้าร้าน / ขอแบ่งซื้อ <span class="badge" id="nCart" hidden></span></button>
+    <button role="tab" data-tab="mine" aria-selected="false">ของที่เราฝากขาย</button>
+    <button role="tab" data-tab="orders" aria-selected="false">ใบจัดซื้อข้ามโรง <span class="badge" id="nTodo" hidden></span></button>
+    <button role="tab" data-tab="dash" aria-selected="false">Dashboard อะไหล่</button>
+    <button role="tab" data-tab="central" aria-selected="false" id="tabCentral" hidden>รอบอนุมัติส่วนกลาง <span class="badge" id="nRound" hidden></span></button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+
+  <section id="tab-shop" hidden>
+    <p class="sub">หน้าร้าน = ของที่โรงอื่นฝากขาย · พิมพ์คำค้น 2 ตัวอักษรขึ้นไปเพื่อ <b>ขอแบ่งซื้อ</b> จากสต็อกทั้งเครือ · ไม่มีราคาในระบบ ฝ่ายจัดซื้อใส่ราคาและชำระเงินเอง</p>
+    <div class="filters" style="max-width:520px"><label>ค้นหา<input id="sQ" placeholder="รหัส ชื่อ หรือหมวดอะไหล่"></label></div>
+    <div id="sCart"></div>
+    <div class="cards" id="sList"></div>
+  </section>
+
+  <section id="tab-mine" hidden>
+    <p class="sub">ฝากขายได้เฉพาะ Chief Engineer / Owner · ฝากขายยังไม่ใช่ขายแล้ว สต็อกเปลี่ยนเมื่อตรวจนับในขั้นสุดท้ายเท่านั้น</p>
+    <h3>ที่เราฝากขายอยู่</h3><div class="scroll"><table id="mListed"></table></div>
+    <h3 style="margin-top:16px">แนะนำให้ฝากขาย (พอใช้เกิน 3 เดือน หรือไม่ถูกเบิก 90 วัน)</h3><div class="scroll"><table id="mSuggest"></table></div>
+  </section>
+
+  <section id="tab-orders" hidden>
+    <div class="filters" style="max-width:520px"><select id="oFilter"><option value="todo">รอเราดำเนินการ</option><option value="open">กำลังดำเนินการทั้งหมด</option><option value="count">งานตรวจนับสต็อก</option><option value="all">ทั้งหมด</option></select>
+      <button class="btn" type="button" id="oCsv">ทะเบียนคุม (Excel)</button></div>
+    <div id="oDetail"></div>
+    <div class="jobs" id="oList"></div>
+  </section>
+
+  <section id="tab-dash" hidden>
+    <div class="kpis" id="dKpi"></div>
+    <div id="dAll"></div>
+    <h3 style="margin-top:16px">อะไหล่รายตัวของโรงเรา</h3>
+    <div class="filters" style="max-width:640px"><label>ค้นหา<input id="dQ" placeholder="เช่น E27"></label><button class="btn" type="button" id="dCsv" style="align-self:end">Excel (CSV)</button></div>
+    <div class="chips" id="dChips"></div>
+    <div class="scroll"><table id="dParts"></table></div>
+    <div id="dHints"></div>
+  </section>
+
+  <section id="tab-central" hidden>
+    <p class="sub">บัญชีส่วนกลางรวมใบที่ผู้ขายยืนยันแล้วเป็นรอบ ผู้อนุมัติส่วนกลางติ๊กออกบรรทัดที่ไม่อนุมัติ แล้วยืนยันผล · ทางสำรอง: พิมพ์แบบฟอร์มไปเซ็น แล้วกรอกผลพร้อมแนบสแกน</p>
+    <div id="cWait"></div>
+    <div id="cRound"></div>
+    <h3 style="margin-top:16px">รอบทั้งหมด</h3><div class="scroll"><table id="cRounds"></table></div>
+    <div id="cPeople" style="margin-top:16px"></div>
+  </section>
+</main>
+<div id="mDoc"></div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/market.js"></script>
+</body>
+</html>
