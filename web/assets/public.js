@@ -36,7 +36,9 @@
     const fl = locs.filter(l => l.building === $("#rBuilding").value);
     opts($("#rFloor"), [...new Set(fl.map(l => l.floor))].map(f => [f, f]));
     const dp = fl.filter(l => l.floor === $("#rFloor").value);
-    opts($("#rDept"), dp.map(l => [l.id, l.department]));
+    opts($("#rDept"), [...dp.map(l => [l.id, l.department]), ["__new", "+ แผนกอื่น (พิมพ์ชื่อเอง)"]]);
+    const isNew = $("#rDept").value === "__new";
+    $("#rDeptNewWrap").hidden = !isNew; $("#rDeptNew").required = isNew;
     $("#equipList").innerHTML = equip.filter(x => !x.location_id || x.location_id === $("#rDept").value).map(x => `<option value="${esc(x.name)}">`).join("");
   }
   ["#rBuilding", "#rFloor", "#rDept"].forEach(s => $(s).onchange = cascade);
@@ -61,15 +63,19 @@
         if (up.error) throw up.error; photos = [path];
       }
       const eq = equip.find(x => x.name === $("#rEquip").value.trim());
-      const { data, error } = await sb.rpc("submit_job", {
-        p_hospital_code: H.code, p_location_id: $("#rDept").value, p_detail: $("#rDetail").value,
+      const common = { p_hospital_code: H.code, p_detail: $("#rDetail").value,
         p_reporter_name: $("#rName").value, p_reporter_phone: $("#rPhone").value,
         p_equipment_id: eq ? eq.id : null, p_equipment_text: eq ? null : $("#rEquip").value,
-        p_job_type_id: $("#rType").value || null, p_photo_paths: photos });
+        p_job_type_id: $("#rType").value || null, p_photo_paths: photos };
+      const newDept = $("#rDept").value === "__new";
+      const { data, error } = newDept
+        ? await sb.rpc("submit_job_new_dept", { ...common, p_building: $("#rBuilding").value, p_floor: $("#rFloor").value, p_department: $("#rDeptNew").value })
+        : await sb.rpc("submit_job", { ...common, p_location_id: $("#rDept").value });
       if (error) throw error;
       const no = data[0].job_no;
       $("#rMsg").innerHTML = `<div class="note ok">ส่งเรื่องแล้ว เลขใบงาน <b class="mono">${esc(no)}</b> เก็บเลขนี้ไว้ติดตามสถานะ</div>`;
       $("#rDetail").value = ""; $("#rEquip").value = ""; $("#rPhoto").value = "";
+      if (newDept) { const d = $("#rDeptNew").value.trim(); $("#rDeptNew").value = ""; await loadRefs(); const o = [...$("#rDept").options].find(x => x.text === d); if (o) { $("#rDept").value = o.value; cascade(); } }
     } catch (err) { $("#rMsg").innerHTML = `<div class="note bad">ส่งไม่สำเร็จ: ${esc(errText(err))}</div>`; }
     btn.disabled = false;
   };

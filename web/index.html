@@ -22,6 +22,7 @@
         <label>อาคาร<select id="rBuilding" required></select></label>
         <label>ชั้น<select id="rFloor" required></select></label>
         <label>แผนก<select id="rDept" required></select></label>
+        <label id="rDeptNewWrap" hidden>ชื่อแผนก (ไม่มีในรายการ)<input id="rDeptNew" maxlength="80" placeholder="พิมพ์ชื่อแผนก เช่น ห้องยา ชั้น 2"></label>
         <label>ประเภทงาน<select id="rType"></select></label>
         <label class="span2">อุปกรณ์ที่แจ้งซ่อม (ถ้าระบุได้)<input id="rEquip" list="equipList" placeholder="เช่น แอร์ห้องตรวจ 3"><datalist id="equipList"></datalist></label>
         <label class="full">รายละเอียดปัญหา<textarea id="rDetail" required placeholder="อาการที่พบ เริ่มเป็นเมื่อไร กระทบผู้ป่วยหรือไม่"></textarea></label>
