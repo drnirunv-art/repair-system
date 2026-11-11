@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>แจ้งซ่อม | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">RS</span><h1>แจ้งซ่อม งานวิศวกรรมอาคาร</h1>
+    <div class="who"><select id="hospital" aria-label="โรงพยาบาล" style="width:auto"></select><a href="staff.html" id="staffLink">เจ้าหน้าที่</a></div></div>
+  <nav role="tablist"><button role="tab" data-tab="report" aria-selected="true">แจ้งซ่อม</button><button role="tab" data-tab="track" aria-selected="false">ติดตามสถานะ</button></nav>
+</div></header>
+<main class="wrap">
+  <section id="tab-report">
+    <h2>แบบฟอร์มแจ้งซ่อม</h2>
+    <p class="sub">เลือกตำแหน่งและบอกอาการ ระบบจะออกเลขใบงานให้ทันที</p>
+    <form id="fReport" class="panel">
+      <div class="grid">
+        <label>อาคาร<select id="rBuilding" required></select></label>
+        <label>ชั้น<select id="rFloor" required></select></label>
+        <label>แผนก<select id="rDept" required></select></label>
+        <label>ประเภทงาน<select id="rType"></select></label>
+        <label class="span2">อุปกรณ์ที่แจ้งซ่อม (ถ้าระบุได้)<input id="rEquip" list="equipList" placeholder="เช่น แอร์ห้องตรวจ 3"><datalist id="equipList"></datalist></label>
+        <label class="full">รายละเอียดปัญหา<textarea id="rDetail" required placeholder="อาการที่พบ เริ่มเป็นเมื่อไร กระทบผู้ป่วยหรือไม่"></textarea></label>
+        <label>ชื่อ-นามสกุล *<input id="rName" required autocomplete="name"></label>
+        <label>เบอร์โทร / ต่อภายใน *<input id="rPhone" required inputmode="tel"></label>
+        <label>รูปภาพ (ไม่บังคับ)<input id="rPhoto" type="file" accept="image/*" capture="environment"></label>
+      </div>
+      <div class="row" style="margin-top:16px"><button class="btn primary" id="rSubmit">ส่งเรื่องแจ้งซ่อม</button><button class="btn" type="button" id="rReload">โหลดข้อมูลตำแหน่งใหม่</button></div>
+      <div id="rMsg"></div>
+    </form>
+  </section>
+  <section id="tab-track" hidden>
+    <h2>ติดตามสถานะงานซ่อม</h2>
+    <p class="sub">ค้นด้วยเลขใบงาน เบอร์โทร หรือชื่อผู้แจ้ง (อย่างน้อย 3 ตัวอักษร)</p>
+    <form id="fTrack" class="filters"><input id="tQ" placeholder="เช่น PT1-6911-0012 หรือ 0812345678"><button class="btn primary" style="flex:0">ค้นหา</button></form>
+    <div id="tList" class="jobs"><div class="empty">พิมพ์คำค้นแล้วกดค้นหา</div></div>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/public.js"></script>
+</body>
+</html>

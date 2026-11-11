@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>เจ้าหน้าที่ | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">RS</span><h1 id="title">ระบบใบงาน งานวิศวกรรมอาคาร</h1>
+    <div class="who"><span id="who"></span><button class="btn small" id="logout" hidden>ออกจากระบบ</button></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="jobs" aria-selected="true">ใบงาน</button>
+    <button role="tab" data-tab="dash" aria-selected="false">Dashboard</button>
+    <button role="tab" data-tab="setup" aria-selected="false" data-manager>ตั้งค่า</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="login" class="login" hidden>
+    <form id="fLogin" class="panel">
+      <h2>เข้าสู่ระบบเจ้าหน้าที่</h2>
+      <p class="sub">ใช้อีเมลที่หัวหน้าเพิ่มเข้าระบบแล้ว ถ้ายังไม่มีบัญชีกด “สมัครบัญชี” แล้วแจ้งหัวหน้าให้เพิ่มสิทธิ์</p>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <label>อีเมล<input id="lEmail" type="email" required autocomplete="username"></label>
+        <label>รหัสผ่าน<input id="lPass" type="password" required minlength="8" autocomplete="current-password"></label>
+        <div class="row"><button class="btn primary">เข้าสู่ระบบ</button><button class="btn" type="button" id="lSignup">สมัครบัญชี</button></div>
+      </div>
+      <div id="lMsg"></div>
+    </form>
+  </section>
+  <section id="pending" hidden><div class="panel"><h2>บัญชียังไม่มีสิทธิ์</h2><p class="sub">ลงชื่อเข้าใช้แล้ว แต่ยังไม่ได้ผูกกับโรงพยาบาล แจ้งหัวหน้าให้เพิ่มอีเมลนี้ในหน้า ตั้งค่า &gt; เจ้าหน้าที่</p></div></section>
+
+  <section id="tab-jobs" hidden>
+    <h2>จัดการใบงาน</h2>
+    <p class="sub">ใบงานที่เกิน SLA มีแถบแดงด้านซ้าย เรียงงานเร่งด่วนขึ้นก่อน อัปเดตอัตโนมัติเมื่อมีใบงานใหม่</p>
+    <div class="filters">
+      <select id="wStatus"></select><select id="wTech"></select><select id="wType"></select><input id="wQ" placeholder="ค้นหาเลขใบงาน ชื่อ แผนก">
+    </div>
+    <div id="wList" class="jobs"></div>
+  </section>
+
+  <section id="tab-dash" hidden>
+    <h2>Dashboard</h2>
+    <div class="filters" style="max-width:420px"><label>ตั้งแต่<input id="dFrom" type="date"></label><label>ถึง<input id="dTo" type="date"></label></div>
+    <div class="kpis" id="dKpi"></div>
+    <div class="two">
+      <div class="panel"><h3>ใบงานตามประเภทงาน</h3><div id="dType"></div></div>
+      <div class="panel"><h3>งานค้างตามช่าง</h3><div id="dTech"></div></div>
+      <div class="panel"><h3>ใบงานตามอาคาร</h3><div id="dBld"></div></div>
+      <div class="panel"><h3>SLA ตามความเร่งด่วน</h3><div class="scroll"><table id="dSla"></table></div></div>
+    </div>
+  </section>
+
+  <section id="tab-setup" hidden>
+    <h2>ตั้งค่า</h2>
+    <p class="sub">ข้อมูลพื้นฐานของโรงพยาบาลนี้ แก้ได้เฉพาะหัวหน้าและผู้ดูแล</p>
+    <div class="two">
+      <form class="panel" id="fStaff"><h3>เจ้าหน้าที่</h3>
+        <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+          <label>อีเมล (สมัครบัญชีแล้ว)<input id="sEmail" type="email" required></label>
+          <label>ชื่อที่แสดง<input id="sName"></label>
+          <label>บทบาท<select id="sRole"></select></label>
+          <div class="row" style="align-self:end"><button class="btn primary">เพิ่ม / เปลี่ยนบทบาท</button></div>
+        </div><div id="sMsg"></div><div class="scroll" style="margin-top:12px"><table id="sList"></table></div></form>
+      <form class="panel" id="fPrio"><h3>ความเร่งด่วนและ SLA</h3>
+        <div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto">
+          <label>ชื่อ<input id="pName" required placeholder="Critical"></label><label>SLA (นาที)<input id="pSla" type="number" min="1" required></label>
+          <div class="row" style="align-self:end"><button class="btn primary">เพิ่ม</button></div></div>
+        <div id="pMsg"></div><div class="scroll" style="margin-top:12px"><table id="pList"></table></div></form>
+      <form class="panel" id="fLoc"><h3>ตำแหน่ง (อาคาร / ชั้น / แผนก)</h3>
+        <div class="grid">
+          <label>อาคาร<input id="oB" required></label><label>ชั้น<input id="oF" required></label><label>แผนก<input id="oD" required></label></div>
+        <div class="row" style="margin-top:10px"><button class="btn primary">เพิ่มตำแหน่ง</button></div>
+        <div id="oMsg"></div><div class="scroll" style="margin-top:12px;max-height:360px"><table id="oList"></table></div></form>
+      <form class="panel" id="fType"><h3>ประเภทงาน (Job Code)</h3>
+        <div class="grid">
+          <label>รหัส<input id="yCode" required placeholder="EE"></label><label>ชื่อ<input id="yName" required placeholder="ไฟฟ้า"></label><label>เวลามาตรฐาน (นาที)<input id="yStd" type="number" min="0"></label></div>
+        <div class="row" style="margin-top:10px"><label style="flex-direction:row;align-items:center;gap:6px"><input id="yKpi" type="checkbox" checked style="width:auto">นับ KPI</label><button class="btn primary">เพิ่มประเภทงาน</button></div>
+        <div id="yMsg"></div><div class="scroll" style="margin-top:12px"><table id="yList"></table></div></form>
+    </div>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/staff.js"></script>
+</body>
+</html>
