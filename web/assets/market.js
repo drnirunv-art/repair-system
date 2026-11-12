@@ -301,9 +301,28 @@
     $("#cWait").innerHTML = `<div class="panel"><b>ใบที่ผู้ขายยืนยันแล้ว รอเข้ารอบ: ${wait.length} ใบ</b> ${wait.map(o => `<span class="pill">${esc(o.doc_no)}</span>`).join(" ")}
       ${central.can_account && wait.length ? '<div class="row" style="margin-top:8px"><button class="btn primary" type="button" id="cNew">จัดรอบใหม่</button></div>' : ""}<div id="cWaitMsg"></div></div>`;
     $("#cRounds").innerHTML = `<tr><th>รอบ</th><th>วันที่จัด</th><th>จำนวนใบ</th><th>สถานะ</th><th></th></tr>` + (rounds.map(x => `<tr><td class="mono">${esc(x.round_no)}</td><td>${fmt(x.created_at)}</td><td>${orders.filter(o => o.round_id === x.id).length}</td><td>${x.status === "open" ? "<b>รออนุมัติ</b>" : "ตัดสินแล้ว " + fmt(x.decided_at) + (x.paper ? " (กระดาษ · " + esc(x.signer_name || "") + ")" : "")}</td><td><button class="btn small" type="button" data-round="${x.id}">เปิด</button></td></tr>`).join("") || '<tr><td colspan="5" class="empty">ยังไม่มีรอบ</td></tr>');
-    $("#cPeople").innerHTML = role() === "owner" ? `<p class="sub">ผู้อนุมัติส่วนกลางและบัญชีส่วนกลาง กำหนดโดย Owner · ตอนนี้บัญชีของคุณ: ${central.can_approve ? "อนุมัติรอบได้" : "อนุมัติรอบไม่ได้"} · ${central.can_account ? "จัดรอบได้" : "จัดรอบไม่ได้"}</p>` : "";
+    if (role() === "owner") {
+      // the Owner picks who acts as central approver / central accounting from the staff of their own hospital
+      const [pp, cc] = await Promise.all([sb.from("profiles").select("id,full_name,role,active").eq("hospital_id", H.id).eq("active", true).order("full_name"), sb.from("xh_central").select("*")]);
+      const set = Object.fromEntries((cc.data || []).map(x => [x.profile_id, x])), people = (pp.data || []).filter(x => x.role !== "observer");
+      const others = (cc.data || []).filter(x => !people.some(q => q.id === x.profile_id)).length;
+      $("#cPeople").innerHTML = `<div class="panel"><h3 style="margin-top:0">ผู้อนุมัติส่วนกลาง / บัญชีส่วนกลาง</h3>
+        <p class="sub">ติ๊กเพื่อให้สิทธิ์ เอาติ๊กออกเพื่อถอนสิทธิ์ (บันทึกทันที) · “อนุมัติรอบ” = ตัดสินผลแต่ละรอบ · “จัดรอบ” = รวมใบเป็นรอบและบันทึกผลจากกระดาษ${others ? ` · มีผู้มีสิทธิ์จากโรงอื่นอีก ${others} คน` : ""}</p>
+        <div class="scroll"><table><tr><th>ชื่อ</th><th>สิทธิ์ในระบบ</th><th>อนุมัติรอบ</th><th>จัดรอบ (บัญชี)</th></tr>${people.map(x => `<tr><td>${esc(x.full_name || "(ไม่มีชื่อ)")}${x.id === me.id ? " (คุณ)" : ""}</td><td>${esc(x.role)}</td>
+          <td><input type="checkbox" data-cp="${x.id}" data-k="a" ${set[x.id]?.can_approve ? "checked" : ""} aria-label="อนุมัติรอบ ${esc(x.full_name || "")}"></td>
+          <td><input type="checkbox" data-cp="${x.id}" data-k="c" ${set[x.id]?.can_account ? "checked" : ""} aria-label="จัดรอบ ${esc(x.full_name || "")}"></td></tr>`).join("")}</table></div><div id="cPeopleMsg"></div></div>`;
+    } else $("#cPeople").innerHTML = "";
     if (curRound) openRound(curRound);
   }
+  $("#tab-central").onchange = async ev => {
+    const id = ev.target.dataset.cp; if (!id) return;
+    const box = k => document.querySelector(`[data-cp="${id}"][data-k="${k}"]`).checked;
+    if (id === me.id && !box("a") && !box("c") && !confirm("ถอนสิทธิ์ส่วนกลางของตัวคุณเองทั้งสองอย่าง?")) { ev.target.checked = true; return; }
+    const { error } = await sb.rpc("xh_central_set", { p_profile: id, p_approve: box("a"), p_account: box("c") });
+    if (error) { ev.target.checked = !ev.target.checked; return bad("#cPeopleMsg", error); }
+    if (id === me.id) central = { can_approve: box("a"), can_account: box("c") };
+    toast("บันทึกสิทธิ์ส่วนกลางแล้ว");
+  };
   $("#tab-central").onclick = async ev => {
     if (ev.target.id === "cNew") {
       ev.target.disabled = true; const { data, error } = await sb.rpc("xh_round_create");
