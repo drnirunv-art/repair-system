@@ -11,8 +11,8 @@
   // f: [key, label, type, options]  types: sel, text, num, date, dt, area
   const ROOTS = [
     { k: "R1", t: "งานซ่อม (CM)", auto: true, d: "นับจากใบแจ้งซ่อมของเดือนนี้" },
-    { k: "R2", t: "PM ตามแผน", auto: true, d: "นับจากใบงาน PM2 ของเดือนนี้" },
-    { k: "R3", t: "รูปถ่ายงาน PM", auto: true, d: "รูปที่แนบในใบงาน PM2" },
+    { k: "R2", t: "PM ตามแผน", auto: true, d: "นับจากใบงาน PM Inhouse ของเดือนนี้" },
+    { k: "R3", t: "รูปถ่ายงาน PM", auto: true, d: "รูปที่แนบในใบงาน PM Inhouse" },
     { k: "R4", t: "บันทึก OP / มิเตอร์", auto: true, d: "บันทึกประจำวันจากหน้า OP" },
     { k: "R5", t: "บิลค่าไฟ ค่าน้ำ", d: "ลงตัวเลขจากบิลและแนบไฟล์บิล", file: true,
       f: [["kind", "ประเภทบิล", "sel", ["ค่าไฟฟ้า", "ค่าน้ำประปา", "อื่น ๆ"]], ["period", "รอบบิล", "text"], ["kwh_on", "kWh On Peak", "num"], ["kwh_off", "kWh Off Peak", "num"],
@@ -178,7 +178,7 @@
     const r = rootOf(sel);
     if (!r) { $("#bRoot").innerHTML = ""; return; }
     if (r.auto) {
-      const link = { R1: ["staff.html", "เปิดหน้าใบงาน"], R2: ["pm.html?tab=result", "เปิดผล PM2"], R3: ["pm.html?tab=result", "เปิดผล PM2"], R4: ["op.html?tab=sheet", "เปิดตาราง OP"] }[r.k];
+      const link = { R1: ["staff.html", "เปิดหน้าใบงาน"], R2: ["pm.html?tab=result", "เปิดผล PM Inhouse"], R3: ["pm.html?tab=result", "เปิดผล PM Inhouse"], R4: ["op.html?tab=sheet", "เปิดตาราง OP"] }[r.k];
       $("#bRoot").innerHTML = `<div class="panel"><h3>${r.k} · ${esc(r.t)}</h3><p class="sub">${esc(r.d)} ระบบดึงให้เอง ไม่ต้องลงข้อมูลหรืออัปโหลดไฟล์</p>
         <p><b>${esc(auto[r.k].line)}</b></p><a class="btn small" href="${link[0]}">${link[1]} ↗</a></div>`;
       return;

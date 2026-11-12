@@ -1,4 +1,4 @@
-// PM2: preventive maintenance by QR — monthly tasks, check sheets (sign 1/3), head 2/3, engineer 3/3,
+// PM Inhouse: preventive maintenance by QR — monthly tasks, check sheets (sign 1/3), head 2/3, engineer 3/3,
 // results, equipment registry + yearly plan, QR stickers and check-sheet templates.
 (() => {
   const { sb, $, esc, fmt, errText, opts, uploadMedia, signed } = RS;
@@ -49,7 +49,7 @@
     me = data;
     if (!me || !me.hospital_id) { $("#gate").hidden = false; return; }
     H = me.hospitals; $("#gate").hidden = true;
-    $("#title").textContent = "PM2 บำรุงรักษาตามแผน · " + H.name; $("#who").textContent = me.full_name || session.user.email;
+    $("#title").textContent = "PM Inhouse บำรุงรักษาตามแผน · " + H.name; $("#who").textContent = me.full_name || session.user.email;
     await Promise.all([loadStaff(), loadEquip(), loadTpls()]);
     document.querySelectorAll("[data-manager]").forEach(b => b.hidden = !isMgr());
     $("#signTab").hidden = !isHead();
@@ -441,7 +441,7 @@
     $("#qGrid").classList.toggle("pick", qSel.size > 0);
     $("#qInfo").textContent = `${qSel.size ? "เลือกไว้ " + qSel.size + " ดวง · " : ""}${l.length} ดวง${l.length > 300 ? " (แสดง 300 ดวงแรก กรองเพิ่มเพื่อพิมพ์ทีละชุด)" : ""}${noTag ? ` · มี ${noTag} เครื่องที่ยังไม่มี TAG จึงยังพิมพ์ไม่ได้` : ""}`;
     $("#qGrid").innerHTML = l.slice(0, 300).map(e => { const q = qrcode(0, "M"); q.addData(tagUrl(e)); q.make();
-      return `<div data-q="${e.id}" class="${qSel.has(e.id) ? "sel" : ""}"><small>${esc(H.name)} · PM2</small><img src="${q.createDataURL(4, 2)}" alt="QR ${esc(e.tag)}"><b>${esc(e.tag)}</b><small>${esc(e.name)}</small><small>${esc(where(e))}</small></div>`; }).join("") || '<div class="empty">ไม่มีเครื่องที่มี TAG ตามตัวกรอง</div>';
+      return `<div data-q="${e.id}" class="${qSel.has(e.id) ? "sel" : ""}"><small>${esc(H.name)} · PM Inhouse</small><img src="${q.createDataURL(4, 2)}" alt="QR ${esc(e.tag)}"><b>${esc(e.tag)}</b><small>${esc(e.name)}</small><small>${esc(where(e))}</small></div>`; }).join("") || '<div class="empty">ไม่มีเครื่องที่มี TAG ตามตัวกรอง</div>';
   }
   ["#qB", "#qF", "#qT"].forEach(s => $(s).onchange = renderQr);
   $("#qQ").oninput = renderQr;
