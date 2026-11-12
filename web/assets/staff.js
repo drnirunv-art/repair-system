@@ -20,6 +20,7 @@
   const TABS = ["jobs", "inbox", "parts", "docs", "dash", "report", "setup"];
   let S = { require_photo: false, max_photos: 6, alert_unassigned_min: 5, alert_not_started_min: 10, appointment_grace_min: 120, hold_needs_approval: true };
   let editing = null, channel = null, view = "all", seenAlerts = new Set(), firstAlertRun = true;
+  let layout = "card", byTech = false, openRow = null, knownNew = null;
   const isMgr = () => me && MANAGER.includes(me.role);
   const isApprover = () => me && APPROVER.includes(me.role);
   const can = () => me && me.role !== "observer";
@@ -62,7 +63,7 @@
     $("#tabs").hidden = false;
     document.querySelectorAll("[data-manager]").forEach(b => b.hidden = !isMgr());
     document.querySelectorAll("[data-approver]").forEach(b => b.hidden = !isApprover());
-    view = store.get("rs-view", MANAGER.includes(me.role) ? "all" : "mine");
+    view = store.get("rs-view", MANAGER.includes(me.role) ? "all" : "mine"); layout = store.get("rs-layout", "card") === "table" ? "table" : "card";
     await loadRefs(); await loadDocs(); await loadJobs();
     channel = sb.channel("jobs-" + H.id)
       .on("postgres_changes", { event: "*", schema: "public", table: "jobs", filter: "hospital_id=eq." + H.id }, () => loadJobs())
@@ -88,7 +89,9 @@
     const n = { all: jobs.filter(j => OPEN.includes(j.status)).length, mine: jobs.filter(j => OPEN.includes(j.status) && mine(j)).length,
       review: jobs.filter(j => j.status === "clear").length, approve: jobs.filter(j => j.status === "on_hold" && j.hold_status === "pending").length,
       appoint: jobs.filter(j => OPEN.includes(j.status) && (j.appointment_at || j.hold_until)).length };
-    $("#wViews").innerHTML = VIEWS.map(([k, l]) => `<button type="button" class="chip" data-view="${k}" aria-pressed="${view === k}">${l}<b>${n[k]}</b></button>`).join("");
+    $("#wViews").innerHTML = VIEWS.map(([k, l]) => `<button type="button" class="chip" data-view="${k}" aria-pressed="${view === k}">${l}<b>${n[k]}</b></button>`).join("")
+      + `<span style="flex:1"></span><button type="button" class="chip" data-bytech aria-pressed="${byTech}">งานยังไม่ปิด รายช่าง</button>
+        <button type="button" class="chip" data-layout="card" aria-pressed="${layout === "card"}">การ์ด</button><button type="button" class="chip" data-layout="table" aria-pressed="${layout === "table"}">ตาราง</button>`;
   }
 
   /* ---------- data ---------- */
@@ -121,7 +124,16 @@
       const a = await sb.from("job_assignees").select("job_id,profile_id,is_lead,active").in("job_id", open.slice(i, i + 150));
       if (a.data) assignees.push(...a.data);
     }
+    const fresh = jobs.filter(j => j.status === "register").map(j => j.id);
+    if (knownNew && can()) { const n = fresh.filter(id => !knownNew.has(id)).length; if (n) newJobPopup(n, fresh.length); }
+    knownNew = new Set(fresh);
     render(); checkAlerts();
+  }
+  function newJobPopup(n, waiting) {
+    const d = $("#newJobs"); if (!d) return;
+    $("#newJobsText").textContent = `งานใหม่ ${n} ใบ · รอรับงานทั้งหมด ${waiting} ใบ`;
+    if (soundOn()) beep();
+    if (!d.open) d.showModal();
   }
   // parts, stock moves, purchase requests and memos (phase B)
   async function loadDocs() {
@@ -266,6 +278,25 @@
     if (view === "appoint") return OPEN.includes(j.status) && (j.appointment_at || j.hold_until);
     return true;
   }
+  // compact one-line-per-job table (like a spreadsheet); "จัดการ" opens the full card under the row
+  const timer = j => j.status === "on_hold" && j.hold_started_at ? "พักมา " + dur(mins(j.hold_started_at)) : j.status === "work_on" && j.started_at ? "ทำมา " + dur(mins(j.started_at)) : j.status === "register" ? "รอ " + dur(mins(j.created_at)) : "";
+  function tableOf(list) {
+    return `<div class="scroll"><table class="jt"><thead><tr><th>#</th><th>เลขใบงาน</th><th>วันที่แจ้ง</th><th>เกิน</th><th>สถานที่</th><th>รายละเอียด</th><th>ผู้แจ้ง</th><th>ช่างที่รับงาน</th><th>สถานะ</th><th></th></tr></thead><tbody>${list.map((j, i) => {
+      const days = OPEN.includes(j.status) ? Math.floor(mins(j.created_at) / 1440) : 0, crew = crewOf(j), open = openRow === j.id || (editing && editing.id === j.id), n = (j.photo_paths || []).length + (j.before_photo_paths || []).length;
+      return `<tr class="${isLate(j) || overDue(j) > 1 ? "late" : ""}"><td>${i + 1}</td><td class="mono">${esc(j.job_no)}</td><td>${fmt(j.created_at)}</td><td>${days ? `<span class="od">${days}</span>` : ""}</td>
+        <td><b>${esc(j.building || "")}</b><br><small>${[j.floor, j.department].filter(Boolean).map(esc).join(" / ")}</small></td><td class="dt">${esc(j.detail)}${n ? ` <small>📷 ${n}</small>` : ""}</td>
+        <td>${esc(j.reporter_name)}<br><small>${esc(j.reporter_phone)}</small></td><td>${crew.map(id => esc(nameOf(id))).join(", ") || "-"}</td>
+        <td>${pill(j.status, statusLabel(j))}${j.status === "on_hold" ? `<br><small>${esc(j.hold_category || "")}${j.hold_status ? " · <b>" + HOLD_STATUS[j.hold_status] + "</b>" : ""}</small>` : ""}${timer(j) ? `<br><small>⏱ ${timer(j)}</small>` : ""}${isLate(j) ? '<br><small style="color:var(--bad);font-weight:700">เกิน SLA</small>' : ""}</td>
+        <td><button class="btn small" type="button" data-row="${j.id}">${open ? "ปิด" : "จัดการ"}</button></td></tr>${open ? `<tr class="jopen"><td colspan="10">${card(j)}</td></tr>` : ""}`; }).join("")}</tbody></table></div>`;
+  }
+  // open jobs per technician; tap a name to filter the list
+  function techBoard() {
+    const rows = staff.filter(s => s.active && s.role !== "observer").map(s => { const mineJobs = jobs.filter(j => crewOf(j).includes(s.id)); const c = st => mineJobs.filter(j => j.status === st).length;
+      return { s, a: c("assign"), w: c("work_on"), h: c("on_hold"), r: c("clear") }; }).map(x => ({ ...x, t: x.a + x.w + x.h })).sort((x, y) => y.t - x.t);
+    return `<div class="panel" style="margin-bottom:12px"><b>งานยังไม่ปิด รายช่าง</b> <small style="color:var(--muted)">กดชื่อเพื่อดูเฉพาะงานของช่างคนนั้น</small><div class="scroll"><table><thead><tr><th>ช่าง</th><th>รวมยังไม่ปิด</th><th>มอบหมายแล้ว</th><th>กำลังซ่อม</th><th>พักงาน</th><th>ซ่อมเสร็จ รอตรวจ</th></tr></thead><tbody>
+      ${rows.map(x => `<tr><td><a href="#" data-pick-tech="${x.s.id}">${esc(x.s.full_name || "(ไม่มีชื่อ)")}</a></td><td><b>${x.t}</b></td><td>${x.a}</td><td>${x.w}</td><td>${x.h}</td><td>${x.r}</td></tr>`).join("")}
+      <tr><td>ยังไม่มีคนรับ</td><td><b>${jobs.filter(j => j.status === "register").length}</b></td><td colspan="4"></td></tr></tbody></table></div></div>`;
+  }
   const apptKey = j => j.appointment_at || (j.hold_until ? j.hold_until + "T00:00:00+07:00" : "9999");
   function renderJobs() {
     renderViews();
@@ -279,7 +310,9 @@
     if (view === "appoint") {
       let last = "";
       list.slice(0, 300).forEach(j => { const d = fmtDate(apptKey(j).slice(0, 10)); if (d !== last) { html += `<h3 class="day">${d}</h3>`; last = d; } html += card(j); });
-    } else html += list.slice(0, 300).map(card).join("");
+    } else if (layout === "table") html += tableOf(list.slice(0, 300));
+    else html += list.slice(0, 300).map(card).join("");
+    if (byTech) html = techBoard() + html;
     $("#wList").innerHTML = list.length ? html : html + `<div class="empty">ยังไม่มีใบงานในมุมมองนี้</div>`;
     if (editing && editing.act === "history") loadHistory(editing.id);
   }
@@ -306,6 +339,10 @@
   }
   document.addEventListener("click", async e => {
     const t = e.target.closest("button,a"); if (!t) return;
+    if (t.dataset.layout) { layout = t.dataset.layout; store.set("rs-layout", layout); openRow = null; render(); return; }
+    if (t.dataset.bytech !== undefined) { byTech = !byTech; render(); return; }
+    if (t.dataset.row) { openRow = openRow === t.dataset.row ? null : t.dataset.row; if (editing && editing.id === t.dataset.row) editing = null; render(); return; }
+    if (t.dataset.pickTech) { e.preventDefault(); view = "all"; $("#wTech").value = t.dataset.pickTech; $("#wStatus").value = "open"; render(); return; }
     if (t.dataset.view) { view = t.dataset.view; store.set("rs-view", view); editing = null; render(); return; }
     if (t.dataset.photo !== undefined) { e.preventDefault(); const { data } = await sb.storage.from("job-photos").createSignedUrl(t.dataset.photo, 600); if (data) window.open(data.signedUrl, "_blank", "noopener"); return; }
     if (t.dataset.cancel !== undefined) { e.preventDefault(); editing = null; render(); return; }
