@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Work Permit ผู้รับเหมา | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<link rel="stylesheet" href="assets/wp.css">
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">WP</span><h1 id="title">Work Permit ผู้รับเหมา</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าใบงาน</a></div></div>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <section id="list" hidden>
+    <p class="sub">ขั้นตอน: เปิดใบและส่งลิงก์ให้ผู้รับเหมา → ผู้รับเหมากรอกคำขอและแนบเอกสาร → ตรวจเอกสาร (Kick off 1) → วิศวกรรมและ จป. ลงนาม (Kick off 2) → ตรวจรายงานทุกเช้า และ รปภ. แลกบัตร → ตรวจรับ → ปิดงาน</p>
+    <details class="panel" id="newBox" style="margin-bottom:14px" hidden><summary><b>เปิด Work Permit ใหม่</b></summary>
+      <div class="hd"><label>ชื่องาน *<input id="nTitle" maxlength="200" placeholder="เช่น ปรับปรุงห้องตรวจ OPD ชั้น 2"></label><label>บริษัทผู้รับเหมา *<input id="nCompany" maxlength="200"></label>
+        <label>ผู้ติดต่อ<input id="nContact" maxlength="120"></label><label>เบอร์โทร<input id="nPhone" maxlength="40" inputmode="tel"></label><label>อีเมล<input id="nEmail" type="email" maxlength="120"></label>
+        <label>พื้นที่ปฏิบัติงาน<input id="nArea" maxlength="300"></label></div>
+      <button class="btn primary" type="button" id="nAdd">เปิดใบและสร้างลิงก์ให้ผู้รับเหมา</button></details>
+    <div class="filters"><label>สถานะ<select id="fStatus"></select></label><label>ค้นหา<input id="fQ" placeholder="เลขที่ ชื่องาน บริษัท"></label><button class="btn" type="button" id="fReload" style="align-self:end;flex:none">โหลดใหม่</button></div>
+    <div class="scroll"><table id="tList"></table></div>
+  </section>
+  <section id="detail" hidden></section>
+</main>
+<datalist id="workers"></datalist>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/wpc.js"></script>
+<script src="assets/wp.js"></script>
+</body>
+</html>

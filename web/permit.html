@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Work Permit ผู้รับเหมา | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<link rel="stylesheet" href="assets/wp.css">
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">WP</span><h1>ใบขออนุญาตเข้าปฏิบัติงาน (Work Permit)</h1><div class="who"><span class="mono" id="no"></span></div></div>
+</div></header>
+<main class="wrap">
+  <section id="bad" hidden><div class="panel"><h2>เปิดลิงก์นี้ไม่ได้</h2><p class="sub">ลิงก์ไม่ถูกต้องหรือไม่ครบ กรุณาเปิดจากลิงก์ที่แผนกวิศวกรรมของโรงพยาบาลส่งให้อีกครั้ง หรือติดต่อแผนกวิศวกรรม</p></div></section>
+  <section id="main" hidden>
+    <div class="panel" id="info"></div>
+    <div id="alert"></div>
+    <form class="panel" id="req" hidden style="margin-top:14px"></form>
+    <div class="panel" id="sum" hidden style="margin-top:14px"></div>
+    <div class="panel" id="day" hidden style="margin-top:14px"></div>
+    <div class="panel" id="fin" hidden style="margin-top:14px"></div>
+    <div class="panel" id="hist" hidden style="margin-top:14px"></div>
+    <p class="sub" style="margin-top:14px">ลิงก์นี้เป็นลิงก์เฉพาะของงานนี้ ใช้แทนการเข้าสู่ระบบ กรุณาส่งต่อเฉพาะผู้ควบคุมงานของบริษัทท่าน</p>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/wpc.js"></script>
+<script src="assets/permit.js"></script>
+</body>
+</html>
