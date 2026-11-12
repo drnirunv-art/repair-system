@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>แบบสอบถามระบบแจ้งซ่อม | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+  .pick label{flex-direction:row;gap:8px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;min-width:0}
+  .pick input{width:auto;margin:0;flex:none}
+  .sc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;border-top:1px solid var(--line);padding:9px 0}
+  .sc .n{display:flex;gap:4px}.sc .n label{position:relative;border:1px solid var(--line);border-radius:8px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:700}
+  .sc .n input{position:absolute;opacity:0;width:0;height:0}.sc .n label:has(input:checked){background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .sc .n label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+  h3.part{margin:20px 0 6px}
+  .barrow{display:grid;grid-template-columns:minmax(0,1fr) 150px 60px;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--line)}
+  .barrow i{display:block;height:12px;border-radius:6px;background:var(--accent)}.barrow div.t{background:var(--line);border-radius:6px;overflow:hidden}
+  .qr{text-align:center;background:#fff;color:#111;border-radius:10px;padding:12px;display:inline-block}
+  @media (max-width:560px){.sc{grid-template-columns:minmax(0,1fr)}.barrow{grid-template-columns:minmax(0,1fr) 90px 52px}}
+  @media print{body.qrp header,body.qrp main>section>*:not(#vQr){display:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">RS</span><h1 id="title">แบบสอบถามความคิดเห็นและข้อเสนอปรับปรุงระบบแจ้งซ่อม</h1>
+    <div class="who"><select id="hospital" aria-label="โรงพยาบาล" style="width:auto"></select><a class="btn small" id="viewLink" hidden></a></div></div>
+</div></header>
+<main class="wrap">
+  <section id="form">
+    <p class="sub">แบบสอบถามนี้จัดทำเพื่อรวบรวมปัญหาการใช้งานและข้อเสนอแนะ สำหรับจัดลำดับงานแก้ไขและปรับปรุงระบบแจ้งซ่อมในรอบถัดไป ใช้เวลาตอบประมาณ 3–5 นาที ข้อมูลใช้เพื่อการพัฒนาระบบเท่านั้น</p>
+    <form id="f" class="panel">
+      <h3 class="part" style="margin-top:0">ส่วนที่ 1 ข้อมูลผู้ตอบ</h3>
+      <div class="grid"><label>ชื่อ–สกุล (ไม่บังคับ)<input id="respondent" maxlength="120"></label><label>หน่วยงาน / แผนก<input id="unit" maxlength="120"></label></div>
+      <p><b>บทบาทการใช้งานระบบ</b> (เลือก 1 ข้อ)</p><div class="pick" id="role"></div>
+      <label id="roleOtherWrap" hidden style="margin-top:8px">ระบุบทบาท<input id="role_other" maxlength="200"></label>
+      <p><b>ความถี่ในการใช้งาน</b> (เลือก 1 ข้อ)</p><div class="pick" id="frequency"></div>
+      <h3 class="part">ส่วนที่ 2 คะแนนความพึงพอใจ</h3><p class="sub" style="margin:0">5 = ดีมาก · 4 = ดี · 3 = ปานกลาง · 2 = พอใช้ · 1 = ควรปรับปรุง · ข้ามด้านที่ไม่เคยใช้ได้</p><div id="scores"></div>
+      <h3 class="part">ส่วนที่ 3 ปัญหาที่พบ</h3><p class="sub" style="margin:0 0 8px">เลือกได้มากกว่า 1 ข้อ</p><div class="pick" id="problems"></div>
+      <label style="margin-top:10px">รายละเอียดปัญหาเพิ่มเติม / เหตุการณ์จริงที่เคยพบ<textarea id="problem_detail" rows="3" maxlength="2000"></textarea></label>
+      <h3 class="part">ส่วนที่ 4 ข้อเสนอปรับปรุง</h3><p class="sub" style="margin:0 0 8px">ฟีเจอร์ที่อยากให้เพิ่ม (เลือกได้มากกว่า 1 ข้อ)</p><div class="pick" id="features"></div>
+      <label style="margin-top:10px">เรื่องที่อยากให้แก้ก่อนเป็นอันดับแรก<textarea id="first_fix" rows="2" maxlength="1000"></textarea></label>
+      <label>ข้อเสนอแนะเพิ่มเติม<textarea id="suggestion" rows="3" maxlength="2000"></textarea></label>
+      <div id="msg"></div>
+      <button class="btn primary" type="submit" id="send">ส่งแบบสอบถาม</button>
+    </form>
+  </section>
+  <section id="thanks" hidden><div class="panel"><h2>ขอบคุณที่ร่วมตอบแบบสอบถาม</h2><p class="sub">ทีมวิศวกรรมได้รับคำตอบของท่านแล้ว และจะนำไปจัดลำดับการปรับปรุงระบบแจ้งซ่อม</p><button class="btn" type="button" id="again">ตอบอีกชุด</button></div></section>
+  <section id="view" hidden>
+    <div class="filters" style="max-width:640px"><label>ตั้งแต่<input type="date" id="vFrom"></label><label>ถึง<input type="date" id="vTo"></label><button class="btn" type="button" id="vCsv" style="align-self:end">Excel (CSV)</button></div>
+    <div class="kpis" id="vKpi"></div>
+    <div class="panel"><h3>คะแนนความพึงพอใจเฉลี่ย (เต็ม 5)</h3><div id="vScores"></div></div>
+    <div class="two" style="margin-top:14px"><div class="panel"><h3>ปัญหาที่พบ</h3><div id="vProblems"></div></div><div class="panel"><h3>ฟีเจอร์ที่อยากให้เพิ่ม</h3><div id="vFeatures"></div></div></div>
+    <div class="panel" style="margin-top:14px"><h3>ผู้ตอบแยกตามบทบาท / ความถี่</h3><div id="vWho"></div></div>
+    <div class="panel" style="margin-top:14px"><h3>ข้อความจากผู้ตอบ</h3><div class="scroll"><table id="vText"></table></div></div>
+    <div class="panel" style="margin-top:14px"><h3>ลิงก์และ QR สำหรับส่งให้ผู้ตอบ</h3><p class="mono" id="vUrl" style="overflow-wrap:anywhere"></p>
+      <div id="vQr" class="qr"></div><p><button class="btn" type="button" id="vPrint">พิมพ์ QR</button></p></div>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/survey.js"></script>
+</body>
+</html>
