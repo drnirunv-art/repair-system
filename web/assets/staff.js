@@ -27,6 +27,9 @@
   const prioOf = j => prios.find(p => p.id === j.priority_id);
   const slaOf = j => (prioOf(j) || {}).sla_minutes || 1440;
   const isLate = j => ["register", "assign", "work_on", "on_hold"].includes(j.status) && workMins(j) > slaOf(j);
+  // response target of the urgency level: minutes from report until a technician accepts the job
+  const respOf = j => (prioOf(j) || {}).respond_minutes || 0;
+  const respLate = j => respOf(j) && ["register", "assign"].includes(j.status) && !j.accepted_at && (Date.now() - new Date(j.created_at)) / 60000 > respOf(j);
   const overDue = j => j.due_minutes && ["assign", "work_on", "on_hold"].includes(j.status) ? workMins(j) / j.due_minutes : 0;
   const nameOf = id => (staff.find(s => s.id === id) || {}).full_name || "";
   const typeOf = id => (types.find(t => t.id === id) || {}).name || "ไม่ระบุ";
@@ -172,8 +175,8 @@
       const std = (types.find(t => t.id === j.job_type_id) || {}).standard_minutes;
       return `<div class="full"><b style="font-size:13px">ผู้รับงาน (เลือกได้หลายคน คนแรกที่ติ๊กเป็นหัวหน้างาน)</b><div class="techs">${techs.map(s => `<label class="tech"><input type="checkbox" name="iTech" value="${s.id}" ${crew.includes(s.id) ? "checked" : ""}>
           <span>${esc(s.full_name || "(ไม่มีชื่อ)")}${w[s.id].hold === least ? ' <em class="free">ว่างสุด</em>' : ""}<small>ถืออยู่ ${w[s.id].hold} · วันนี้ ${w[s.id].today}</small></span></label>`).join("")}</div></div>
-        <label>ความเร่งด่วน<select id="iPrio">${prios.map(p => `<option value="${p.id}" ${p.id === j.priority_id ? "selected" : ""}>${esc(p.name)} (SLA ${dur(p.sla_minutes)})</option>`).join("")}</select></label>
-        <label>ประเภทงาน<select id="iType"><option value="">ไม่ระบุ</option>${types.map(t => `<option value="${t.id}" data-std="${t.standard_minutes || ""}" ${t.id === j.job_type_id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>
+        <label>ความเร่งด่วน<select id="iPrio">${prios.map(p => `<option value="${p.id}" ${p.id === j.priority_id ? "selected" : ""}>${esc(p.name)} (${p.respond_minutes ? "ตอบรับ " + p.respond_minutes + " นาที · " : ""}SLA ${dur(p.sla_minutes)})</option>`).join("")}</select></label>
+        <label>ประเภทงาน<select id="iType"><option value="">ไม่ระบุ</option>${types.filter(t => t.active || t.id === j.job_type_id).map(t => `<option value="${t.id}" data-std="${t.standard_minutes || ""}" ${t.id === j.job_type_id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>
         <label>⏱ กำหนดเสร็จภายใน (นาทีเวลาทำงาน)<input id="iDue" type="number" min="1" placeholder="เว้นว่าง = ไม่เตือน" value="${j.due_minutes || std || ""}"></label>
         <label class="span2">หมายเหตุถึงช่าง<input id="iNote" placeholder="ไม่บังคับ"></label>${ok("assign")}`;
     }
@@ -266,7 +269,7 @@
         ${j.rating ? `<div class="meta">ผู้แจ้งให้คะแนน ${"★".repeat(j.rating)}${"☆".repeat(5 - j.rating)}${j.rating_comment ? " · " + esc(j.rating_comment) : ""}</div>` : ""}
         <div class="meta">${photoLinks("ผู้แจ้ง", j.photo_paths)}${photoLinks("ก่อนซ่อม", j.before_photo_paths)}${photoLinks("หลังซ่อม", j.close_photo_paths)}</div></div>
       <div class="side">${pill(j.status, statusLabel(j))}${pr ? `<span class="pr${crit ? " crit" : ""}">${esc(pr.name)}</span>` : ""}
-        <span class="meta">${age}${isLate(j) ? ' · <b style="color:var(--bad)">เกิน SLA</b>' : ""}</span>
+        <span class="meta">${age}${isLate(j) ? ' · <b style="color:var(--bad)">เกิน SLA</b>' : ""}${respLate(j) ? ` · <b style="color:var(--bad)">เกินเวลาตอบรับ ${respOf(j)} นาที</b>` : ""}</span>
         ${j.due_minutes && OPEN.includes(j.status) && j.status !== "clear" ? `<span class="meta">กำหนด ${dur(j.due_minutes)}${od > 2 ? ' · <b style="color:var(--bad)">⏰ เกินกำหนด 2 เท่า</b>' : od > 1 ? ' · <b style="color:var(--bad)">⏰ เกินกำหนด</b>' : ""}</span>` : ""}</div>
       ${acts ? `<div class="acts">${acts}</div>` : ""}${inline}</article>`;
   }
@@ -286,7 +289,7 @@
       return `<tr class="${isLate(j) || overDue(j) > 1 ? "late" : ""}"><td>${i + 1}</td><td class="mono">${esc(j.job_no)}</td><td>${fmt(j.created_at)}</td><td>${days ? `<span class="od">${days}</span>` : ""}</td>
         <td><b>${esc(j.building || "")}</b><br><small>${[j.floor, j.department].filter(Boolean).map(esc).join(" / ")}</small></td><td class="dt">${esc(j.detail)}${n ? ` <small>📷 ${n}</small>` : ""}</td>
         <td>${esc(j.reporter_name)}<br><small>${esc(j.reporter_phone)}</small></td><td>${crew.map(id => esc(nameOf(id))).join(", ") || "-"}</td>
-        <td>${pill(j.status, statusLabel(j))}${j.status === "on_hold" ? `<br><small>${esc(j.hold_category || "")}${j.hold_status ? " · <b>" + HOLD_STATUS[j.hold_status] + "</b>" : ""}</small>` : ""}${timer(j) ? `<br><small>⏱ ${timer(j)}</small>` : ""}${isLate(j) ? '<br><small style="color:var(--bad);font-weight:700">เกิน SLA</small>' : ""}</td>
+        <td>${pill(j.status, statusLabel(j))}${j.status === "on_hold" ? `<br><small>${esc(j.hold_category || "")}${j.hold_status ? " · <b>" + HOLD_STATUS[j.hold_status] + "</b>" : ""}</small>` : ""}${timer(j) ? `<br><small>⏱ ${timer(j)}</small>` : ""}${isLate(j) ? '<br><small style="color:var(--bad);font-weight:700">เกิน SLA</small>' : ""}${respLate(j) ? `<br><small style="color:var(--bad);font-weight:700">เกินเวลาตอบรับ ${respOf(j)} นาที</small>` : ""}</td>
         <td><button class="btn small" type="button" data-row="${j.id}">${open ? "ปิด" : "จัดการ"}</button></td></tr>${open ? `<tr class="jopen"><td colspan="10">${card(j)}</td></tr>` : ""}`; }).join("")}</tbody></table></div>`;
   }
   // open jobs per technician; tap a name to filter the list
@@ -503,7 +506,7 @@
     $("#sList").innerHTML = "<tr><th>ชื่อ</th><th>บทบาท</th><th>สถานะ</th><th></th></tr>" + staff.map(s => `<tr><td>${esc(s.full_name)}</td><td>${ROLES[s.role]}</td><td>${s.active ? "ใช้งาน" : "ปิดใช้"}</td>
       <td>${s.id !== me.id ? `<button class="btn small" type="button" data-staff-toggle="${s.id}">${s.active ? "ปิดใช้" : "เปิดใช้"}</button>` : ""}</td></tr>`).join("")
       + invites.map(i => `<tr><td>${esc(i.full_name || i.email)}<br><small class="mono">${esc(i.email)}</small></td><td>${ROLES[i.role]}</td><td>รอสมัครบัญชี</td><td></td></tr>`).join("");
-    $("#pList").innerHTML = "<tr><th>ชื่อ</th><th>SLA</th><th>ค่าเริ่มต้นของฟอร์ม</th><th></th></tr>" + prios.map(p => `<tr><td>${esc(p.name)}</td><td>${dur(p.sla_minutes)}</td>
+    $("#pList").innerHTML = "<tr><th>ชื่อ</th><th>ตอบรับภายใน</th><th>SLA ซ่อมเสร็จ</th><th>ค่าเริ่มต้นของฟอร์ม</th><th></th></tr>" + prios.map(p => `<tr><td>${esc(p.name)}</td><td>${p.respond_minutes ? p.respond_minutes + " นาที" : "-"}</td><td>${dur(p.sla_minutes)}</td>
       <td>${p.is_default ? "✓" : `<button class="btn small" type="button" data-prio-default="${p.id}">ตั้งเป็นค่าเริ่มต้น</button>`}</td><td><button class="btn small" type="button" data-del="priorities:${p.id}">ลบ</button></td></tr>`).join("");
     $("#oList").innerHTML = "<tr><th>อาคาร</th><th>ชั้น</th><th>แผนก</th><th></th></tr>" + locs.map(l => `<tr><td>${esc(l.building)}</td><td>${esc(l.floor)}</td><td>${esc(l.department)}${l.active ? "" : " <small>(ซ่อน)</small>"}</td>
       <td><button class="btn small" type="button" data-loc-rename="${l.id}">แก้ชื่อ</button> <button class="btn small" type="button" data-loc-toggle="${l.id}">${l.active ? "ซ่อน" : "แสดง"}</button> <a class="btn small" href="qr.html?h=${encodeURIComponent(H.code)}&loc=${l.id}" target="_blank" rel="noopener">QR</a></td></tr>`).join("");
