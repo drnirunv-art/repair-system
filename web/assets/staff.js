@@ -30,6 +30,9 @@
   // response target of the urgency level: minutes from report until a technician accepts the job
   const respOf = j => (prioOf(j) || {}).respond_minutes || 0;
   const respLate = j => respOf(j) && ["register", "assign"].includes(j.status) && !j.accepted_at && (Date.now() - new Date(j.created_at)) / 60000 > respOf(j);
+  // finish-time levels chosen at assignment; 0 = over 60 days (no deadline warning)
+  const BANDS = [[360, "6 ชม."], [1440, "24 ชม."], [43200, "30 วัน"], [86400, "60 วัน"], [0, "เกิน 60 วัน"]];
+  const bandName = m => (BANDS.find(b => b[0] === +m) || [0, dur(m)])[1];
   const overDue = j => j.due_minutes && ["assign", "work_on", "on_hold"].includes(j.status) ? workMins(j) / j.due_minutes : 0;
   const nameOf = id => (staff.find(s => s.id === id) || {}).full_name || "";
   const typeOf = id => (types.find(t => t.id === id) || {}).name || "ไม่ระบุ";
@@ -177,7 +180,7 @@
           <span>${esc(s.full_name || "(ไม่มีชื่อ)")}${w[s.id].hold === least ? ' <em class="free">ว่างสุด</em>' : ""}<small>ถืออยู่ ${w[s.id].hold} · วันนี้ ${w[s.id].today}</small></span></label>`).join("")}</div></div>
         <label>ความเร่งด่วน<select id="iPrio">${prios.map(p => `<option value="${p.id}" ${p.id === j.priority_id ? "selected" : ""}>${esc(p.name)} (${p.respond_minutes ? "ตอบรับ " + p.respond_minutes + " นาที · " : ""}SLA ${dur(p.sla_minutes)})</option>`).join("")}</select></label>
         <label>ประเภทงาน<select id="iType"><option value="">ไม่ระบุ</option>${types.filter(t => t.active || t.id === j.job_type_id).map(t => `<option value="${t.id}" data-std="${t.standard_minutes || ""}" ${t.id === j.job_type_id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>
-        <label>⏱ กำหนดเสร็จภายใน (นาทีเวลาทำงาน)<input id="iDue" type="number" min="1" placeholder="เว้นว่าง = ไม่เตือน" value="${j.due_minutes || std || ""}"></label>
+        <label>⏱ เวลาซ่อมเสร็จ<select id="iDue"><option value="">ยังไม่กำหนด (ใช้ SLA ตามความเร่งด่วน)</option>${BANDS.map(b => `<option value="${b[0]}" ${j.due_minutes === b[0] ? "selected" : ""}>${b[1]}</option>`).join("")}${j.due_minutes && !BANDS.some(b => b[0] === j.due_minutes) ? `<option value="${j.due_minutes}" selected>${dur(j.due_minutes)} (ค่าเดิม)</option>` : ""}</select></label>
         <label class="span2">หมายเหตุถึงช่าง<input id="iNote" placeholder="ไม่บังคับ"></label>${ok("assign")}`;
     }
     if (a === "start") return `${fileInput("iFiles")}<label class="span2">หมายเหตุ<input id="iNote" placeholder="ไม่บังคับ เช่น ตรวจพบว่า..."></label>${ok("start")}`;
@@ -270,7 +273,7 @@
         <div class="meta">${photoLinks("ผู้แจ้ง", j.photo_paths)}${photoLinks("ก่อนซ่อม", j.before_photo_paths)}${photoLinks("หลังซ่อม", j.close_photo_paths)}</div></div>
       <div class="side">${pill(j.status, statusLabel(j))}${pr ? `<span class="pr${crit ? " crit" : ""}">${esc(pr.name)}</span>` : ""}
         <span class="meta">${age}${isLate(j) ? ' · <b style="color:var(--bad)">เกิน SLA</b>' : ""}${respLate(j) ? ` · <b style="color:var(--bad)">เกินเวลาตอบรับ ${respOf(j)} นาที</b>` : ""}</span>
-        ${j.due_minutes && OPEN.includes(j.status) && j.status !== "clear" ? `<span class="meta">กำหนด ${dur(j.due_minutes)}${od > 2 ? ' · <b style="color:var(--bad)">⏰ เกินกำหนด 2 เท่า</b>' : od > 1 ? ' · <b style="color:var(--bad)">⏰ เกินกำหนด</b>' : ""}</span>` : ""}</div>
+        ${j.due_minutes != null && OPEN.includes(j.status) && j.status !== "clear" ? `<span class="meta">ซ่อมเสร็จภายใน ${bandName(j.due_minutes)}${od > 2 ? ' · <b style="color:var(--bad)">⏰ เกินกำหนด 2 เท่า</b>' : od > 1 ? ' · <b style="color:var(--bad)">⏰ เกินกำหนด</b>' : ""}</span>` : ""}</div>
       ${acts ? `<div class="acts">${acts}</div>` : ""}${inline}</article>`;
   }
   const match = (j, q) => !q || [j.job_no, j.reporter_phone, j.reporter_name, j.detail, j.department, j.equipment_text].some(x => String(x || "").toLowerCase().includes(q));
@@ -391,7 +394,7 @@
   // remember tick order so the first technician ticked becomes the lead
   document.addEventListener("change", e => {
     if (e.target.name === "iTech" && editing) { editing.order = (editing.order || []).filter(x => x !== e.target.value); if (e.target.checked) editing.order.push(e.target.value); }
-    if (e.target.id === "iType") { const o = e.target.selectedOptions[0]; if (o && o.dataset.std && !$("#iDue").value) $("#iDue").value = o.dataset.std; }
+    if (e.target.id === "iType") { const o = e.target.selectedOptions[0]; if (o && o.dataset.std && !$("#iDue").value && BANDS.some(b => b[0] === +o.dataset.std)) $("#iDue").value = o.dataset.std; }
   });
   ["#wStatus", "#wTech", "#wType"].forEach(s => $(s).addEventListener("change", render));
   $("#wQ").addEventListener("input", render);
