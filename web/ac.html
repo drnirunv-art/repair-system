@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>งานผู้รับเหมาแอร์ (AC) | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .it{display:grid;grid-template-columns:minmax(0,1fr) 92px 110px minmax(0,180px);gap:6px;align-items:center;border-top:1px solid var(--line);padding:7px 0}
+  .it small{color:var(--muted)}.it.bad{background:color-mix(in srgb,var(--bad) 7%,transparent)}
+  .it select,.it input{min-width:0;width:100%}
+  .sec{font-weight:700;margin:14px 0 2px}
+  .hd{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:10px}
+  .hd label{min-width:0}.hd input,.hd select{width:100%;min-width:0}
+  table.rows input,table.rows select{width:100%;min-width:70px}table.rows td{padding:3px}
+  .signs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:12px}
+  .signs>div{border:1px solid var(--line);border-radius:8px;padding:8px;min-width:0}
+  .signs b{display:block;font-size:13px}.signs small{display:block;color:var(--muted)}.signs input{width:100%;margin:4px 0}
+  .ph{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.ph img{width:86px;height:86px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+  .ph figure{margin:0;text-align:center;font-size:11px}
+  .st{display:inline-block;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:700;white-space:nowrap;color:#111}
+  .st.draft{background:#ddd}.st.submitted{background:#ffe08a}.st.accepted{background:#9be3b0}.st.returned{background:#ffb3ad}
+  .stk{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+  .stk div{border:1px dashed var(--line);border-radius:8px;padding:8px;text-align:center;background:#fff;color:#111;break-inside:avoid}
+  .stk img{width:120px;height:120px}.stk b{display:block;overflow-wrap:anywhere}.stk small{display:block;font-size:11px}
+  table.plan input{width:44px;padding:3px;text-align:center}table.plan td,table.plan th{padding:2px 3px;text-align:center;white-space:nowrap}table.plan td:first-child{text-align:left;white-space:normal;min-width:150px}
+  #mDoc{display:none}
+  .doc{color:#111;background:#fff;font-size:12px}
+  .doc h2{text-align:center;margin:4px 0;font-size:16px}.doc table{width:100%;border-collapse:collapse;margin:6px 0}
+  .doc th,.doc td{border:1px solid #777;padding:3px 5px;text-align:left;vertical-align:top}
+  .doc .signs div{border:0;border-top:1px solid #555;border-radius:0;margin-top:30px;text-align:center;font-size:11px}
+  @media (max-width:760px){.it{grid-template-columns:minmax(0,1fr) 92px}.it .v,.it .n{grid-column:span 1}}
+  @media print{body.docprint header,body.docprint main>section,body.docprint #toast{display:none!important}body.docprint #mDoc{display:block}
+    body.qrprint header,body.qrprint #uMain>*:not(#uQr),body.qrprint #uView,body.qrprint #toast{display:none!important}@page{size:A4;margin:10mm}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">AC</span><h1 id="title">งานผู้รับเหมาระบบปรับอากาศ</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าใบงาน</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="work" aria-selected="true">แบบฟอร์มงาน <span class="badge" id="nWork" hidden></span></button>
+    <button role="tab" data-tab="units" aria-selected="false">ทะเบียนเครื่อง / ประวัติ</button>
+    <button role="tab" data-tab="calls" aria-selected="false">แจ้งซ่อม / ความเสียหาย <span class="badge" id="nCalls" hidden></span></button>
+    <button role="tab" data-tab="month" aria-selected="false">สรุปเดือน / ตรวจรับ</button>
+    <button role="tab" data-tab="setup" aria-selected="false">สัญญา / แผนปี / ทีม</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+
+  <section id="tab-work" hidden>
+    <p class="sub" id="wHint"></p>
+    <div class="filters"><label>เดือน<input type="month" id="wMonth"></label>
+      <label>แบบฟอร์ม<select id="wForm"></select></label>
+      <label>สถานะ<select id="wStatus"><option value="">ทุกสถานะ</option><option value="draft">ร่าง</option><option value="returned">ตีกลับ</option><option value="submitted">ส่งแล้ว รอตรวจรับ</option><option value="accepted">ตรวจรับแล้ว</option></select></label>
+      <label data-write>สร้างใหม่<select id="wNew"></select></label></div>
+    <div id="wEdit"></div>
+    <div class="scroll"><table id="wList"></table></div>
+  </section>
+
+  <section id="tab-units" hidden>
+    <div id="uView"></div>
+    <div id="uMain">
+      <div class="filters"><label>ค้นหา<input id="uQ" placeholder="รหัสเครื่อง ห้อง ยี่ห้อ"></label><label>ประเภท<select id="uKind"></select></label>
+        <button class="btn" type="button" id="uCsv" style="align-self:end">Excel (CSV)</button><button class="btn" type="button" id="uQrBtn" style="align-self:end">พิมพ์ QR ที่กรองอยู่</button></div>
+      <details class="panel" data-write style="margin-bottom:12px"><summary><b>เพิ่มเครื่อง</b> (ทีละเครื่อง หรือวางหลายแถวจาก Excel)</summary>
+        <div class="hd" id="uForm" style="margin-top:10px"></div>
+        <button class="btn primary" type="button" id="uAdd">บันทึกเครื่องนี้</button>
+        <p class="sub" style="margin:14px 0 4px">วางจาก Excel: คัดลอกแถวจากชีต “ทะเบียนอุปกรณ์” คอลัมน์ B ถึง L (รหัสเครื่อง · ประเภท · อาคาร · ชั้น · ห้อง · ประเภทพื้นที่ · ยี่ห้อ · รุ่น · ขนาด · สารทำความเย็น · ปีที่ติดตั้ง) แล้ววางในช่องนี้</p>
+        <textarea id="uPaste" rows="4" style="width:100%" placeholder="PT1-A-05-FCU-012	Fan Coil Unit (FCU)	A	5	ห้อง 512	ห้องผู้ป่วย	Carrier	42CED012	12000	น้ำเย็น	2015"></textarea>
+        <button class="btn" type="button" id="uImport">นำเข้าแถวที่วาง</button> <span id="uNote"></span></details>
+      <div class="scroll"><table id="uList"></table></div>
+      <div id="uQr" class="stk" style="margin-top:14px"></div>
+    </div>
+  </section>
+
+  <section id="tab-calls" hidden>
+    <p class="sub" id="cHint"></p>
+    <h3>AC-09 ทะเบียนแจ้งซ่อม + SLA</h3>
+    <details class="panel" data-write style="margin-bottom:10px"><summary><b>รับแจ้งซ่อมใหม่</b></summary><div class="hd" style="margin-top:10px">
+      <label>วัน-เวลารับแจ้ง<input type="datetime-local" id="tAt"></label><label>ผู้แจ้ง / หน่วยงาน<input id="tWho"></label><label>สถานที่<input id="tPlace"></label>
+      <label>รหัสเครื่อง (ถ้ามี)<input id="tUnit" list="unitCodes"></label><label style="grid-column:1/-1">อาการที่แจ้ง<input id="tSym"></label></div>
+      <button class="btn primary" type="button" id="tAdd">บันทึกรับแจ้ง</button></details>
+    <div class="scroll"><table id="tList"></table></div>
+    <h3 style="margin-top:20px">AC-10 ทะเบียนความเสียหายจากการปฏิบัติงาน</h3>
+    <details class="panel" data-write style="margin-bottom:10px"><summary><b>บันทึกความเสียหายใหม่</b></summary><div class="hd" style="margin-top:10px">
+      <label>วัน-เวลาเกิด / แจ้ง<input type="datetime-local" id="dAt"></label><label>สถานที่<input id="dPlace"></label><label>รหัสเครื่อง (ถ้ามี)<input id="dUnit" list="unitCodes"></label>
+      <label>ทรัพย์สินที่เสียหาย<input id="dAsset"></label><label>สาเหตุ<input id="dCause"></label>
+      <label>ประเภทเกณฑ์<select id="dCrit"><option value="work">ความเสียหายจากการปฏิบัติงาน (9.1-9.2)</option><option value="defect">อุปกรณ์ชำรุดจากความบกพร่อง (9.3)</option></select></label></div>
+      <button class="btn primary" type="button" id="dAdd">บันทึกความเสียหาย</button></details>
+    <div class="scroll"><table id="dList"></table></div>
+    <p><button class="btn" type="button" id="cCsv">ส่งออกทะเบียน AC-09 / AC-10 (CSV)</button></p>
+  </section>
+
+  <section id="tab-month" hidden>
+    <div class="filters" style="max-width:520px"><label>เดือน<input type="month" id="mMonth"></label><button class="btn" type="button" id="mPrint" style="align-self:end">พิมพ์ใบตรวจรับ AC-12</button></div>
+    <div id="mBody"></div>
+  </section>
+
+  <section id="tab-setup" hidden>
+    <div class="panel"><h3>ข้อมูลสัญญา (ฐานคำนวณ SLA และค่าปรับ)</h3><div class="hd" id="sContract"></div>
+      <button class="btn primary" type="button" id="sSave" data-manager>บันทึกข้อมูลสัญญา</button> <span id="sNote"></span></div>
+    <div class="panel" style="margin-top:14px"><h3>แผนล้างประจำปี (จำนวนเครื่องต่อเดือน: ย = ล้างย่อย, ญ = ล้างใหญ่)</h3>
+      <div class="filters" style="max-width:260px"><label>ปี (ค.ศ.)<input type="number" id="pYear"></label></div>
+      <div class="scroll"><table class="plan" id="pTable"></table></div>
+      <button class="btn primary" type="button" id="pSave" data-plan>บันทึกแผนปี</button> <span id="pNote"></span></div>
+    <div class="panel" style="margin-top:14px" data-manager><h3>ทีมผู้รับเหมา</h3>
+      <p class="sub">บัญชีผู้รับเหมาต้องสมัครและถูกตั้งสิทธิ์เป็น <b>Observer</b> ก่อน (หน้าเจ้าหน้าที่ → ตั้งค่า → เจ้าหน้าที่) แล้วเลือกตำแหน่งที่นี่ · “หัวหน้าช่าง” เป็นผู้ส่งแบบฟอร์มและส่งงานรายเดือน</p>
+      <div class="scroll"><table id="sTeam"></table></div></div>
+  </section>
+</main>
+<datalist id="unitCodes"></datalist>
+<div id="mDoc"></div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/ac.js"></script>
+</body>
+</html>
