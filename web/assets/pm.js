@@ -593,6 +593,38 @@
     for (let from = 0; ; from += 1000) { const r = await sb.from("pm_tasks").select("equipment_id").eq("hospital_id", H.id).eq("year", y).in("status", ["submitted", "head_signed", "approved"]).order("id").range(from, from + 999); if (r.error || !r.data) break; r.data.forEach(t => set.add(t.equipment_id)); if (r.data.length < 1000) break; }
     mpDone = { key, set, loading: false }; if (!$("#tab-plan").hidden) renderPlan(); }
   const pctOf = (a, b) => b ? Math.round(a * 100 / b) + "%" : "-";
+  // executive summary + analysis of the plan in view (page panel and PowerPoint deck)
+  function mpReport(l, y) {
+    const dn = mpDone.set, visits = l.reduce((s, e) => s + Object.keys(gridOf(e)).length, 0), mDone = l.filter(e => dn.has(e.id)).length, noPlan = equip.length - equip.filter(e => (e.pm_months || []).length).length;
+    const con = conRows(l, dn), named = con.filter(c => c.name), blank = con.find(c => !c.name), cDone = named.filter(c => c.d > 0).length, types = typeRows(l);
+    const sys = new Map(); l.forEach(e => { const k = grpOf(e), r = sys.get(k) || [k, 0, 0, 0]; r[1]++; r[2] += Object.keys(gridOf(e)).length; if (dn.has(e.id)) r[3]++; sys.set(k, r); });
+    const sysR = [...sys.values()].sort((a, b) => b[1] - a[1]), mon = Array(12).fill(0); l.forEach(e => Object.keys(gridOf(e)).forEach(k => mon[Math.floor((k - 1) / 4)]++));
+    const peak = mon.indexOf(Math.max(...mon)), low = mon.indexOf(Math.min(...mon)), avg = visits / 12, n = v => v.toLocaleString(), top3 = a => a.slice(0, 3).map(r => `${r.name || r[0]} ${n(r.n ?? r[1])} เครื่อง`).join(", ");
+    const find = [], notes = [];
+    if (!l.length) find.push(`ยังไม่มีแผน ${SCN} ของปี ${y + 543} ในระบบ`);
+    else {
+      find.push(`แผน ${SCN} ปี ${y + 543} มี ${n(l.length)} เครื่อง รวม ${n(visits)} ครั้งทั้งปี เฉลี่ยเดือนละ ${n(Math.round(avg))} ครั้ง แบ่งเป็น ${n(types.length)} Type ใน ${n(sysR.length)} ระบบ`);
+      if (SC === "MA") find.push(named.length ? `มีสัญญา MA ${n(named.length)} สัญญา มาทำจริงแล้ว ${n(cDone)} สัญญา (${pctOf(cDone, named.length)}) สัญญาที่มีอุปกรณ์มากที่สุด: ${top3(named)}` : "ยังไม่มีชื่อผู้รับเหมาในคอลัมน์ CONTRACTOR จึงยังนับจำนวนสัญญาไม่ได้");
+      find.push(`ทำจริงแล้ว ${n(mDone)} จาก ${n(l.length)} เครื่อง (${pctOf(mDone, l.length)}) ยังไม่มีผลตรวจ ${n(l.length - mDone)} เครื่อง`);
+      find.push(`Type ที่มีเครื่องมากที่สุด: ${top3(types)}`); find.push(`ระบบที่มีเครื่องมากที่สุด: ${top3(sysR)}`);
+      find.push(`เดือนที่งานตามแผนมากที่สุดคือ ${TH_M[peak]} ${n(mon[peak])} ครั้ง น้อยที่สุดคือ ${TH_M[low]} ${n(mon[low])} ครั้ง`);
+      if (noPlan) find.push(`มีเครื่องในทะเบียนส่วน ${SCN} ที่ยังไม่มีแผน ${n(noPlan)} เครื่อง`);
+      if (mon[peak] > avg * 1.5 && avg) notes.push(`งานเดือน ${TH_M[peak]} สูงกว่าค่าเฉลี่ยเกิน 1.5 เท่า ควรเกลี่ยแผนหรือเตรียมกำลังคน${SC === "MA" ? "และนัดผู้รับเหมา" : ""}ล่วงหน้า`);
+      if (SC === "MA" && blank) notes.push(`มี ${n(blank.n)} เครื่องที่ยังไม่ระบุผู้รับเหมา ควรกรอกคอลัมน์ CONTRACTOR ใน Master Plan แล้วนำเข้าใหม่ เพื่อให้ติดตามรายสัญญาได้ครบ`);
+      if (SC === "MA") named.filter(c => !c.d).slice(0, 3).forEach(c => notes.push(`สัญญา ${c.name} (${n(c.n)} เครื่อง) ยังไม่มีผลการเข้าทำในระบบ ควรติดตามกำหนดเข้างาน`));
+      if (l.length && mDone / l.length < 0.5) notes.push(`ผลทำจริงยังต่ำกว่า 50% ของเครื่องในแผน ควรตรวจว่ามีงานที่ทำแล้วแต่ยังไม่ได้บันทึกใบตรวจเข้าระบบหรือไม่`);
+      if (noPlan) notes.push(`ควรวางแผนให้เครื่องที่ยังไม่มีแผน ${n(noPlan)} เครื่อง หรือยืนยันว่าไม่ต้องทำ PM`);
+      if (!notes.length) notes.push("แผนกระจายตัวสม่ำเสมอและไม่มีรายการที่ต้องติดตามเป็นพิเศษ");
+    }
+    const kp = SC === "MA" ? [["แผนจำนวนสัญญา MA", n(named.length)], ["แผนจำนวนอุปกรณ์", n(l.length)], ["สัญญาทำจริง", n(cDone)], ["อุปกรณ์ที่มาทำจริง", n(mDone)], ["% สัญญาที่ทำจริง", pctOf(cDone, named.length)], ["% อุปกรณ์ที่ทำจริง", pctOf(mDone, l.length)], ["จำนวนครั้งตามแผนทั้งปี", n(visits)], ["เครื่องที่ยังไม่มีแผน", n(noPlan)]]
+      : [["เครื่องในแผน", n(l.length)], ["จำนวนครั้งตามแผนทั้งปี", n(visits)], ["ทำจริงแล้ว (เครื่อง)", n(mDone)], ["% ทำจริง", pctOf(mDone, l.length)], ["จำนวน Type", n(types.length)], ["จำนวนระบบ", n(sysR.length)], ["เครื่องที่ยังไม่มีแผน", n(noPlan)]];
+    const sections = [];
+    if (SC === "MA" && con.length) sections.push({ title: "สัญญา MA: แผนเทียบทำจริง", head: ["สัญญา / ผู้รับเหมา", "อุปกรณ์ (แผน)", "มาทำจริง", "% ทำจริง"], rows: con.map(c => [c.name || "ยังไม่ระบุผู้รับเหมา", c.n, c.d, pctOf(c.d, c.n)]), note: con.length > 12 ? `แสดง 12 จาก ${con.length} รายการ ดูครบในไฟล์ Excel` : "" });
+    sections.push({ title: "แยกตาม Type ของเครื่องจักร", head: ["Type", "จำนวนเครื่อง", "ครั้งตามแผนทั้งปี"], rows: types.map(t => [t.name, t.n, t.v]), note: types.length > 12 ? `แสดง 12 Type แรกจาก ${types.length} Type ดูครบในไฟล์ Excel` : "" });
+    sections.push({ title: "แยกตามระบบ", head: ["ระบบ / กลุ่ม", "จำนวนเครื่อง", "ครั้งตามแผนทั้งปี", "ทำจริง (เครื่อง)"], rows: sysR, note: sysR.length > 12 ? `แสดง 12 จาก ${sysR.length} ระบบ` : "" });
+    sections.push({ title: "ปริมาณงานตามแผนรายเดือน", head: ["เดือน", "จำนวนครั้งตามแผน"], rows: TH_M.map((m, i) => [m, mon[i]]), note: l.length ? `เดือนที่งานมากที่สุด: ${TH_M[peak]} · เฉลี่ยเดือนละ ${n(Math.round(avg))} ครั้ง` : "" });
+    return { title: `บทสรุปผู้บริหาร PM Master Plan ${SCN}`, org: H.name, period: `ปี ${y + 543}`, file: `บทสรุปผู้บริหาร_PM_${H.code}_${y + 543}_${SC === "MA" ? "PM-MA" : "PM-Inhouse"}`, findings: find, notes, kpis: kp, sections };
+  }
   function renderPlan() {
     if (!$("#mpYear").value) { const py = (equip.find(e => e.pm_year) || {}).pm_year; $("#mpYear").value = (py || new Date().getFullYear()) + 543; }
     const planned = equip.filter(e => (e.pm_months || []).length), opt = (id, all, vals) => { const cur = $(id).value; $(id).innerHTML = `<option value="">${all}</option>` + vals.map(v => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`).join(""); };
@@ -613,6 +645,8 @@
     $("#mpTypeBox").innerHTML = l.length ? `<details class="panel" open><summary style="cursor:pointer;font-weight:600">สรุปตาม Type ของเครื่องจักร · ${tr.length.toLocaleString()} Type · ${l.length.toLocaleString()} เครื่อง</summary><p class="meta" style="margin-top:8px">แตะแถวเพื่อดูเฉพาะ Type นั้นในตารางแผนด้านล่าง</p><div style="overflow:auto;max-height:340px"><table><tr><th>#</th><th>Type ของเครื่องจักร</th><th style="text-align:right">จำนวนเครื่อง</th><th style="text-align:right">จำนวนครั้งตามแผนทั้งปี</th>${SC === "MA" ? '<th style="text-align:right">จำนวนสัญญา</th>' : ""}<th>ระบบ / กลุ่ม</th></tr>` +
       tr.map((t, i) => `<tr data-mptype="${esc(t.name)}" style="cursor:pointer"><td>${i + 1}</td><td>${esc(t.name)}</td><td style="text-align:right">${t.n.toLocaleString()}</td><td style="text-align:right">${t.v.toLocaleString()}</td>${SC === "MA" ? `<td style="text-align:right">${t.c || "-"}</td>` : ""}<td class="meta">${esc(t.g.slice(0, 2).join(", "))}${t.g.length > 2 ? ` และอีก ${t.g.length - 2}` : ""}</td></tr>`).join("") +
       `<tr style="font-weight:700;background:#eef3f8"><td></td><td>รวม ${tr.length.toLocaleString()} Type</td><td style="text-align:right">${l.length.toLocaleString()}</td><td style="text-align:right">${visits.toLocaleString()}</td>${SC === "MA" ? "<td></td>" : ""}<td></td></tr></table></div></details>` : "";
+    const rep = mpReport(l, y);
+    $("#mpExec").innerHTML = `<h3 style="margin:0 0 6px">บทสรุปผู้บริหาร</h3><ul style="margin:0 0 8px 18px;padding:0">${rep.findings.map(t => `<li>${esc(t)}</li>`).join("")}</ul>${rep.notes.length ? `<b>วิเคราะห์และข้อเสนอแนะ</b><ul style="margin:4px 0 0 18px;padding:0">${rep.notes.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}`;
     const th = TH_M.map(m => `<th colspan="4" style="text-align:center">${m}</th>`).join("");
     let g = null;
     $("#mpTable").innerHTML = l.length ? `<table class="mp"><tr><th rowspan="2">TAG</th><th rowspan="2">ชื่อเครื่อง</th><th rowspan="2">ที่ตั้ง</th>${th}<th rowspan="2">ผู้ทำ</th><th rowspan="2">ผู้รับเหมา</th></tr><tr>${[...Array(48)].map((_, i) => `<th style="padding:2px 3px;font-weight:400">${(i % 4) + 1}</th>`).join("")}</tr>` +
@@ -625,6 +659,8 @@
   document.addEventListener("click", e => { if (e.target.id === "mpAll") { mpLimit += 500; renderPlan(); } });
   document.addEventListener("click", e => { const r = e.target.closest && e.target.closest("[data-mptype]"); if (!r) return; $("#mpType").value = $("#mpType").value === r.dataset.mptype ? "" : r.dataset.mptype; mpLimit = 150; renderPlan(); });
   $("#mpPrint").onclick = () => window.print();
+  $("#mpPpt").onclick = async ev => { const b = ev.currentTarget, t = b.textContent, rep = mpReport(mpList(), mpYearCE()); b.disabled = true; b.textContent = "กำลังสร้างไฟล์…";
+    try { await Office.pptx(rep.file, rep); } catch (e) { toast(e.message || String(e)); } b.disabled = false; b.textContent = t; };
   $("#mpXlsx").onclick = () => { const y = mpYearCE(), l = mpList();
     Office.xlsx(`PM_${H.code}_${y + 543}_${SC === "MA" ? "PM-MA" : "PM-Inhouse"}`, [{ name: "PM_Plan", rows: planRows(l, y, SCN), styles: { 0: 2, 1: 3, 2: 1, 3: 1 } }].concat(SC === "MA" ? [conSheet(l, y)] : [], [typeSheet(l, y)])); };
   const conSheet = (l, y) => { const dn = mpDone.set, con = conRows(l, dn), nCon = con.filter(c => c.name).length;
