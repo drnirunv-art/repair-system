@@ -499,19 +499,25 @@
     });
     return out;
   }
-  if ($("#xYear")) $("#xYear").value = new Date().getFullYear();
+  const ceYear = v => { v = +v; return v >= 2400 ? v - 543 : v; };   // the box takes a Thai year (2569); a CE year (2026) also works
+  let xHosp = [];
+  const xH = () => xHosp.find(h => h.id === $("#xHosp").value) || H;
+  if ($("#xYear")) $("#xYear").value = new Date().getFullYear() + 543;
+  const xInit = async () => { if (!H) return setTimeout(xInit, 400); const ex = await sb.rpc("am_exec"); if (ex.data !== true) return; if ((await sb.rpc("pm_import_for", { p_hospital: H.id, p_year: new Date().getFullYear(), p_rows: [] })).error) return;   // not available yet xHosp = (await sb.from("hospitals").select("id,code,name").order("code")).data || [];
+    $("#xHosp").innerHTML = xHosp.map(h => `<option value="${h.id}"${h.id === H.id ? " selected" : ""}>${esc(h.code)} ${esc(h.name)}</option>`).join(""); $("#xHospL").hidden = !xHosp.length; }; xInit();
   $("#xFile").onchange = async ev => {
     const f = ev.target.files[0]; if (!f) return; note("#xMsg"); $("#xPrev").innerHTML = '<div class="empty">กำลังอ่านไฟล์…</div>';
     try {
       const wb = await Office.readXlsx(f), sheet = wb.PM_Plan || Object.values(wb).find(r => r.some(x => /^NO\.?$/i.test(cellS(x[0])) && x.some(c => /MACHINE\s*NAME/i.test(cellS(c)))));
       if (!sheet) throw new Error("ไม่พบแผ่นงาน PM_Plan ในไฟล์");
       const proj = cellS((sheet.find(r => /PROJECT/i.test(cellS(r[0]))) || [])[0]), code = (/PROJECT\s*:\s*([A-Z0-9]+)/i.exec(proj) || [])[1], be = +(/(25\d\d)/.exec(proj) || [])[1];
-      if (be) $("#xYear").value = be - 543;
+      if (be) $("#xYear").value = be; else { const ce = +(/(20\d\d)/.exec(proj) || [])[1]; if (ce) $("#xYear").value = ce + 543; }
+      const fh = code && xHosp.find(h => h.code.toUpperCase() === code.toUpperCase()); if (fh) $("#xHosp").value = fh.id;
       xRows = parsePlan(sheet);
-      const have = new Set(equip.map(e => (e.tag || "").toUpperCase())), marks = {}, cnt = t => xRows.filter(x => x.w.some(y => y.startsWith(t))).length;
+      const other = xH().id !== H.id, have = new Set(equip.map(e => (e.tag || "").toUpperCase())), marks = {}, cnt = t => xRows.filter(x => x.w.some(y => y.startsWith(t))).length;
       xRows.forEach(x => Object.values(x.row.grid).forEach(v => marks[v] = (marks[v] || 0) + 1));
-      const up = xRows.filter(x => have.has(x.row.tag.toUpperCase())).length, wrong = code && code.toUpperCase() !== H.code.toUpperCase();
-      $("#xPrev").innerHTML = `${wrong ? `<div class="note bad">ไฟล์นี้เป็นของ ${esc(code)} แต่คุณอยู่ที่ ${esc(H.code)} ตรวจให้แน่ใจก่อนนำเข้า</div>` : ""}<div class="kpis" style="margin-top:12px">${kpis([["เครื่องในไฟล์", xRows.length], ["ปรับแผนเครื่องเดิม", up], ["เพิ่มเครื่องใหม่", xRows.length - up], ["ไม่มีแผนในปีนี้", cnt("ไม่มีแผน")], ["TAG ซ้ำในไฟล์", cnt("TAG ซ้ำ")], ["ไม่มี TAG", cnt("ไม่มี TAG")]])}</div>
+      const up = xRows.filter(x => have.has(x.row.tag.toUpperCase())).length, wrong = code && code.toUpperCase() !== xH().code.toUpperCase();
+      $("#xPrev").innerHTML = `${wrong ? `<div class="note bad">ไฟล์นี้เป็นของ ${esc(code)} แต่กำลังจะนำเข้าให้ ${esc(xH().code)} ตรวจให้แน่ใจก่อนนำเข้า</div>` : ""}${other ? `<div class="note">นำเข้าให้ ${esc(xH().code)} ${esc(xH().name)} (ปี พ.ศ. ${ceYear($("#xYear").value) + 543})</div>` : ""}<div class="kpis" style="margin-top:12px">${kpis([["เครื่องในไฟล์", xRows.length], ["ปรับแผนเครื่องเดิม", other ? "-" : up], ["เพิ่มเครื่องใหม่", other ? "-" : xRows.length - up], ["ไม่มีแผนในปีนี้", cnt("ไม่มีแผน")], ["TAG ซ้ำในไฟล์", cnt("TAG ซ้ำ")], ["ไม่มี TAG", cnt("ไม่มี TAG")]])}</div>
         <p class="meta">${esc(proj)} · จำนวนครั้งตามแผนทั้งปี: ${Object.entries(marks).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} ${v.toLocaleString()}`).join(" · ") || "-"}</p>
         <div class="scroll" style="max-height:340px"><table><tr><th>แถว</th><th>TAG</th><th>ชื่อเครื่อง</th><th>ที่ตั้ง</th><th>เดือนที่ทำ</th><th>ผู้ทำ</th><th>หมายเหตุ</th></tr>${xRows.slice(0, 200).map(x => `<tr><td>${x.n}</td><td class="mono">${esc(x.row.tag)}</td><td>${esc(x.row.name)}</td><td>${esc([x.row.building, x.row.floor, x.row.place].filter(Boolean).join(" · "))}</td><td>${[...new Set(Object.keys(x.row.grid).map(k => Math.ceil(k / 4)))].join(", ")}</td><td>${esc(x.row.by)}</td><td class="meta">${esc(x.w.join(" · "))}</td></tr>`).join("")}</table></div>
         ${xRows.length > 200 ? `<p class="meta">แสดง 200 แถวแรก จากทั้งหมด ${xRows.length.toLocaleString()} แถว</p>` : ""}
@@ -521,23 +527,23 @@
   document.addEventListener("click", async e => {
     if (e.target.id === "xDrop") { xRows = []; $("#xPrev").innerHTML = ""; $("#xFile").value = ""; return; }
     if (e.target.id !== "xGo") return;
-    const y = +$("#xYear").value; if (!(y >= 2024 && y <= 2100)) return note("#xMsg", new Error("ใส่ปีของแผนเป็น ค.ศ. เช่น 2026"));
-    if (!confirm(`นำเข้าแผน PM ปี ${y} (พ.ศ. ${y + 543}) จำนวน ${xRows.length.toLocaleString()} เครื่อง เข้า ${H.name}?`)) return;
+    const y = ceYear($("#xYear").value), th = xH(); if (!(y >= 2024 && y <= 2100)) return note("#xMsg", new Error("ใส่ปีของแผนเป็น พ.ศ. เช่น 2569"));
+    if (!confirm(`นำเข้าแผน PM ปี พ.ศ. ${y + 543} (ค.ศ. ${y}) จำนวน ${xRows.length.toLocaleString()} เครื่อง เข้า ${th.name}?`)) return;
     e.target.disabled = true; let up = 0, add = 0;
     try {
       for (let i = 0; i < xRows.length; i += 400) {
         e.target.textContent = `กำลังนำเข้า ${Math.min(i + 400, xRows.length).toLocaleString()} / ${xRows.length.toLocaleString()}`;
-        const { data, error } = await sb.rpc("pm_import", { p_year: y, p_rows: xRows.slice(i, i + 400).map(x => x.row) });
+        const part = xRows.slice(i, i + 400).map(x => x.row), { data, error } = th.id === H.id ? await sb.rpc("pm_import", { p_year: y, p_rows: part }) : await sb.rpc("pm_import_for", { p_hospital: th.id, p_year: y, p_rows: part });
         if (error) throw new Error(`แถว ${xRows[i].n} เป็นต้นไป: ${errText(error)} (แถวก่อนหน้านี้นำเข้าแล้ว นำเข้าไฟล์เดิมซ้ำได้)`);
         up += data.updated; add += data.added;
       }
-      xRows = []; $("#xPrev").innerHTML = ""; $("#xFile").value = ""; note("#xMsg", null, `นำเข้าแผนปี ${y} แล้ว: ปรับแผนเครื่องเดิม ${up.toLocaleString()} · เพิ่มเครื่องใหม่ ${add.toLocaleString()} · ไปที่ “สร้างงาน PM ของเดือนจากแผน” เพื่อออกงานของแต่ละเดือน`);
+      xRows = []; $("#xPrev").innerHTML = ""; $("#xFile").value = ""; note("#xMsg", null, `นำเข้าแผนปี พ.ศ. ${y + 543} ของ ${th.code} แล้ว: ปรับแผนเครื่องเดิม ${up.toLocaleString()} · เพิ่มเครื่องใหม่ ${add.toLocaleString()} · ไปที่ “สร้างงาน PM ของเดือนจากแผน” เพื่อออกงานของแต่ละเดือน`);
     } catch (err) { note("#xMsg", err); e.target.disabled = false; e.target.textContent = "ลองนำเข้าอีกครั้ง"; }
     await loadEquip(); fillFilters(); renderReg();
   });
   // the current register in the same template, ready to edit for next year and upload again
   $("#xTpl").onclick = () => {
-    const y = +$("#xYear").value || new Date().getFullYear(), wk = [...Array(48)].map((_, i) => (i % 4) + 1), mh = MONTHS.flatMap(m => [m, "", "", ""]);
+    const y = ceYear($("#xYear").value) || new Date().getFullYear(), wk = [...Array(48)].map((_, i) => (i % 4) + 1), mh = MONTHS.flatMap(m => [m, "", "", ""]);
     const list = equip.filter(e => e.tag).sort((a, b) => (a.system || "").localeCompare(b.system || "") || (a.pm_group || "").localeCompare(b.pm_group || "") || a.tag.localeCompare(b.tag));
     const rows = [["MASTER PLAN PREVENTIVE MAINTENANCE"], [`PROJECT :  ${H.code}    ปี ${y + 543}`], ["NO.", "MACHINE NAME", "MACHINE TAG", "LOCATION", "BUILDING", "FLOOR", "PERIODES", ...mh, "SYSTEM", "MAINTAIN BY (TW/MA)", "CONTRACTOR / VENDOR"], ["", "", "", "", "", "", "", ...wk]];
     let g = null, n = 0;
