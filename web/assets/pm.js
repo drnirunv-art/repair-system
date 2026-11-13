@@ -5,7 +5,7 @@
   const MANAGER = ["owner", "admin", "chief_engineer", "supervisor"];
   const HEAD = ["owner", "admin", "chief_engineer", "supervisor", "senior_technician"];
   const ENG = ["owner", "admin", "chief_engineer"];
-  const TABS = ["work", "sign", "result", "reg", "qr", "tpl"];
+  const TABS = ["work", "sign", "result", "follow", "reg", "qr", "tpl"];
   const ST = { todo: "ยังไม่ตรวจ", submitted: "ช่างส่งแล้ว รอหัวหน้า 2/3", head_signed: "รอวิศวกร 3/3", approved: "อนุมัติครบ 3/3", returned: "ถูกส่งกลับ ให้แก้" };
   const STC = { todo: "register", submitted: "assign", head_signed: "work_on", approved: "close", returned: "on_hold" };
   const LV = { ok: "ปกติ", wear: "เริ่มเสื่อม", bad: "ผิดปกติ" };
@@ -98,9 +98,9 @@
     document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
     [...TABS, "sheet"].forEach(x => $("#tab-" + x).hidden = x !== t);
     store.set("rs-pm-tab", t);
-    ({ work: renderWork, sign: renderSign, result: renderResult, reg: renderReg, qr: renderQr, tpl: renderTpl })[t]();
+    ({ work: renderWork, sign: renderSign, result: renderResult, follow: renderFollow, reg: renderReg, qr: renderQr, tpl: renderTpl })[t]();
   }
-  ["#wMonth", "#sMonth", "#rMonth", "#gMonth"].forEach(s => $(s).value = today().slice(0, 7));
+  ["#wMonth", "#sMonth", "#rMonth", "#gMonth", "#fMonth"].forEach(s => $(s).value = today().slice(0, 7));
   $("#wMonth").onchange = () => renderWork(); $("#wQ").oninput = () => renderWork(true);
   $("#sMonth").onchange = () => renderSign(); $("#rMonth").onchange = () => renderResult();
   async function signCount() {
@@ -432,6 +432,48 @@
     await loadEquip(); fillFilters(); renderReg();
   });
 
+  /* ---------- follow-up table: plan of the month against what was done; mailed on the 28th ---------- */
+  let fRows = [], fAll = [], fRcp = [], fExec = false, fHosp = [];
+  const fHid = () => (fExec && $("#fHosp").value) || H.id;
+  const fHead = ["ระบบ", "แผนเดือนนี้ (เครื่อง)", "เสร็จและอนุมัติ", "รอเซ็น", "ยังไม่ทำ", "พบผิดปกติ (ใบ)", "% เสร็จ", "แผนสะสมทั้งปี (ครั้ง)", "ทำแล้วสะสม", "% สะสม"];
+  const fLine = r => [r.planned, r.done, r.waiting_sign, r.not_done, r.abnormal, r.pct == null ? "-" : r.pct + "%", r.ytd_planned, r.ytd_done, r.ytd_pct == null ? "-" : r.ytd_pct + "%"];
+  const fTable = (head, rows, bold) => `<tr>${head.map((h, i) => `<th${i ? ' class="num"' : ""}>${h}</th>`).join("")}</tr>` + rows.map(r => `<tr${bold(r) ? ' style="font-weight:700"' : ""}>${r.map((v, i) => `<td${i ? ' class="num"' : ""}>${esc(v ?? "")}</td>`).join("")}</tr>`).join("");
+  async function renderFollow() {
+    const [y, m] = ym($("#fMonth").value); note("#fMsg");
+    const [a, ex] = await Promise.all([sb.rpc("pm_followup", { p_year: y, p_month: m }), sb.rpc("am_exec")]);
+    if (a.error) return note("#fMsg", a.error);
+    fRows = a.data || []; fExec = ex.data === true;
+    const tot = fRows.find(r => r.grp === "รวม") || { planned: 0, done: 0, waiting_sign: 0, not_done: 0, abnormal: 0 };
+    $("#fTitle").textContent = `ตารางติดตามแผน PM ${H.name} ${monthLabel($("#fMonth").value)}`;
+    $("#fKpi").innerHTML = kpis([["แผนเดือนนี้ (เครื่อง)", tot.planned], ["เสร็จและอนุมัติ", tot.done], ["รอเซ็น", tot.waiting_sign], ["ยังไม่ทำ", tot.not_done, 1], ["พบผิดปกติ (ใบ)", tot.abnormal, 1], ["% เสร็จ", tot.pct == null ? "-" : tot.pct + "%"], ["% สะสมทั้งปี", tot.ytd_pct == null ? "-" : tot.ytd_pct + "%"]]);
+    const late = fRows.filter(r => r.grp !== "รวม" && r.not_done > 0).sort((x, z) => z.not_done - x.not_done);
+    $("#fSum").innerHTML = !tot.planned ? '<div class="empty">เดือนนี้ยังไม่มีเครื่องในแผน PM นำเข้าแผนได้ที่แท็บ “ทะเบียน &amp; แผนปี”</div>'
+      : `<b>บทสรุปผู้บริหาร:</b> แผนเดือนนี้ ${tot.planned} เครื่อง ทำเสร็จและอนุมัติแล้ว ${tot.done} เครื่อง (${tot.pct}%) รอเซ็น ${tot.waiting_sign} ยังไม่ทำ ${tot.not_done}${late.length ? ` · ระบบที่ค้างมากที่สุด: ${late.slice(0, 3).map(r => `${esc(r.grp)} ${r.not_done}`).join(", ")}` : " · ไม่มีระบบที่ค้าง"}${tot.abnormal ? ` · พบผิดปกติ ${tot.abnormal} ใบ ควรเปิดใบแจ้งซ่อมตาม` : ""}`;
+    $("#fTable").innerHTML = fTable(fHead, fRows.map(r => [r.grp, ...fLine(r)]), r => r[0] === "รวม");
+    $("#fAllBox").hidden = !fExec;
+    if (fExec) { const b = await sb.rpc("pm_followup_all", { p_year: y, p_month: m }); fAll = b.data || [];
+      $("#fAll").innerHTML = b.error ? "" : fTable(["โรงพยาบาล", "เครื่องในแผน PM", ...fHead.slice(1)], fAll.map(r => [`${r.code} ${r.name}`, r.machines, ...fLine({ ...r, planned: r.planned ?? 0, done: r.done ?? 0, waiting_sign: r.waiting_sign ?? 0, not_done: r.not_done ?? 0, abnormal: r.abnormal ?? 0, ytd_planned: r.ytd_planned ?? 0, ytd_done: r.ytd_done ?? 0 })]), () => false); }
+    if (fExec && !fHosp.length) { fHosp = (await sb.from("hospitals").select("id,code,name").order("code")).data || []; $("#fHosp").innerHTML = fHosp.map(x => `<option value="${x.id}"${x.id === H.id ? " selected" : ""}>${esc(x.code)} ${esc(x.name)}</option>`).join(""); }
+    $("#fHospL").hidden = !fExec; if (fExec) $("#fRcpBox").hidden = false;
+    $("#fTest").hidden = fHid() !== H.id || !isMgr();
+    if (isMgr() || fExec) { const r = await sb.from("report_recipients").select("*").eq("hospital_id", fHid()).eq("kind", "pm_followup").order("created_at"); fRcp = r.data || [];
+      $("#fRcp").innerHTML = fRcp.map(x => `<tr${x.active ? "" : ' style="opacity:.55"'}><td>${esc(x.email)}</td><td>${x.active ? "ส่งอยู่" : "หยุดส่ง"}</td><td><button class="btn small" type="button" data-rcp="${x.id}">${x.active ? "หยุดส่ง" : "ส่งอีกครั้ง"}</button></td></tr>`).join("") || '<tr><td class="empty">ยังไม่ได้ตั้ง email ผู้รับ</td></tr>'; }
+  }
+  $("#fMonth").onchange = renderFollow; $("#fHosp").onchange = renderFollow;
+  $("#fPrint").onclick = () => window.print();
+  $("#fCsv").onclick = () => { const tot = fRows.find(r => r.grp === "รวม");
+    const sheets = [Office.summarySheet({ title: $("#fTitle").textContent, org: H.name, findings: [$("#fSum").textContent.replace(/^บทสรุปผู้บริหาร:\s*/, "")], figures: tot ? fHead.slice(1).map((h, i) => [h, fLine(tot)[i]]) : [] }), { name: "ติดตามรายระบบ", header: 0, rows: [fHead, ...fRows.map(r => [r.grp, ...fLine(r)])] }];
+    if (fExec && fAll.length) sheets.push({ name: "12 โรงพยาบาล", header: 0, rows: [["รหัส", "โรงพยาบาล", "เครื่องในแผน PM", ...fHead.slice(1)], ...fAll.map(r => [r.code, r.name, r.machines, ...fLine(r)])] });
+    Office.xlsx(`ติดตามแผนPM-${H.code}-${$("#fMonth").value}`, sheets); };
+  $("#fAdd").onclick = async () => { const em = $("#fEmail").value.trim().toLowerCase(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return note("#fMsg", new Error("รูปแบบ email ไม่ถูกต้อง"));
+    const { error } = await sb.from("report_recipients").insert({ hospital_id: fHid(), kind: "pm_followup", email: em, created_by: me.id });
+    if (error) return note("#fMsg", /duplicate|report_recipients_uq/.test(error.message || "") ? new Error("email นี้มีอยู่แล้ว") : error); $("#fEmail").value = ""; note("#fMsg", null, "เพิ่มผู้รับแล้ว"); renderFollow(); };
+  $("#fTest").onclick = async () => { if (!fRcp.some(x => x.active)) return note("#fMsg", new Error("ยังไม่มี email ผู้รับที่เปิดส่งอยู่"));
+    if (!confirm(`ส่งตารางของ${monthLabel($("#fMonth").value)} ไปที่ email ผู้รับ ${fRcp.filter(x => x.active).length} ราย ตอนนี้เลย?`)) return;
+    const [y, m] = ym($("#fMonth").value), { data, error } = await sb.rpc("pm_followup_send_now", { p_year: y, p_month: m }); note("#fMsg", error, error ? "" : `เข้าคิวส่ง ${data} ฉบับแล้ว จะถึงผู้รับภายในไม่กี่นาที`); };
+  document.addEventListener("click", async e => { const b = e.target.closest("[data-rcp]"); if (!b) return; const x = fRcp.find(z => z.id === b.dataset.rcp);
+    const { error } = await sb.from("report_recipients").update({ active: !x.active }).eq("id", x.id); if (error) return note("#fMsg", error); renderFollow(); });
+
   /* ---------- yearly master plan from the Excel template ---------- */
   // PM_Plan sheet: a header row starting with NO., month names over 4 week columns each, marks (M Q S Y W 2M ...) in the week to do the work
   const MONTHS = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
@@ -449,7 +491,7 @@
       const grid = {}; for (let k = 0; k < 48; k++) { const v = cellS(r[c.jan + k]).toUpperCase(); if (v) grid[k + 1] = v.slice(0, 6); }
       const w = []; let tag = cellS(r[c.tag]);
       if (!tag) { let hsh = 0; for (const ch of [name, cellS(r[c.b]), cellS(r[c.f]), cellS(r[c.place])].join("|")) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0; tag = "AUTO-" + hsh.toString(36).toUpperCase(); w.push("ไม่มี TAG ในไฟล์ ระบบตั้งให้"); }
-      const k0 = tag.toUpperCase(); seen[k0] = (seen[k0] || 0) + 1; if (seen[k0] > 1) { tag = `${tag}-${seen[k0]}`; w.push("TAG ซ้ำในไฟล์ ระบบเติมเลขต่อท้าย"); }
+      const k0 = tag.toUpperCase(); seen[k0] = (seen[k0] || 0) + 1; if (seen[k0] > 1) { tag = `${tag}ซ้ำ${seen[k0] - 1}`; w.push("TAG ซ้ำในไฟล์ ระบบเติม ซ้ำ" + (seen[k0] - 1)); }
       if (!Object.keys(grid).length) w.push("ไม่มีแผนในปีนี้");
       out.push({ n: hi + 3 + i, w, row: { tag, name, building: cellS(r[c.b]), floor: cellS(r[c.f]), place: cellS(r[c.place]), system: c.sys < 0 ? "" : cellS(r[c.sys]), grp, by: c.by < 0 ? "" : cellS(r[c.by]), vendor: c.ven < 0 ? "" : cellS(r[c.ven]), grid } });
     });
