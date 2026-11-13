@@ -1,4 +1,4 @@
--- PM follow-up table per hospital (plan of the month against what was done) and its monthly e-mail on the 28th.
+-- PM follow-up table per hospital (plan of the month against what was done) and its monthly e-mail on the 20th.
 -- Contract duty: PM results go to the hospital every month, and the yearly master plan once before the year ends.
 -- Recipients are set per hospital by that hospital's managers (people with the 12-hospital view can set any hospital).
 create table if not exists public.report_recipients (
@@ -88,7 +88,7 @@ begin
   end loop;
   if coalesce(tot.planned, 0) = 0 then body := body || E'(เดือนนี้ยังไม่มีเครื่องในแผน PM ของระบบ)\n'; end if;
   body := body || E'\nรายละเอียดรายเครื่องอยู่ในไฟล์ Excel ที่แนบมากับอีเมลนี้\n\n' ||
-    h.name || E' งานวิศวกรรมอาคาร\n(อีเมลนี้ส่งอัตโนมัติทุกวันที่ 28 ของเดือน กรุณาอย่าตอบกลับ)';
+    h.name || E' งานวิศวกรรมอาคาร\n(อีเมลนี้ส่งอัตโนมัติทุกวันที่ 20 ของเดือน กรุณาอย่าตอบกลับ)';
   insert into email_outbox (hospital_id, to_email, subject, body_text, attach)
   select p_hospital, rr.email, 'ผลงาน PM ' || h.code || ' เดือน' || mth || ': เสร็จ ' || coalesce(tot.done, 0) || ' จาก ' || coalesce(tot.planned, 0) || ' เครื่อง', body,
     jsonb_build_object('kind', 'pm_month', 'year', p_year, 'month', p_month)
@@ -101,7 +101,7 @@ begin
       'Master Plan Preventive Maintenance ปี ' || (p_year + 543) || E'\n' || h.name || ' (' || h.code || E')\n\n' ||
       'แนบไฟล์ Excel แผน PM ทั้งปีรายเครื่อง (12 เดือน เดือนละ 4 สัปดาห์) ตามรูปแบบ Master Plan จำนวน ' ||
       (select count(*) from equipment e where e.hospital_id = p_hospital and e.active and e.tag is not null and cardinality(e.pm_months) > 0) || E' เครื่อง\n\n' ||
-      h.name || E' งานวิศวกรรมอาคาร\n(อีเมลนี้ส่งอัตโนมัติปีละ 1 ครั้ง วันที่ 28 ธันวาคม กรุณาอย่าตอบกลับ)',
+      h.name || E' งานวิศวกรรมอาคาร\n(อีเมลนี้ส่งอัตโนมัติปีละ 1 ครั้ง วันที่ 20 ธันวาคม กรุณาอย่าตอบกลับ)',
       jsonb_build_object('kind', 'pm_master_plan', 'year', p_year)
     from report_recipients rr where rr.hospital_id = p_hospital and rr.kind = 'pm_followup' and rr.active;
     get diagnostics n2 = row_count;
@@ -110,7 +110,7 @@ begin
 end $$;
 revoke all on function public.pm_followup_queue(uuid, int, int, boolean) from public, anon, authenticated;
 
--- the 28th job: every hospital that has recipients
+-- the 20th job: every hospital that has recipients
 create or replace function public.pm_followup_send_all() returns int
 language plpgsql security definer set search_path = public as $$
 declare d date := (now() at time zone 'Asia/Bangkok')::date; n int := 0; h record;
@@ -130,5 +130,5 @@ end $$;
 revoke all on function public.pm_followup_send_now(int, int, boolean) from public, anon;
 grant execute on function public.pm_followup_send_now(int, int, boolean) to authenticated;
 
--- 08:00 Bangkok on the 28th of every month
-select cron.schedule('pm-followup-28', '0 1 28 * *', $$select public.pm_followup_send_all()$$);
+-- 08:00 Bangkok on the 20th of every month
+select cron.schedule('pm-followup-20', '0 1 20 * *', $$select public.pm_followup_send_all()$$);

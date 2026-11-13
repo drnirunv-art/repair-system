@@ -432,7 +432,7 @@
     await loadEquip(); fillFilters(); renderReg();
   });
 
-  /* ---------- follow-up table: plan of the month against what was done; mailed on the 28th ---------- */
+  /* ---------- follow-up table: plan of the month against what was done; mailed on the 20th ---------- */
   let fRows = [], fAll = [], fRcp = [], fExec = false, fHosp = [];
   const fHid = () => (fExec && $("#fHosp").value) || H.id;
   const fHead = ["ระบบ", "แผนเดือนนี้ (เครื่อง)", "เสร็จและอนุมัติ", "รอเซ็น", "ยังไม่ทำ", "พบผิดปกติ (ใบ)", "% เสร็จ", "แผนสะสมทั้งปี (ครั้ง)", "ทำแล้วสะสม", "% สะสม"];
