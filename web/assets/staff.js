@@ -509,12 +509,9 @@
     const f = $("#dFrom").value, t = $("#dTo").value;
     const rows = jobs.filter(j => { const d = day(j.created_at); return (!f || d >= f) && (!t || d <= t); });
     const head = ["เลขใบงาน", "วันที่แจ้ง", "อาคาร", "ชั้น", "แผนก", "อุปกรณ์", "รายละเอียด", "ผู้แจ้ง", "เบอร์", "ประเภทงาน", "ความเร่งด่วน", "สถานะ", "ช่าง", "เหตุผลพักงาน", "หมายเหตุพักงาน", "วันนัด", "สรุปการซ่อม", "ใช้อะไหล่", "เวลาทำงาน (นาที)", "SLA (นาที)", "ทัน SLA", "ปิดงาน", "คะแนน"];
-    const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const body = rows.map(j => [j.job_no, fmt(j.created_at), j.building, j.floor, j.department, j.equipment_text, j.detail, j.reporter_name, j.reporter_phone + (j.reporter_email ? " " + j.reporter_email : ""), typeOf(j.job_type_id), (prioOf(j) || {}).name, statusLabel(j),
-      crewOf(j).map(nameOf).join(", "), j.hold_category, j.hold_reason, j.hold_until, j.summary, j.uses_parts ? "ใช้" : "", workMins(j), slaOf(j), workMins(j) <= slaOf(j) ? "ทัน" : "ไม่ทัน", fmt(j.closed_at), j.rating || ""].map(q).join(","));
-    const blob = new Blob(["﻿" + [head.map(q).join(","), ...body].join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `ใบงาน-${H.code}-${f || "all"}-${t || ""}.csv` });
-    document.body.appendChild(a); a.click(); a.remove();
+      crewOf(j).map(nameOf).join(", "), j.hold_category, j.hold_reason, j.hold_until, j.summary, j.uses_parts ? "ใช้" : "", workMins(j), slaOf(j), workMins(j) <= slaOf(j) ? "ทัน" : "ไม่ทัน", fmt(j.closed_at), j.rating || ""]);
+    csv(`ใบงาน-${H.code}-${f || "all"}-${t || ""}`, head, body, { title: "ทะเบียนใบงานแจ้งซ่อม", period: [f, t].filter(Boolean).join(" ถึง ") });
   };
 
   /* ---------- setup ---------- */
@@ -567,12 +564,8 @@
 
   /* ---------- phase B: shared helpers ---------- */
   function toast(m) { $("#toast").textContent = m; $("#toast").hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => $("#toast").hidden = true, 6000); }
-  function csv(name, head, rows) {
-    const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const blob = new Blob(["﻿" + [head.map(q).join(","), ...rows.map(r => r.map(q).join(","))].join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
-    document.body.appendChild(a); a.click(); a.remove();
-  }
+  // every list export is a real .xlsx with an executive-summary sheet first (assets/office.js)
+  const csv = (name, head, rows, opts) => Office.table(name, head, rows, { org: H && H.name, ...opts });
   const jobNo = id => (jobs.find(j => j.id === id) || {}).job_no || "";
   async function savePr(jobId) {
     const items = prItemsFromForm(), reason = $("#prReason").value.trim();
@@ -709,11 +702,11 @@
     if (opening > 0) { const r = await sb.rpc("part_move", { p_part_id: data.id, p_kind: "receive", p_qty: opening, p_note: "ยอดยกมา", p_unit_cost: +f.unit_cost.value || null }); if (r.error) return msg("#ptMsg", r.error); }
     msg("#ptMsg", null, "เพิ่มอะไหล่แล้ว"); f.reset(); f.unit.value = "ชิ้น"; await loadDocs(); render();
   };
-  $("#ptExport").onclick = () => csv(`สต็อกอะไหล่-${H.code}.csv`, ["รหัส", "ชื่อ", "หมวด", "ที่เก็บ", "หน่วย", "คงเหลือ", "ขั้นต่ำ", "ราคา/หน่วย", "มูลค่า", "สถานะ"],
+  $("#ptExport").onclick = () => csv(`สต็อกอะไหล่-${H.code}`, ["รหัส", "ชื่อ", "หมวด", "ที่เก็บ", "หน่วย", "คงเหลือ", "ขั้นต่ำ", "ราคา/หน่วย", "มูลค่า", "สถานะ"],
     parts.map(p => [p.code, p.name, p.category, p.store, p.unit, p.qty, p.min_qty, p.unit_cost, p.qty * p.unit_cost, !p.active ? "ซ่อน" : p.min_qty > 0 && p.qty <= p.min_qty ? "ต่ำกว่าขั้นต่ำ" : "ปกติ"]));
   $("#pcExport").onclick = () => {
     const f1 = $("#pcFrom").value, t1 = $("#pcTo").value, dd = d => new Date(d).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
-    csv(`การเคลื่อนไหวอะไหล่-${H.code}-${f1}-${t1}.csv`, ["วันที่", "รายการ", "รหัส", "อะไหล่", "จำนวน", "คงเหลือหลังทำ", "ราคา/หน่วย", "มูลค่า", "ใบงาน", "เครื่อง/อุปกรณ์", "ใบขอซื้อ", "หมายเหตุ", "ผู้ทำ"],
+    csv(`การเคลื่อนไหวอะไหล่-${H.code}-${f1}-${t1}`, ["วันที่", "รายการ", "รหัส", "อะไหล่", "จำนวน", "คงเหลือหลังทำ", "ราคา/หน่วย", "มูลค่า", "ใบงาน", "เครื่อง/อุปกรณ์", "ใบขอซื้อ", "หมายเหตุ", "ผู้ทำ"],
       moves.filter(m => (!f1 || dd(m.created_at) >= f1) && (!t1 || dd(m.created_at) <= t1)).map(m => { const p = parts.find(x => x.id === m.part_id) || {};
         return [fmt(m.created_at), MOVE[m.kind], p.code, p.name, m.qty, m.qty_after, m.unit_cost, m.qty * m.unit_cost, jobNo(m.job_id), m.equipment_text, (prs.find(x => x.id === m.pr_id) || {}).pr_no, m.note, nameOf(m.actor_id)]; }));
   };
@@ -767,9 +760,9 @@
     if (error) return alert(errText(error));
     await loadDocs(); render(); toast("บันทึกแล้ว");
   });
-  $("#prExport").onclick = () => csv(`ทะเบียนใบขอซื้อ-${H.code}.csv`, ["เลขที่", "วันที่", "ผู้ขอ", "ใบงาน", "เหตุผล", "รายการ", "ผู้ขาย", "ต้องการภายใน", "รวม (บาท)", "สถานะ", "ผู้พิจารณา", "วันที่พิจารณา", "หมายเหตุผู้อนุมัติ", "สั่งซื้อ", "รับของ"],
+  $("#prExport").onclick = () => csv(`ทะเบียนใบขอซื้อ-${H.code}`, ["เลขที่", "วันที่", "ผู้ขอ", "ใบงาน", "เหตุผล", "รายการ", "ผู้ขาย", "ต้องการภายใน", "รวม (บาท)", "สถานะ", "ผู้พิจารณา", "วันที่พิจารณา", "หมายเหตุผู้อนุมัติ", "สั่งซื้อ", "รับของ"],
     prs.map(x => [x.pr_no, fmt(x.created_at), nameOf(x.requested_by), jobNo(x.job_id), x.reason, prItems.filter(i => i.pr_id === x.id).map(i => `${i.description} ${i.qty} ${i.unit} x ${i.unit_price}`).join("; "), x.supplier, x.need_by, x.total, PR_STATUS[x.status], nameOf(x.decided_by), fmt(x.decided_at), x.decision_note, fmt(x.ordered_at), fmt(x.received_at)]));
-  $("#memoExport").onclick = () => csv(`ทะเบียน Memo-${H.code}.csv`, ["เลขที่", "วันที่", "ผู้เขียน", "เรื่อง", "เรียน", "รายละเอียด", "จำนวนเงิน", "ใบงาน", "ใบขอซื้อ", "สถานะ", "ผู้พิจารณา", "วันที่พิจารณา", "หมายเหตุผู้อนุมัติ"],
+  $("#memoExport").onclick = () => csv(`ทะเบียน Memo-${H.code}`, ["เลขที่", "วันที่", "ผู้เขียน", "เรื่อง", "เรียน", "รายละเอียด", "จำนวนเงิน", "ใบงาน", "ใบขอซื้อ", "สถานะ", "ผู้พิจารณา", "วันที่พิจารณา", "หมายเหตุผู้อนุมัติ"],
     memos.map(x => [x.memo_no, fmt(x.created_at), nameOf(x.created_by), x.subject, x.to_whom, x.body, x.amount, jobNo(x.job_id), (prs.find(p => p.id === x.pr_id) || {}).pr_no, MEMO_STATUS[x.status], nameOf(x.decided_by), fmt(x.decided_at), x.decision_note]));
 
   /* ---------- phase B: open-jobs report grouped by reason ---------- */
@@ -789,7 +782,7 @@
         <td>${esc(j.department || "")}</td><td>${esc(j.detail)}</td><td>${esc(crewOf(j).map(nameOf).join(", "))}</td><td>${esc([j.hold_category, j.hold_reason].filter(Boolean).join(" · ") || statusLabel(j))}</td><td>${j.hold_until ? fmtDate(j.hold_until) : j.appointment_at ? fmt(j.appointment_at) : "-"}</td><td>${planText(j) || "-"}${j.plan_note ? "<br><small>" + esc(j.plan_note) + "</small>" : ""}</td></tr>`).join("")}</table></div>`).join("") || `<div class="empty">ไม่มีงานค้าง</div>`);
   }
   $("#rpPrint").onclick = () => window.print();
-  $("#rpExport").onclick = () => csv(`รายงานงานค้าง-${H.code}-${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })}.csv`, ["กลุ่ม", "เลขใบงาน", "วันที่แจ้ง", "ค้าง (วัน)", "อาคาร", "ชั้น", "แผนก", "รายละเอียด", "ช่าง", "สถานะ", "เหตุผลพักงาน", "หมายเหตุพักงาน", "วันนัด", "เกิน SLA", "กำหนดเสร็จ (แผน)", "เลยกำหนด (วัน)", "แผนงาน"],
+  $("#rpExport").onclick = () => csv(`รายงานงานค้าง-${H.code}-${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })}`, ["กลุ่ม", "เลขใบงาน", "วันที่แจ้ง", "ค้าง (วัน)", "อาคาร", "ชั้น", "แผนก", "รายละเอียด", "ช่าง", "สถานะ", "เหตุผลพักงาน", "หมายเหตุพักงาน", "วันนัด", "เกิน SLA", "กำหนดเสร็จ (แผน)", "เลยกำหนด (วัน)", "แผนงาน"],
     reportGroups().flatMap(([k, l]) => l.map(j => [k, j.job_no, fmt(j.created_at), daysOpen(j), j.building, j.floor, j.department, j.detail, crewOf(j).map(nameOf).join(", "), statusLabel(j), j.hold_category, j.hold_reason, j.hold_until || fmt(j.appointment_at), isLate(j) ? "เกิน" : "", j.plan_due || "", planLate(j) ? -planLeft(j) : "", j.plan_note || ""])));
 
   function render() {

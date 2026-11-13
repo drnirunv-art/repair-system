@@ -25,12 +25,8 @@
   const count = (arr, f) => Object.entries(arr.reduce((m, x) => { const k = f(x) || "ไม่ระบุ"; m[k] = (m[k] || 0) + 1; return m; }, {})).sort((a, b) => b[1] - a[1]);
   const bars = pairs => { const max = Math.max(1, ...pairs.map(p => p[1])); return pairs.length ? pairs.map(([k, v]) => `<div class="bar"><span>${esc(k)}</span><i style="width:${v / max * 100}%"></i><em>${v}</em></div>`).join("") : `<div class="empty">ยังไม่มีข้อมูล</div>`; };
   function toast(m) { $("#toast").textContent = m; $("#toast").hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => $("#toast").hidden = true, 6000); }
-  function csv(name, head, rows) {
-    const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const blob = new Blob(["﻿" + [head.map(q).join(","), ...rows.map(r => r.map(q).join(","))].join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
-    document.body.appendChild(a); a.click(); a.remove();
-  }
+  // every list export is a real .xlsx with an executive-summary sheet first (assets/office.js)
+  const csv = (name, head, rows, opts) => Office.table(name, head, rows, { org: H && H.name, ...opts });
   const fail = (el, e) => { $(el).innerHTML = `<div class="note bad">${esc(errText(e))}</div>`; };
 
   /* ---------- boot ---------- */
@@ -188,7 +184,7 @@
       <h3 class="grp">ใบงานที่รับแจ้งวันนี้ (${rows.length})</h3><div class="scroll"><table><tr><th>เลขใบงาน</th><th>เวลา</th><th>แผนก</th><th>รายละเอียด</th><th>ประเภท</th><th>ช่าง</th><th>สถานะ</th></tr>
       ${rows.map(j => `<tr${late.includes(j) ? ' class="low"' : ""}><td class="mono">${esc(j.job_no)}</td><td>${fmt(j.created_at)}</td><td>${esc([j.building, j.department].filter(Boolean).join(" · "))}</td><td>${esc(j.detail)}</td><td>${esc(typeOf(j.job_type_id))}</td><td>${esc(nameOf(j.technician_id))}</td><td>${esc(statusLabel(j))}</td></tr>`).join("") || `<tr><td colspan="7"><div class="empty">ไม่มีการแจ้งซ่อมในวันนี้</div></td></tr>`}</table></div>`;
   }
-  $("#dyExport").onclick = () => csv(`สรุปรับแจ้ง-${H.code}-${$("#dyDate").value}.csv`, ["เลขใบงาน", "เวลาแจ้ง", "อาคาร", "ชั้น", "แผนก", "รายละเอียด", "ประเภทงาน", "ความเร่งด่วน", "ช่าง", "สถานะ"],
+  $("#dyExport").onclick = () => csv(`สรุปรับแจ้ง-${H.code}-${$("#dyDate").value}`, ["เลขใบงาน", "เวลาแจ้ง", "อาคาร", "ชั้น", "แผนก", "รายละเอียด", "ประเภทงาน", "ความเร่งด่วน", "ช่าง", "สถานะ"],
     dyRows.map(j => [j.job_no, fmt(j.created_at), j.building, j.floor, j.department, j.detail, typeOf(j.job_type_id), (prioOf(j) || {}).name, nameOf(j.technician_id), statusLabel(j)]));
 
   /* ---------- roster ---------- */
@@ -255,7 +251,9 @@
   });
 
   /* ---------- monthly report book ---------- */
-  let moJobs = [];
+  let moJobs = [], moRep = null;
+  const unesc = v => String(v).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  const busy = async (btn, f) => { const t = btn.textContent; btn.disabled = true; btn.textContent = "กำลังสร้างไฟล์…"; try { await f(); } catch (e) { alert(errText(e)); } btn.disabled = false; btn.textContent = t; };
   async function renderMonth() {
     const m = $("#moMonth").value || today().slice(0, 7), d0 = m + "-01", d1 = addDays(addDays(d0, 32).slice(0, 8) + "01", 0), s = bkk(d0), e = bkk(d1);
     $("#moBody").innerHTML = `<div class="empty">กำลังโหลด…</div>`;
@@ -287,7 +285,42 @@
     const techs = {}; jobs.filter(j => j.technician_id).forEach(j => { const t = techs[j.technician_id] = techs[j.technician_id] || { n: 0, done: [], r: [] }; t.n++; if (j.cleared_at) t.done.push(j); if (j.rating) t.r.push(j.rating); });
     const pc = {}; moves.filter(x => x.kind === "issue" || x.kind === "return").forEach(x => { const p = parts.find(y => y.id === x.part_id) || {}; const k = x.part_id; pc[k] = pc[k] || { name: `${p.code || ""} ${p.name || "?"}`, unit: p.unit || "", q: 0, c: 0 }; pc[k].q -= x.qty; pc[k].c -= x.qty * x.unit_cost; });
     const notes = nt.data || {};
+    // executive summary and analysis: computed from the same numbers as the tables below; reused by the Excel and PowerPoint exports
+    const ratingAvg = rated.length ? rated.reduce((t, j) => t + j.rating, 0) / rated.length : null, slaPct = cleared.length ? Math.round(slaOk / cleared.length * 100) : null;
+    const topB = count(jobs, j => j.building).slice(0, 10), topD = count(jobs, j => j.department).slice(0, 10), holds = count(jobs.filter(j => j.hold_category), j => j.hold_category);
+    const partRows = Object.values(pc).filter(x => x.q > 0).sort((x, y) => y.c - x.c).slice(0, 10), techRows = Object.entries(techs).sort((x, y) => y[1].n - x[1].n).map(([id, t]) => [nameOf(id) || "-", t.n, t.done.length, avg(t.done), t.r.length ? (t.r.reduce((x, y) => x + y, 0) / t.r.length).toFixed(2) : "-"]);
+    const worst = slaRows.filter(r => r[2] > 0).sort((x, y) => x[3] / x[2] - y[3] / y[2])[0], shiftDue = daysSoFar * shifts.length;
+    const find = [], rec = [];
+    if (!jobs.length) find.push("เดือนนี้ไม่มีใบแจ้งซ่อม");
+    else {
+      find.push(`รับแจ้งซ่อม ${jobs.length} ใบ ซ่อมเสร็จ ${cleared.length} ใบ (${pct(cleared.length, jobs.length)}) ปิดงาน ${closed.length} ใบ และมีงานค้าง ณ สิ้นเดือน ${openEnd.length} ใบ`);
+      if (slaPct != null) find.push(`ซ่อมเสร็จทัน SLA ${slaPct}% (${slaOk} จาก ${cleared.length} ใบ)${worst && worst[3] < worst[2] ? ` กลุ่มที่ทันน้อยที่สุดคือ ${unesc(worst[0])} ทัน ${worst[4]}` : ""}`);
+      if (closed.length) find.push(`เวลาปิดงานเฉลี่ย ${avg(closed)}`);
+      if (byType.length) { const t = [...byType].sort((x, y) => y[1] - x[1]); find.push(`ประเภทงานที่แจ้งมากที่สุดคือ ${unesc(t[0][0])} ${t[0][1]} ใบ (${pct(t[0][1], jobs.length)})${t[1] ? ` รองลงมา ${unesc(t[1][0])} ${t[1][1]} ใบ` : ""}`); }
+      if (topB.length) find.push(`พื้นที่ที่แจ้งมากที่สุด: อาคาร ${topB[0][0]} ${topB[0][1]} ใบ${topD.length ? ` และแผนก ${topD[0][0]} ${topD[0][1]} ใบ` : ""}`);
+      if (repeat.length) find.push(`มีเครื่อง / อุปกรณ์ที่แจ้งซ่อมซ้ำ ${repeat.length} รายการ มากที่สุดคือ ${repeat[0][0]} ${repeat[0][1]} ครั้ง`);
+      find.push(ratingAvg != null ? `ความพึงพอใจเฉลี่ย ${ratingAvg.toFixed(2)} จาก 5 (ผู้แจ้งประเมิน ${rated.length} ใบ คิดเป็น ${pct(rated.length, jobs.length)} ของใบงาน)` : "ยังไม่มีผู้แจ้งประเมินความพึงพอใจในเดือนนี้");
+      if (cost > 0 || prs.length) find.push(`ค่าอะไหล่ที่เบิกใช้ ${baht(cost)} บาท ใบขอซื้อ ${prs.length} ใบ มูลค่ารวม ${baht(prs.reduce((t, x) => t + +x.total, 0))} บาท`);
+      if (slaPct != null && slaPct < 80) rec.push(`% ทัน SLA อยู่ที่ ${slaPct}% ต่ำกว่า 80% ควรทบทวนการจ่ายงานและกำลังคนในช่วงที่งานเข้ามาก${worst ? ` โดยเฉพาะงานระดับ ${unesc(worst[0])}` : ""}`);
+      if (openEnd.length > Math.max(5, cleared.length * 0.3)) rec.push(`งานค้าง ณ สิ้นเดือน ${openEnd.length} ใบ สูงเมื่อเทียบกับงานที่ซ่อมเสร็จ ${cleared.length} ใบ ควรใส่วันกำหนดเสร็จให้งานค้างทุกใบและติดตามทุกสัปดาห์`);
+      if (holds.length) rec.push(`เหตุผลพักงานที่พบมากที่สุดคือ ${holds[0][0]} ${holds[0][1]} ใบ ควรเร่งแก้ที่ต้นเหตุนี้ก่อน`);
+      if (repeat.length) rec.push(`เครื่องที่แจ้งซ้ำ เช่น ${repeat.slice(0, 3).map(r => r[0]).join(", ")} ควรตรวจหาสาเหตุหลัก และพิจารณาเพิ่มรอบ PM หรือเปลี่ยนทดแทน`);
+      if (ratingAvg != null && ratingAvg < 4) rec.push(`ความพึงพอใจเฉลี่ย ${ratingAvg.toFixed(2)} ต่ำกว่า 4 ควรอ่านความคิดเห็นของผู้แจ้งในข้อ 11 และแจ้งกลับผู้แจ้งให้เร็วขึ้น`);
+      if (rated.length < jobs.length * 0.2) rec.push(`มีผู้ประเมินเพียง ${pct(rated.length, jobs.length)} ของใบงาน ควรเชิญผู้แจ้งให้ประเมินหลังปิดงาน`);
+      if (shiftDue && shiftSent < shiftDue * 0.9) rec.push(`ส่งรายงานกะ ${shiftSent} จาก ${shiftDue} กะ ควรกำชับให้ส่งครบทุกกะ`);
+      if (!rec.length) rec.push("ตัวเลขของเดือนนี้อยู่ในเกณฑ์ ไม่พบประเด็นที่ต้องเร่งแก้จากข้อมูลในระบบ");
+    }
+    moRep = { title: `รายงานประจำเดือน ${monthTh}`, org: `งานวิศวกรรมอาคาร ${H.name}`, period: monthTh, file: `รายงานประจำเดือน-${H.code}-${m}`, findings: find, notes: rec, manager: [notes.summary && `บทสรุปของหัวหน้างาน: ${notes.summary}`, notes.plan && `แผนเดือนถัดไป: ${notes.plan}`].filter(Boolean),
+      kpis: [["รับแจ้งทั้งเดือน", jobs.length], ["ซ่อมเสร็จ", cleared.length], ["ปิดงาน", closed.length], ["ค้าง ณ สิ้นเดือน", openEnd.length], ["ซ่อมเสร็จทัน SLA", pct(slaOk, cleared.length)], ["เวลาปิดงานเฉลี่ย", avg(closed)],
+        ["ความพึงพอใจเฉลี่ย", ratingAvg != null ? ratingAvg.toFixed(2) + " / 5" : "-"], ["ผู้แจ้งประเมิน", rated.length], ["ค่าอะไหล่ที่เบิกใช้ (บาท)", baht(cost)], ["ใบขอซื้อ", prs.length], ["Memo", memos.length], ["รายงานกะที่ส่ง", `${shiftSent} / ${shiftDue}`]],
+      sections: [{ title: "SLA ตามความเร่งด่วน", head: ["ความเร่งด่วน", "จำนวนใบ", "ซ่อมเสร็จ", "ทันเวลา", "% ทัน SLA"], rows: slaRows.map(r => [unesc(r[0]), ...r.slice(1)]) },
+        { title: "งานตามประเภท", head: ["ประเภทงาน", "จำนวนใบ", "ซ่อมเสร็จ", "เวลาเฉลี่ย"], rows: byType.map(r => [unesc(r[0]), ...r.slice(1)]) },
+        { title: "อาคารที่แจ้งมากที่สุด", head: ["อาคาร", "จำนวนใบ"], rows: topB }, { title: "แผนกที่แจ้งมากที่สุด", head: ["แผนก", "จำนวนใบ"], rows: topD },
+        { title: "เครื่อง / อุปกรณ์ที่แจ้งซ่อมซ้ำ", head: ["เครื่อง / อุปกรณ์", "จำนวนใบ"], rows: repeat }, { title: "ผลงานช่าง", head: ["ช่าง", "จำนวนใบ", "ซ่อมเสร็จ", "เวลาเฉลี่ย", "คะแนนเฉลี่ย"], rows: techRows },
+        { title: "เหตุผลพักงาน", head: ["เหตุผล", "จำนวนใบ"], rows: holds }, { title: "อะไหล่ที่ใช้มากที่สุด", head: ["อะไหล่", "จำนวน", "บาท"], rows: partRows.map(x => [x.name, `${x.q} ${x.unit}`, baht(x.c)]), chart: false }] };
+    const li = l => l.map(t => `<li>${esc(t)}</li>`).join("");
     $("#moBody").innerHTML = `<div class="panel" style="text-align:center;margin-bottom:16px"><h2 style="margin:0">รายงานประจำเดือน ${esc(monthTh)}</h2><div class="sub" style="margin:4px 0 0">งานวิศวกรรมอาคาร ${esc(H.name)} · พิมพ์เมื่อ ${fmt(new Date().toISOString())}</div></div>
+      <div class="panel" style="margin-bottom:16px"><h3 style="margin-top:0">บทสรุปผู้บริหาร</h3><ol style="margin:0 0 12px;padding-left:22px">${li(find)}</ol>${rec.length ? `<h3>บทวิเคราะห์และข้อเสนอแนะ</h3><ol style="margin:0;padding-left:22px">${li(rec)}</ol>` : ""}<p class="meta" style="margin:10px 0 0">ระบบสรุปจากตัวเลขในรายงานนี้โดยอัตโนมัติ บทสรุปของหัวหน้างานอยู่ในข้อ 12</p></div>
       <h3 class="grp">1. สรุปตัวเลขสำคัญ</h3>${kpis([["รับแจ้งทั้งเดือน", jobs.length], ["ซ่อมเสร็จ", cleared.length], ["ปิดงาน", closed.length], ["ค้าง ณ สิ้นเดือน", openEnd.length, 1],
         ["ซ่อมเสร็จทัน SLA", pct(slaOk, cleared.length)], ["เวลาปิดงานเฉลี่ย", avg(closed)], ["ความพึงพอใจเฉลี่ย", rated.length ? (rated.reduce((t, j) => t + j.rating, 0) / rated.length).toFixed(2) + " / 5" : "-"], ["ผู้แจ้งประเมิน", rated.length],
         ["ค่าอะไหล่ที่เบิกใช้ (บาท)", baht(cost)], ["ใบขอซื้อ", prs.length], ["Memo", memos.length], ["รายงานกะที่ส่ง", `${shiftSent} / ${daysSoFar * shifts.length}`]])}
@@ -312,8 +345,13 @@
       if (error) return alert(errText(error)); toast("บันทึกบทสรุปแล้ว"); renderMonth();
     };
   }
-  $("#moExport").onclick = () => csv(`ใบงาน-${H.code}-${$("#moMonth").value}.csv`, ["เลขใบงาน", "วันที่แจ้ง", "อาคาร", "ชั้น", "แผนก", "อุปกรณ์", "รายละเอียด", "ประเภทงาน", "ความเร่งด่วน", "สถานะ", "ช่าง", "เหตุผลพักงาน", "สรุปการซ่อม", "เวลาทำงาน (นาที)", "SLA (นาที)", "ทัน SLA", "ปิดงาน", "คะแนน"],
-    moJobs.map(j => [j.job_no, fmt(j.created_at), j.building, j.floor, j.department, j.equipment_text, j.detail, typeOf(j.job_type_id), (prioOf(j) || {}).name, statusLabel(j), nameOf(j.technician_id), j.hold_category, j.summary, workMins(j), slaOf(j), workMins(j) <= slaOf(j) ? "ทัน" : "ไม่ทัน", fmt(j.closed_at), j.rating || ""]));
+  // whole report as one workbook: summary sheet, one sheet of report tables, and the month's job list
+  $("#moExport").onclick = () => { const r = moRep; if (!r) return;
+    const tables = [], st = {}; r.sections.forEach(x => { st[tables.length] = 1; tables.push([x.title, ...x.head.slice(1)]); (x.rows.length ? x.rows : [["ไม่มีข้อมูล"]]).forEach(y => tables.push(y)); tables.push([]); });
+    const head = ["เลขใบงาน", "วันที่แจ้ง", "อาคาร", "ชั้น", "แผนก", "อุปกรณ์", "รายละเอียด", "ประเภทงาน", "ความเร่งด่วน", "สถานะ", "ช่าง", "เหตุผลพักงาน", "สรุปการซ่อม", "เวลาทำงาน (นาที)", "SLA (นาที)", "ทัน SLA", "ปิดงาน", "คะแนน"];
+    Office.xlsx(r.file, [Office.summarySheet({ title: r.title, org: r.org, findings: r.findings, notes: [...r.notes, ...r.manager], figures: r.kpis }), { name: "ตารางรายงาน", rows: tables, styles: st },
+      { name: "ใบงานของเดือน", header: 0, rows: [head, ...moJobs.map(j => [j.job_no, fmt(j.created_at), j.building, j.floor, j.department, j.equipment_text, j.detail, typeOf(j.job_type_id), (prioOf(j) || {}).name, statusLabel(j), nameOf(j.technician_id), j.hold_category, j.summary, workMins(j), slaOf(j), workMins(j) <= slaOf(j) ? "ทัน" : "ไม่ทัน", fmt(j.closed_at), j.rating || ""])] }]); };
+  $("#moPpt").onclick = e => moRep && busy(e.currentTarget, () => Office.pptx(moRep.file, { ...moRep, notes: [...moRep.notes, ...moRep.manager] }));
 
   /* ---------- knowledge base ---------- */
   let kb = [], kbJobs = [];
@@ -374,7 +412,7 @@
   });
 
   /* ---------- executive overview ---------- */
-  let exRows = [];
+  let exRows = [], exRep = null;
   async function renderExec() {
     const { data, error } = await sb.rpc("exec_overview", { p_from: $("#exFrom").value, p_to: $("#exTo").value });
     if (error) return fail("#exTable", error);
@@ -385,11 +423,36 @@
     $("#exTable").innerHTML = `<tr><th>โรงพยาบาล</th><th class="num">รับแจ้ง</th><th class="num">ซ่อมเสร็จ</th><th class="num">ปิดงาน</th><th class="num">ค้างตอนนี้</th><th class="num">เกิน SLA</th><th class="num">พักงาน</th><th class="num">รออนุมัติ</th><th class="num">เวลาปิดเฉลี่ย</th><th class="num">% ทัน SLA</th><th class="num">ความพึงพอใจ</th><th class="num">ค่าอะไหล่</th><th class="num">PR รออนุมัติ</th></tr>` +
       exRows.map(r => `<tr${r.late_open > 0 ? ' class="low"' : ""}><td><b>${esc(r.code)}</b> ${esc(r.name)}</td><td class="num">${r.received}</td><td class="num">${r.cleared}</td><td class="num">${r.closed}</td><td class="num">${r.open_now}</td><td class="num">${r.late_open}</td><td class="num">${r.on_hold}</td><td class="num">${r.hold_pending}</td>
         <td class="num">${r.avg_close_min != null ? dur(r.avg_close_min) : "-"}</td><td class="num">${r.sla_ok_pct != null ? r.sla_ok_pct + "%" : "-"}</td><td class="num">${r.rating_avg != null ? (+r.rating_avg).toFixed(2) + ` (${r.rating_n})` : "-"}</td><td class="num">${baht(r.parts_cost)}</td><td class="num">${r.pr_pending}</td></tr>`).join("");
+    const act = exRows.filter(r => +r.received || +r.open_now), by = (k, dir = -1) => [...act].filter(r => r[k] != null).sort((x, y) => dir * (+x[k] - +y[k])), slaAll = act.filter(r => r.sla_ok_pct != null && +r.cleared);
+    const slaW = slaAll.length ? Math.round(slaAll.reduce((t, r) => t + r.sla_ok_pct * r.cleared, 0) / slaAll.reduce((t, r) => t + +r.cleared, 0)) : null, find = [], rec = [], period = `${$("#exFrom").value} ถึง ${$("#exTo").value}`;
+    if (!act.length) find.push("ช่วงนี้ยังไม่มีใบแจ้งซ่อมในระบบ");
+    else {
+      find.push(`ทั้ง ${exRows.length} โรงพยาบาล รับแจ้ง ${sum("received")} ใบ ซ่อมเสร็จ ${sum("cleared")} ใบ ปิดงาน ${sum("closed")} ใบ ค้างตอนนี้ ${sum("open_now")} ใบ`);
+      if (slaW != null) find.push(`ซ่อมเสร็จทัน SLA รวม ${slaW}%${by("sla_ok_pct", 1)[0] ? ` ต่ำที่สุดคือ ${by("sla_ok_pct", 1)[0].code} ${by("sla_ok_pct", 1)[0].sla_ok_pct}% สูงที่สุดคือ ${by("sla_ok_pct")[0].code} ${by("sla_ok_pct")[0].sla_ok_pct}%` : ""}`);
+      const o = by("open_now")[0]; if (o && +o.open_now) find.push(`งานค้างมากที่สุดอยู่ที่ ${o.code} ${o.open_now} ใบ (${Math.round(o.open_now / Math.max(1, sum("open_now")) * 100)}% ของงานค้างทั้งหมด)`);
+      const late = act.filter(r => +r.late_open > 0); find.push(late.length ? `มีงานเกิน SLA ตอนนี้ ${sum("late_open")} ใบ ใน ${late.length} โรง: ${by("late_open").filter(r => +r.late_open).slice(0, 5).map(r => `${r.code} ${r.late_open}`).join(", ")}` : "ไม่มีงานเกิน SLA ค้างอยู่ในขณะนี้");
+      const ra = act.filter(r => r.rating_avg != null && +r.rating_n); if (ra.length) find.push(`ความพึงพอใจเฉลี่ยรวม ${(ra.reduce((t, r) => t + r.rating_avg * r.rating_n, 0) / ra.reduce((t, r) => t + +r.rating_n, 0)).toFixed(2)} จาก 5 (ประเมิน ${sum("rating_n")} ใบ)`);
+      find.push(`ค่าอะไหล่รวม ${baht(sum("parts_cost"))} บาท ใบขอซื้อรออนุมัติ ${sum("pr_pending")} ใบ`);
+      by("sla_ok_pct", 1).filter(r => +r.sla_ok_pct < 80).slice(0, 4).forEach(r => rec.push(`${r.code} ทัน SLA ${r.sla_ok_pct}% ต่ำกว่า 80% ควรทบทวนการจ่ายงานและกำลังคน`));
+      if (late.length) rec.push(`ติดตามงานเกิน SLA ${sum("late_open")} ใบ ให้มีวันกำหนดเสร็จทุกใบ เริ่มจาก ${by("late_open")[0].code}`);
+      if (sum("hold_pending")) rec.push(`มีคำขอพักงานรออนุมัติ ${sum("hold_pending")} ใบ ควรพิจารณาให้เสร็จเพื่อไม่ให้งานค้างโดยไม่มีแผน`);
+      if (sum("pr_pending")) rec.push(`มีใบขอซื้อรออนุมัติ ${sum("pr_pending")} ใบ ซึ่งอาจทำให้งานที่รออะไหล่ล่าช้า`);
+      const silent = exRows.filter(r => !+r.received); if (silent.length) rec.push(`โรงที่ยังไม่มีใบแจ้งซ่อมในช่วงนี้: ${silent.map(r => r.code).join(", ")} ควรตรวจว่าเริ่มใช้งานระบบแล้วหรือยัง`);
+      if (!rec.length) rec.push("ตัวเลขทุกโรงอยู่ในเกณฑ์ ไม่พบประเด็นที่ต้องเร่งแก้จากข้อมูลในระบบ");
+    }
+    exRep = { title: "ภาพรวมงานซ่อม 12 โรงพยาบาล", org: "งานวิศวกรรมอาคาร", period, file: `ภาพรวม-12รพ-${$("#exFrom").value}-${$("#exTo").value}`, findings: find, notes: rec,
+      kpis: [["รับแจ้งในช่วงนี้", sum("received")], ["ซ่อมเสร็จ", sum("cleared")], ["ปิดงาน", sum("closed")], ["ค้างตอนนี้", sum("open_now")], ["เกิน SLA ตอนนี้", sum("late_open")], ["% ทัน SLA รวม", slaW != null ? slaW + "%" : "-"], ["รออนุมัติพักงาน", sum("hold_pending")], ["ค่าอะไหล่ (บาท)", baht(sum("parts_cost"))]],
+      sections: [{ title: "รับแจ้งรายโรงพยาบาล", head: ["โรงพยาบาล", "รับแจ้ง", "ซ่อมเสร็จ", "ปิดงาน"], rows: by("received").map(r => [r.code, r.received, r.cleared, r.closed]) }, { title: "งานค้างตอนนี้", head: ["โรงพยาบาล", "ค้างตอนนี้", "เกิน SLA", "พักงาน"], rows: by("open_now").map(r => [r.code, r.open_now, r.late_open, r.on_hold]) },
+        { title: "% ซ่อมเสร็จทัน SLA", head: ["โรงพยาบาล", "% ทัน SLA"], rows: by("sla_ok_pct").map(r => [r.code, r.sla_ok_pct]) }, { title: "ค่าอะไหล่รายโรงพยาบาล (บาท)", head: ["โรงพยาบาล", "ค่าอะไหล่"], rows: by("parts_cost").filter(r => +r.parts_cost).map(r => [r.code, Math.round(r.parts_cost)]) }] };
+    const li = l => l.map(t => `<li>${esc(t)}</li>`).join("");
+    $("#exSum").innerHTML = `<h3 style="margin-top:0">บทสรุปผู้บริหาร <small class="meta">${esc(period)}</small></h3><ol style="margin:0 0 12px;padding-left:22px">${li(find)}</ol>${rec.length ? `<h3>บทวิเคราะห์และข้อเสนอแนะ</h3><ol style="margin:0;padding-left:22px">${li(rec)}</ol>` : ""}`;
     $("#exOpen").innerHTML = bars(exRows.map(r => [r.code, +r.open_now]).sort((a, b) => b[1] - a[1]));
     $("#exSla").innerHTML = bars(exRows.filter(r => r.sla_ok_pct != null).map(r => [r.code, +r.sla_ok_pct]).sort((a, b) => b[1] - a[1]));
   }
-  $("#exExport").onclick = () => csv(`ภาพรวม-12รพ-${$("#exFrom").value}-${$("#exTo").value}.csv`, ["รหัส", "โรงพยาบาล", "รับแจ้ง", "ซ่อมเสร็จ", "ปิดงาน", "ค้างตอนนี้", "เกิน SLA", "พักงาน", "รออนุมัติพักงาน", "เวลาปิดเฉลี่ย (นาที)", "% ทัน SLA", "ความพึงพอใจเฉลี่ย", "จำนวนประเมิน", "ค่าอะไหล่ (บาท)", "PR รออนุมัติ", "มูลค่า PR อนุมัติ"],
-    exRows.map(r => [r.code, r.name, r.received, r.cleared, r.closed, r.open_now, r.late_open, r.on_hold, r.hold_pending, r.avg_close_min, r.sla_ok_pct, r.rating_avg, r.rating_n, r.parts_cost, r.pr_pending, r.pr_value]));
+  $("#exExport").onclick = () => csv(`ภาพรวม-12รพ-${$("#exFrom").value}-${$("#exTo").value}`, ["รหัส", "โรงพยาบาล", "รับแจ้ง", "ซ่อมเสร็จ", "ปิดงาน", "ค้างตอนนี้", "เกิน SLA", "พักงาน", "รออนุมัติพักงาน", "เวลาปิดเฉลี่ย (นาที)", "% ทัน SLA", "ความพึงพอใจเฉลี่ย", "จำนวนประเมิน", "ค่าอะไหล่ (บาท)", "PR รออนุมัติ", "มูลค่า PR อนุมัติ"],
+    exRows.map(r => [r.code, r.name, r.received, r.cleared, r.closed, r.open_now, r.late_open, r.on_hold, r.hold_pending, r.avg_close_min, r.sla_ok_pct, r.rating_avg, r.rating_n, r.parts_cost, r.pr_pending, r.pr_value]),
+    exRep ? { title: exRep.title, org: exRep.org, period: exRep.period, findings: exRep.findings, notes: exRep.notes } : {});
+  $("#exPpt").onclick = e => exRep && busy(e.currentTarget, () => Office.pptx(exRep.file, exRep));
 
   setInterval(() => { if (!$("#tab-shift").hidden && !shOpen) renderShift(); }, 120000);
   void STATUS;

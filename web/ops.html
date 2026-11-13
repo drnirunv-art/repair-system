@@ -33,7 +33,7 @@
 
   <section id="tab-daily" hidden>
     <h2>สรุปงานรับแจ้งรายวัน</h2>
-    <div class="filters noprint" style="max-width:860px"><label>วันที่<input id="dyDate" type="date"></label><button class="btn" type="button" id="dyExport" style="align-self:end">ดาวน์โหลด Excel (CSV)</button><button class="btn primary" type="button" id="dyPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+    <div class="filters noprint" style="max-width:860px"><label>วันที่<input id="dyDate" type="date"></label><button class="btn" type="button" id="dyExport" style="align-self:end">ดาวน์โหลด Excel</button><button class="btn primary" type="button" id="dyPrint" style="align-self:end">พิมพ์ / PDF</button></div>
     <div id="dyBody"></div>
   </section>
 
@@ -55,7 +55,8 @@
 
   <section id="tab-month" hidden>
     <h2 class="noprint">รายงานประจำเดือน (Monthly Report Book)</h2>
-    <div class="filters noprint" style="max-width:860px"><label>เดือน<input id="moMonth" type="month"></label><button class="btn" type="button" id="moExport" style="align-self:end">ใบงานของเดือน (CSV)</button><button class="btn primary" type="button" id="moPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+    <div class="filters noprint" style="max-width:860px"><label>เดือน<input id="moMonth" type="month"></label><button class="btn" type="button" id="moExport" style="align-self:end">Excel ทั้งเล่ม</button><button class="btn" type="button" id="moPpt" style="align-self:end">PowerPoint</button><button class="btn primary" type="button" id="moPrint" style="align-self:end">PDF / พิมพ์</button></div>
+    <p class="meta noprint">ปุ่ม PDF / พิมพ์: ในหน้าต่างพิมพ์ ช่อง “ปลายทาง” เลือก “บันทึกเป็น PDF” · ทุกไฟล์มีบทสรุปผู้บริหารและบทวิเคราะห์อยู่หน้าแรก</p>
     <div id="moBody"></div>
   </section>
 
@@ -76,7 +77,9 @@
   <section id="tab-exec" hidden>
     <h2>ภาพรวม 12 โรงพยาบาล</h2>
     <p class="sub">ตัวเลขสรุปของทุกโรง (ไม่แสดงชื่อผู้แจ้งหรือรายละเอียดรายใบ) เห็นเฉพาะผู้บริหารที่ได้รับสิทธิ์</p>
-    <div class="filters noprint" style="max-width:860px"><label>ตั้งแต่<input id="exFrom" type="date"></label><label>ถึง<input id="exTo" type="date"></label><button class="btn" type="button" id="exExport" style="align-self:end">ดาวน์โหลด Excel (CSV)</button><button class="btn primary" type="button" id="exPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+    <div class="filters noprint" style="max-width:860px"><label>ตั้งแต่<input id="exFrom" type="date"></label><label>ถึง<input id="exTo" type="date"></label><button class="btn" type="button" id="exExport" style="align-self:end">ดาวน์โหลด Excel</button><button class="btn" type="button" id="exPpt" style="align-self:end">PowerPoint</button><button class="btn primary" type="button" id="exPrint" style="align-self:end">PDF / พิมพ์</button></div>
+    <p class="meta noprint">ปุ่ม PDF / พิมพ์: ในหน้าต่างพิมพ์ ช่อง “ปลายทาง” เลือก “บันทึกเป็น PDF”</p>
+    <div class="panel" id="exSum" style="margin-bottom:14px"></div>
     <div class="kpis" id="exKpi"></div>
     <div class="scroll"><table id="exTable"></table></div>
     <div class="two" style="margin-top:14px"><div class="panel"><h3>งานค้างตอนนี้</h3><div id="exOpen"></div></div><div class="panel"><h3>% ซ่อมเสร็จทัน SLA</h3><div id="exSla"></div></div></div>
@@ -86,6 +89,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="assets/config.js"></script>
 <script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
 <script src="assets/ops.js"></script>
 </body>
 </html>

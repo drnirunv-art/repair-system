@@ -27,12 +27,14 @@
   const kpis = arr => arr.map(([a, b, red]) => `<div class="kpi"><b style="${red && +b > 0 ? "color:var(--bad)" : ""}">${b}</b><span>${a}</span></div>`).join("");
   const bars = pairs => { const max = Math.max(1, ...pairs.map(p => p[1])); return pairs.length ? pairs.map(([k, v]) => `<div class="bar"><span>${esc(k)}</span><i style="width:${v / max * 100}%"></i><em>${v}</em></div>`).join("") : `<div class="empty">ไม่มี</div>`; };
   function toast(m) { $("#toast").textContent = m; $("#toast").hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => $("#toast").hidden = true, 6000); }
-  function csv(name, head, rows) {
+  function csvFile(name, head, rows) {
     const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const blob = new Blob(["﻿" + [head.map(q).join(","), ...rows.map(r => r.map(q).join(","))].join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
     document.body.appendChild(a); a.click(); a.remove();
   }
+  // every list export is a real .xlsx with an executive-summary sheet first (assets/office.js)
+  const csv = (name, head, rows, opts) => Office.table(name, head, rows, { org: H && H.name, ...opts });
   const note = (el, err, ok) => { $(el).innerHTML = err ? `<div class="note bad">${esc(errText(err))}</div>` : ok ? `<div class="note">${esc(ok)}</div>` : ""; };
   const sig = t => `<div class="sig"><span class="${t.submitted_at ? "on" : ""}">ช่าง 1/3${t.tech_id ? " · " + esc(nameOf(t.tech_id)) : ""}</span><span class="${t.head_at ? "on" : ""}">หัวหน้า 2/3${t.head_id ? " · " + esc(nameOf(t.head_id)) : ""}</span><span class="${t.eng_at ? "on" : ""}">วิศวกร 3/3${t.eng_id ? " · " + esc(nameOf(t.eng_id)) : ""}</span></div>`;
   const weekOfDay = d => Math.min(4, Math.ceil(d / 7));
@@ -326,7 +328,7 @@
         <td class="noprint"><button class="btn small" data-open="${t.id}">ดู</button></td></tr>`).join("") || `<tr><td colspan="12"><div class="empty">ยังไม่มีงานของเดือนนี้</div></td></tr>`);
   }
   $("#rPrint").onclick = () => window.print();
-  $("#rCsv").onclick = () => csv(`PM-${H.code}-${$("#rMonth").value}.csv`, ["สัปดาห์", "TAG", "เครื่อง", "ชนิด", "อาคาร", "ชั้น", "ที่ตั้ง", "ผู้ทำ", "สถานะ", "คะแนน", "ข้อผิดปกติ", "สแกน QR", "ช่าง 1/3", "ส่งเมื่อ", "หัวหน้า 2/3", "วิศวกร 3/3", "หมายเหตุ", "ใบแจ้งซ่อม"],
+  $("#rCsv").onclick = () => csv(`PM-${H.code}-${$("#rMonth").value}`, ["สัปดาห์", "TAG", "เครื่อง", "ชนิด", "อาคาร", "ชั้น", "ที่ตั้ง", "ผู้ทำ", "สถานะ", "คะแนน", "ข้อผิดปกติ", "สแกน QR", "ช่าง 1/3", "ส่งเมื่อ", "หัวหน้า 2/3", "วิศวกร 3/3", "หมายเหตุ", "ใบแจ้งซ่อม"],
     resRows.map(({ t, e }) => [t.week, e.tag, e.name, e.eq_type, e.building, e.floor, e.place, e.pm_by, ST[t.status], t.score, t.abnormal, t.submitted_at ? (t.scanned ? "สแกน" : "ไม่ได้สแกน") : "", nameOf(t.tech_id), fmt(t.submitted_at), nameOf(t.head_id), nameOf(t.eng_id), t.note, t.job_id ? "เปิดแล้ว" : ""]));
 
   /* ---------- registry & yearly plan ---------- */
@@ -377,9 +379,9 @@
     const { data, error } = await sb.rpc("pm_generate", { p_year: y, p_month: m });
     note("#gMsg", error, error ? "" : `สร้างงาน ${data} รายการ สำหรับ${monthLabel($("#gMonth").value)}${data ? "" : " (มีครบแล้ว หรือยังไม่มีเครื่องที่แผนตรงเดือนนี้)"}`);
   };
-  $("#eCsv").onclick = () => csv(`ทะเบียนPM-${H.code}.csv`, ["TAG", "ชื่อเครื่อง", "ชนิด", "อาคาร", "ชั้น", "ที่ตั้ง", "ความถี่", "เดือนที่เริ่ม", "สัปดาห์", "ผู้ทำ", "เดือนในแผน", "รหัสเดิม", "ระบบ"],
+  $("#eCsv").onclick = () => csv(`ทะเบียนPM-${H.code}`, ["TAG", "ชื่อเครื่อง", "ชนิด", "อาคาร", "ชั้น", "ที่ตั้ง", "ความถี่", "เดือนที่เริ่ม", "สัปดาห์", "ผู้ทำ", "เดือนในแผน", "รหัสเดิม", "ระบบ"],
     regList().map(e => [e.tag, e.name, e.eq_type, e.building, e.floor, e.place, e.pm_freq, (e.pm_months || [])[0] || "", e.pm_week, e.pm_by, (e.pm_months || []).join(" "), e.code, e.system]));
-  $("#iTpl").onclick = () => csv("แบบฟอร์มนำเข้าแผนPM.csv", ["TAG", "ชื่อเครื่อง", "ชนิด", "อาคาร", "ชั้น", "ที่ตั้ง", "ความถี่", "เดือนที่เริ่ม", "สัปดาห์", "ผู้ทำ"], [["A-EEL-1-001", "ไฟฉุกเฉิน ทางออก", "ทั่วไป", "A", "1", "หน้าลิฟต์", "M", 1, 1, "TW"]]);
+  $("#iTpl").onclick = () => csvFile("แบบฟอร์มนำเข้าแผนPM.csv", ["TAG", "ชื่อเครื่อง", "ชนิด", "อาคาร", "ชั้น", "ที่ตั้ง", "ความถี่", "เดือนที่เริ่ม", "สัปดาห์", "ผู้ทำ"], [["A-EEL-1-001", "ไฟฉุกเฉิน ทางออก", "ทั่วไป", "A", "1", "หน้าลิฟต์", "M", 1, 1, "TW"]]);
 
   // CSV import with preview and warnings; confirmed rows update by TAG or add new equipment
   let imp = [];

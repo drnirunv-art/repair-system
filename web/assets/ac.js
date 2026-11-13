@@ -99,12 +99,8 @@
   const penAmt = d => d * (+contract?.value || 0) * (+(contract?.penalty_rate ?? 0.001));
   const stPill = s => `<span class="st ${s}">${ST[s] || s}</span>`;
   function toast(m) { $("#toast").textContent = m; $("#toast").hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => $("#toast").hidden = true, 6000); }
-  function csv(name, head, rows) {
-    const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const blob = new Blob(["﻿" + [head.map(q).join(","), ...rows.map(r => r.map(q).join(","))].join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
-    document.body.appendChild(a); a.click(); a.remove();
-  }
+  // every list export is a real .xlsx with an executive-summary sheet first (assets/office.js)
+  const csv = (name, head, rows, opts) => Office.table(name, head, rows, { org: H && H.name, ...opts });
   const field = (id, label, type, val, ro) => Array.isArray(type)
     ? `<label>${esc(label)}<select data-k="${id}" ${ro ? "disabled" : ""}>${type.map(o => `<option ${o === (val ?? "") ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></label>`
     : `<label>${esc(label)}<input data-k="${id}" type="${type || "text"}" ${type === "number" ? 'step="any"' : ""} value="${esc(val ?? "")}" ${ro ? "disabled" : ""}></label>`;
@@ -407,7 +403,7 @@
   }
   $("#uQ").oninput = $("#uKind").onchange = renderUnits;
   $("#uList").onclick = e => { const tr = e.target.closest("[data-unit]"); if (tr) openUnit(tr.dataset.unit); };
-  $("#uCsv").onclick = () => csv(`ac-units-${H.code}.csv`, UF.map(f => f[1].replace(" *", "")), uFiltered().map(u => UF.map(f => u[f[0]])));
+  $("#uCsv").onclick = () => csv(`ac-units-${H.code}`, UF.map(f => f[1].replace(" *", "")), uFiltered().map(u => UF.map(f => u[f[0]])));
   const unitUrl = u => { const x = new URL("ac.html", location.href); x.search = "?u=" + u.id; return x.toString(); };
   const qrImg = u => { const q = qrcode(0, "M"); q.addData(unitUrl(u)); q.make(); return q.createDataURL(4, 2); };
   $("#uQrBtn").onclick = () => {
@@ -448,12 +444,12 @@
         ${u.install_year ? `<br>ติดตั้ง ${u.install_year} (อายุ ${+today().slice(0, 4) - u.install_year} ปี)` : ""}${u.condition ? " · สภาพ " + esc(u.condition) : ""}</p></div></div>
       <div class="kpis" style="margin-top:12px">${[["รายการทั้งหมด", hist.length], ["ล้างใหญ่ล่าสุด", last("ล้างใหญ่")], ["ล้างย่อยล่าสุด", last("ล้างย่อย")], ["แจ้งซ่อม (ครั้ง)", hist.filter(x => x.kind === "แจ้งซ่อม").length], ["ซ่อมล่าสุด", last("แจ้งซ่อม")], ["ความเสียหาย", hist.filter(x => x.kind === "ความเสียหาย").length]].map(([a, b]) => `<div class="kpi"><b>${b}</b><span>${a}</span></div>`).join("")}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="uBack">← กลับทะเบียน</button>${side ? `<button class="btn primary" type="button" id="uNew">กรอกแบบฟอร์ม ${formFor} ของเครื่องนี้</button>` : ""}
-        <button class="btn" type="button" id="uHCsv">ประวัติ (CSV)</button>${side ? `<button class="btn" type="button" id="uOff">ปิดใช้งานเครื่องนี้</button>` : ""}</div>
+        <button class="btn" type="button" id="uHCsv">ประวัติ (Excel)</button>${side ? `<button class="btn" type="button" id="uOff">ปิดใช้งานเครื่องนี้</button>` : ""}</div>
       ${error ? `<div class="note bad">${esc(errText(error))}</div>` : ""}
       <div class="scroll" style="margin-top:10px"><table><tr><th>วันที่</th><th>ประเภทงาน</th><th>แบบฟอร์ม / เลขที่</th><th>รายละเอียด</th><th>ค่าวัด / การแก้ไข</th><th>ผู้ปฏิบัติ / ผู้ตรวจ</th><th>สถานะ</th></tr>
       ${hist.map(x => `<tr><td>${fmtDate(day(x.at))}</td><td>${esc(x.kind)}</td><td class="mono">${esc(x.ref)}</td><td>${esc(x.detail)}</td><td>${esc(x.measure)}</td><td>${esc(x.who)}</td><td>${stPill(x.status)}</td></tr>`).join("") || `<tr><td colspan="7" class="empty">ยังไม่มีประวัติ</td></tr>`}</table></div></div>`;
     $("#uBack").onclick = renderUnits;
-    $("#uHCsv").onclick = () => csv(`ac-history-${u.code}.csv`, ["วันที่", "ประเภทงาน", "เลขที่", "รายละเอียด", "ค่าวัด / การแก้ไข", "ผู้ปฏิบัติ", "สถานะ"], hist.map(x => [day(x.at), x.kind, x.ref, x.detail, x.measure, x.who, ST[x.status]]));
+    $("#uHCsv").onclick = () => csv(`ac-history-${u.code}`, ["วันที่", "ประเภทงาน", "เลขที่", "รายละเอียด", "ค่าวัด / การแก้ไข", "ผู้ปฏิบัติ", "สถานะ"], hist.map(x => [day(x.at), x.kind, x.ref, x.detail, x.measure, x.who, ST[x.status]]));
     if ($("#uNew")) $("#uNew").onclick = () => { show("work"); formFor === "AC-05" ? (newForm("AC-05"), cur.data.rows = [{ code: u.code, kind: u.kind }], drawForm()) : newForm(formFor, u.id); };
     if ($("#uOff")) $("#uOff").onclick = async e => {
       if (e.target.dataset.sure !== "1") { e.target.dataset.sure = "1"; e.target.textContent = "กดอีกครั้งเพื่อยืนยันปิดใช้งาน"; return; }
@@ -509,9 +505,9 @@
   });
   $("#cCsv").onclick = () => {
     const sla = +(contract?.sla_hours ?? 24);
-    csv(`AC-09-${H.code}.csv`, ["เลขที่แจ้ง", "รับแจ้ง", "ผู้แจ้ง", "สถานที่", "รหัสเครื่อง", "อาการ", "เข้าตรวจ", "ชม.ที่ใช้", "วันปรับ", "ค่าปรับ", "แก้เสร็จ", "การแก้ไข", "ผู้ตรวจรับ"],
+    csv(`AC-09-${H.code}`, ["เลขที่แจ้ง", "รับแจ้ง", "ผู้แจ้ง", "สถานที่", "รหัสเครื่อง", "อาการ", "เข้าตรวจ", "ชม.ที่ใช้", "วันปรับ", "ค่าปรับ", "แก้เสร็จ", "การแก้ไข", "ผู้ตรวจรับ"],
       tickets.map(x => { const pd = penDays(x.reported_at, x.visited_at, sla); return [x.ticket_no, fmt(x.reported_at), x.reporter, x.place, unitOf(x.unit_id)?.code, x.symptom, x.visited_at ? fmt(x.visited_at) : "", hrs(x.reported_at, x.visited_at).toFixed(1), pd, penAmt(pd), x.fixed_at ? fmt(x.fixed_at) : "", x.fix_note, x.inspector_name]; }));
-    csv(`AC-10-${H.code}.csv`, ["เกิด/แจ้ง", "สถานที่", "รหัสเครื่อง", "ทรัพย์สิน", "สาเหตุ", "เกณฑ์", "แก้เสร็จ", "ชม.ที่ใช้", "วันปรับ", "ค่าปรับ", "ผู้ตรวจรับ"],
+    csv(`AC-10-${H.code}`, ["เกิด/แจ้ง", "สถานที่", "รหัสเครื่อง", "ทรัพย์สิน", "สาเหตุ", "เกณฑ์", "แก้เสร็จ", "ชม.ที่ใช้", "วันปรับ", "ค่าปรับ", "ผู้ตรวจรับ"],
       damages.map(x => { const lim = x.criteria === "defect" ? +(contract?.defect_hours ?? 72) : +(contract?.damage_hours ?? 48), pd = penDays(x.occurred_at, x.fixed_at, lim); return [fmt(x.occurred_at), x.place, unitOf(x.unit_id)?.code, x.asset, x.cause, x.criteria === "defect" ? "9.3" : "9.1-9.2", x.fixed_at ? fmt(x.fixed_at) : "", hrs(x.occurred_at, x.fixed_at).toFixed(1), pd, penAmt(pd), x.inspector_name]; }));
   };
 

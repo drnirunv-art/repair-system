@@ -64,7 +64,7 @@
     <div id="uView"></div>
     <div id="uMain">
       <div class="filters"><label>ค้นหา<input id="uQ" placeholder="รหัสเครื่อง ห้อง ยี่ห้อ"></label><label>ประเภท<select id="uKind"></select></label>
-        <button class="btn" type="button" id="uCsv" style="align-self:end">Excel (CSV)</button><button class="btn" type="button" id="uQrBtn" style="align-self:end">พิมพ์ QR ที่กรองอยู่</button></div>
+        <button class="btn" type="button" id="uCsv" style="align-self:end">Excel</button><button class="btn" type="button" id="uQrBtn" style="align-self:end">พิมพ์ QR ที่กรองอยู่</button></div>
       <details class="panel" data-write style="margin-bottom:12px"><summary><b>เพิ่มเครื่อง</b> (ทีละเครื่อง หรือวางหลายแถวจาก Excel)</summary>
         <div class="hd" id="uForm" style="margin-top:10px"></div>
         <button class="btn primary" type="button" id="uAdd">บันทึกเครื่องนี้</button>
@@ -91,7 +91,7 @@
       <label>ประเภทเกณฑ์<select id="dCrit"><option value="work">ความเสียหายจากการปฏิบัติงาน (9.1-9.2)</option><option value="defect">อุปกรณ์ชำรุดจากความบกพร่อง (9.3)</option></select></label></div>
       <button class="btn primary" type="button" id="dAdd">บันทึกความเสียหาย</button></details>
     <div class="scroll"><table id="dList"></table></div>
-    <p><button class="btn" type="button" id="cCsv">ส่งออกทะเบียน AC-09 / AC-10 (CSV)</button></p>
+    <p><button class="btn" type="button" id="cCsv">ส่งออกทะเบียน AC-09 / AC-10 (Excel)</button></p>
   </section>
 
   <section id="tab-month" hidden>
@@ -118,6 +118,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="assets/config.js"></script>
 <script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
 <script src="assets/ac.js"></script>
 </body>
 </html>

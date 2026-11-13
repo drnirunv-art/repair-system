@@ -21,12 +21,8 @@
   const thDate = d => new Date(d).toLocaleDateString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "long", year: "numeric" });
   function toast(m) { $("#toast").textContent = m; $("#toast").hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => $("#toast").hidden = true, 6000); }
   const bad = (el, e) => { $(el).innerHTML = `<div class="note bad">${esc(typeof e === "string" ? e : errText(e))}</div>`; };
-  function csv(name, head, rows) {
-    const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const blob = new Blob(["﻿" + [head.map(q).join(","), ...rows.map(r => r.map(q).join(","))].join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
-    document.body.appendChild(a); a.click(); a.remove();
-  }
+  // every list export is a real .xlsx with an executive-summary sheet first (assets/office.js)
+  const csv = (name, head, rows, opts) => Office.table(name, head, rows, { org: H && H.name, ...opts });
   const badge = (el, k) => { $(el).textContent = k; $(el).hidden = !k; };
 
   /* ---------- boot ---------- */
@@ -161,7 +157,7 @@
 
   /* ---------- orders ---------- */
   $("#oFilter").onchange = () => { cur = null; renderOrders(); };
-  $("#oCsv").onclick = () => csv(`ทะเบียนคุม-XH-${H.code}.csv`, ["เลขที่ใบ", "วันที่", "ผู้ซื้อ", "ผู้ขาย", "สถานะ", "รอบ", "รหัส", "รายการ", "หน่วย", "ขอซื้อ", "ผู้ขายให้", "ส่วนกลางอนุมัติ", "นับผู้ขาย", "นับผู้ซื้อ", "เหตุผล", "Movement ผู้ขาย", "Movement ผู้ซื้อ"],
+  $("#oCsv").onclick = () => csv(`ทะเบียนคุม-XH-${H.code}`, ["เลขที่ใบ", "วันที่", "ผู้ซื้อ", "ผู้ขาย", "สถานะ", "รอบ", "รหัส", "รายการ", "หน่วย", "ขอซื้อ", "ผู้ขายให้", "ส่วนกลางอนุมัติ", "นับผู้ขาย", "นับผู้ซื้อ", "เหตุผล", "Movement ผู้ขาย", "Movement ผู้ซื้อ"],
     orders.flatMap(o => o.xh_items.map(i => [o.doc_no, fmt(o.created_at), hCode(o.buyer_hospital), hCode(o.seller_hospital), ST[o.status], o.round_no || "", i.code, i.name, i.unit, i.qty_req, i.qty_seller ?? "", i.qty_central ?? "", i.count_seller ?? "", i.count_buyer ?? "", i.reason_kind + (i.reason ? " — " + i.reason : ""), i.mv_seller || "", i.mv_buyer || ""])));
   function renderOrders() {
     $("#oDetail").innerHTML = "";
@@ -264,7 +260,7 @@
   /* ---------- dashboard ---------- */
   let dash = [];
   $("#dQ").oninput = () => renderDashParts();
-  $("#dCsv").onclick = () => csv(`อะไหล่รายตัว-${H.code}.csv`, ["รหัส", "รายการ", "หน่วย", "คงเหลือ", "Movement", "ใช้ 3 เดือน", "พอใช้ (เดือน)", "ฝากขาย"], dashParts().map(p => [p.code, p.name, p.unit, p.qty, p.mv, p.use3, p.cover_months ?? "", p.listed ?? ""]));
+  $("#dCsv").onclick = () => csv(`อะไหล่รายตัว-${H.code}`, ["รหัส", "รายการ", "หน่วย", "คงเหลือ", "Movement", "ใช้ 3 เดือน", "พอใช้ (เดือน)", "ฝากขาย"], dashParts().map(p => [p.code, p.name, p.unit, p.qty, p.mv, p.use3, p.cover_months ?? "", p.listed ?? ""]));
   const dashParts = () => { const q = $("#dQ").value.trim().toLowerCase(); return mine.filter(p => (!mvFilter || p.mv === mvFilter) && (!q || (p.code + " " + p.name).toLowerCase().includes(q))); };
   async function renderDash() {
     const [d, m] = await Promise.all([sb.rpc("xh_dashboard"), sb.rpc("xh_my_parts")]);

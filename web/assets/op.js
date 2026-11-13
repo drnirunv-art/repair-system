@@ -18,12 +18,8 @@
   const num = v => v === "" || v == null ? null : +v;
   const kpis = arr => arr.map(([a, b, red]) => `<div class="kpi"><b style="${red && +b > 0 ? "color:var(--bad)" : ""}">${b}</b><span>${a}</span></div>`).join("");
   function toast(m) { $("#toast").textContent = m; $("#toast").hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => $("#toast").hidden = true, 6000); }
-  function csv(name, head, rows) {
-    const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const blob = new Blob(["﻿" + [head.map(q).join(","), ...rows.map(r => r.map(q).join(","))].join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
-    document.body.appendChild(a); a.click(); a.remove();
-  }
+  // every list export is a real .xlsx with an executive-summary sheet first (assets/office.js)
+  const csv = (name, head, rows, opts) => Office.table(name, head, rows, { org: H && H.name, ...opts });
   const note = (el, err, ok) => { $(el).innerHTML = err ? `<div class="note bad">${esc(errText(err))}</div>` : ok ? `<div class="note">${esc(ok)}</div>` : ""; };
   const badField = (f, v, use) => {
     if (v === "" || v == null) return false;
@@ -154,7 +150,7 @@
         <tr><th colspan="2">เฉลี่ย</th>${cols.map((c, i) => `<th>${c.t === "num" || c.use ? agg(i, avg) : ""}</th>`).join("")}<th colspan="2"></th></tr></table></div>
       <p class="meta">สัญลักษณ์ (/) = ปกติ, (×) = ผิดปกติ · บันทึกแล้ว ${logs.length} จาก ${n} วัน · ค่าผิดปกติ ${logs.reduce((s, l) => s + l.abnormal, 0)} ช่อง</p>
       <div class="two" style="margin-top:24px"><div>ตรวจสอบโดย หัวหน้างาน / วิศวกร บริษัท Technical Water (TW)<br><br>ลงชื่อ ……………………………………… วันที่ ……………</div><div>ตรวจสอบโดย ผู้จัดการอาคาร<br><br>ลงชื่อ ……………………………………… วันที่ ……………</div></div></div>`;
-    $("#sCsv").onclick = () => csv(`${f.code}-${p.name}-${$("#sMonth").value}.csv`, ["วันที่", ...cols.map(c => c.l + (c.sub ? " " + c.sub : "") + (c.u ? ` (${c.u})` : "")), "ผู้บันทึก", "หมายเหตุ"],
+    $("#sCsv").onclick = () => csv(`${f.code}-${p.name}-${$("#sMonth").value}`, ["วันที่", ...cols.map(c => c.l + (c.sub ? " " + c.sub : "") + (c.u ? ` (${c.u})` : "")), "ผู้บันทึก", "หมายเหตุ"],
       sheetRows.map(r => [r.d, ...r.vals.map((v, i) => cols[i].t === "ok" ? (v === "x" ? "×" : v) : v), r.l ? nameOf(r.l.logged_by) : "", r.l ? r.l.note || "" : ""]));
   }
 
@@ -176,7 +172,7 @@
       (meterRows.map(x => `<tr><td>${esc(x.p.name)}${x.p.meter_no ? `<br><small class="meta">No.${esc(x.p.meter_no)}</small>` : ""}</td><td>${esc(x.u)}</td>${cell(x.t, x.y)}${cell(x.t, x.w)}${cell(x.am, x.apm)}</tr>`).join("")
         || `<tr><td colspan="11"><div class="empty">ยังไม่มีมิเตอร์ (เพิ่มจุดตรวจด้วยแบบ OP-22E มิเตอร์ไฟ หรือ OP-22W มิเตอร์น้ำ)</div></td></tr>`);
   }
-  $("#mCsv").onclick = () => csv(`มิเตอร์-${H.code}-${$("#mDate").value}.csv`, ["มิเตอร์", "เลขมิเตอร์", "หน่วย", "วันนี้", "เมื่อวาน", "สัปดาห์ก่อน", "เฉลี่ย/วัน เดือนนี้", "เฉลี่ย/วัน เดือนก่อน"],
+  $("#mCsv").onclick = () => csv(`มิเตอร์-${H.code}-${$("#mDate").value}`, ["มิเตอร์", "เลขมิเตอร์", "หน่วย", "วันนี้", "เมื่อวาน", "สัปดาห์ก่อน", "เฉลี่ย/วัน เดือนนี้", "เฉลี่ย/วัน เดือนก่อน"],
     meterRows.map(x => [x.p.name, x.p.meter_no, x.u, x.t, x.y, x.w, x.am, x.apm]));
 
   /* ---------- points & meter registry ---------- */

@@ -71,7 +71,7 @@
   <section id="tab-result" hidden>
     <h2 class="noprint">ตรวจผล PM ประจำเดือน</h2>
     <div class="filters noprint" style="max-width:860px"><label>เดือน<input id="rMonth" type="month"></label>
-      <button class="btn" type="button" id="rCsv" style="align-self:end">ดาวน์โหลด Excel (CSV)</button><button class="btn primary" type="button" id="rPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+      <button class="btn" type="button" id="rCsv" style="align-self:end">ดาวน์โหลด Excel</button><button class="btn primary" type="button" id="rPrint" style="align-self:end">พิมพ์ / PDF</button></div>
     <h2 class="printonly" id="rTitle"></h2>
     <div class="kpis k7" id="rKpi"></div>
     <div class="two" style="margin-top:14px"><div class="panel"><h3>ความคืบหน้ารายสัปดาห์</h3><div id="rWeek"></div></div><div class="panel"><h3>ชนิดเครื่องที่ยังค้างมากที่สุด</h3><div id="rType"></div></div></div>
@@ -91,7 +91,7 @@
       <p class="meta" style="margin-top:10px">บันทึกไฟล์ Excel เป็น CSV (UTF-8) คอลัมน์ตามลำดับ: TAG, ชื่อเครื่อง, ชนิด, อาคาร, ชั้น, ที่ตั้ง, ความถี่ (M/Q/H/Y), เดือนที่เริ่ม (1–12), สัปดาห์ (1–4), ผู้ทำ (TW/MA) · แถวที่ TAG ตรงกับทะเบียนจะอัปเดต แถวใหม่จะเพิ่มเครื่อง</p>
       <div class="row"><button class="btn small" type="button" id="iTpl">ดาวน์โหลดแบบฟอร์ม CSV</button><input id="iFile" type="file" accept=".csv,text/csv"></div>
       <div id="iPrev"></div></details>
-    <div class="filters noprint"><input id="eQ" placeholder="ค้นหา TAG ชื่อ ที่ตั้ง"><select id="eT"></select><select id="eB"></select><select id="eP"><option value="">ทุกเครื่อง</option><option value="plan">อยู่ในแผน PM</option><option value="noplan">ยังไม่มีแผน</option><option value="notag">ยังไม่มี TAG</option></select><button class="btn" type="button" id="eCsv">ดาวน์โหลดทะเบียน (CSV)</button></div>
+    <div class="filters noprint"><input id="eQ" placeholder="ค้นหา TAG ชื่อ ที่ตั้ง"><select id="eT"></select><select id="eB"></select><select id="eP"><option value="">ทุกเครื่อง</option><option value="plan">อยู่ในแผน PM</option><option value="noplan">ยังไม่มีแผน</option><option value="notag">ยังไม่มี TAG</option></select><button class="btn" type="button" id="eCsv">ดาวน์โหลดทะเบียน (Excel)</button></div>
     <div id="eEdit"></div>
     <div class="scroll"><table id="eTable"></table></div>
     <div id="eMore"></div>
@@ -118,6 +118,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="assets/config.js"></script>
 <script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
 <script src="assets/pm.js"></script>
 </body>
 </html>

@@ -58,7 +58,7 @@
     <h2>คลังอะไหล่</h2>
     <p class="sub">ยอดคงเหลือเปลี่ยนเฉพาะเมื่อรับเข้า เบิก คืน หรือปรับยอด ทุกรายการมีประวัติ ช่างเบิกอะไหล่จากปุ่ม “เบิกอะไหล่” ในใบงาน</p>
     <div class="kpis" id="ptKpi"></div>
-    <div class="filters"><input id="ptQ" placeholder="ค้นหารหัส ชื่อ หมวด"><select id="ptF"><option value="">ทุกรายการ</option><option value="low">ต่ำกว่าขั้นต่ำ</option><option value="off">ที่ซ่อนไว้</option></select><button class="btn" type="button" id="ptExport">ดาวน์โหลดสต็อก (CSV)</button></div>
+    <div class="filters"><input id="ptQ" placeholder="ค้นหารหัส ชื่อ หมวด"><select id="ptF"><option value="">ทุกรายการ</option><option value="low">ต่ำกว่าขั้นต่ำ</option><option value="off">ที่ซ่อนไว้</option></select><button class="btn" type="button" id="ptExport">ดาวน์โหลดสต็อก (Excel)</button></div>
     <details class="panel" id="ptAddBox" data-manager hidden><summary style="cursor:pointer;font-weight:600">+ เพิ่มอะไหล่ใหม่</summary><form id="fPart" style="margin-top:12px">
       <div class="grid"><label>รหัส *<input name="code" required placeholder="EE-001"></label><label class="span2">ชื่ออะไหล่ *<input name="name" required placeholder="หลอด LED 18W"></label>
         <label>หน่วย *<input name="unit" required value="ชิ้น"></label><label>หมวด<input name="category" placeholder="ไฟฟ้า"></label><label>ที่เก็บ<input name="store" placeholder="ห้องเก็บของ ชั้น B1"></label>
@@ -67,7 +67,7 @@
       <div class="row" style="margin-top:10px"><button class="btn primary">เพิ่มอะไหล่</button></div><div id="ptMsg"></div></form></details>
     <div class="scroll" style="margin-top:14px"><table id="ptList"></table></div>
     <h3 style="margin-top:22px">ต้นทุนอะไหล่ที่เบิกใช้ ตามเครื่อง/อุปกรณ์</h3>
-    <div class="filters" style="max-width:620px"><label>ตั้งแต่<input id="pcFrom" type="date"></label><label>ถึง<input id="pcTo" type="date"></label><button class="btn" type="button" id="pcExport" style="align-self:end">ดาวน์โหลดการเคลื่อนไหว (CSV)</button></div>
+    <div class="filters" style="max-width:620px"><label>ตั้งแต่<input id="pcFrom" type="date"></label><label>ถึง<input id="pcTo" type="date"></label><button class="btn" type="button" id="pcExport" style="align-self:end">ดาวน์โหลดการเคลื่อนไหว (Excel)</button></div>
     <div class="scroll"><table id="pcList"></table></div>
   </section>
 
@@ -77,9 +77,9 @@
     <div class="row" style="margin-bottom:12px"><button class="btn primary" type="button" id="newPr">+ ใบขอซื้อใหม่</button><button class="btn" type="button" id="newMemo">+ Memo ใหม่</button>
       <select id="dcF" style="width:auto"><option value="open">เฉพาะที่ยังไม่จบ</option><option value="">ทั้งหมด</option></select></div>
     <div id="dcForm"></div>
-    <h3>ทะเบียนใบขอซื้อ <button class="btn small" type="button" id="prExport">CSV</button></h3>
+    <h3>ทะเบียนใบขอซื้อ <button class="btn small" type="button" id="prExport">Excel</button></h3>
     <div class="scroll"><table id="prList"></table></div>
-    <h3 style="margin-top:22px">ทะเบียน Memo <button class="btn small" type="button" id="memoExport">CSV</button></h3>
+    <h3 style="margin-top:22px">ทะเบียน Memo <button class="btn small" type="button" id="memoExport">Excel</button></h3>
     <div class="scroll"><table id="memoList"></table></div>
   </section>
 
@@ -87,13 +87,13 @@
     <h2>รายงานงานค้าง</h2>
     <p class="sub">ใบงานที่ยังไม่ปิด จัดกลุ่มตามเหตุผลที่ค้าง กด “พิมพ์ / PDF” แล้วเลือก “บันทึกเป็น PDF” ในหน้าต่างพิมพ์</p>
     <div class="filters noprint"><select id="rpG"><option value="reason">จัดกลุ่มตามเหตุผลพักงาน</option><option value="status">จัดกลุ่มตามสถานะ</option><option value="tech">จัดกลุ่มตามช่าง</option><option value="dept">จัดกลุ่มตามแผนก</option></select>
-      <button class="btn" type="button" id="rpExport">ดาวน์โหลด Excel (CSV)</button><button class="btn primary" type="button" id="rpPrint">พิมพ์ / PDF</button></div>
+      <button class="btn" type="button" id="rpExport">ดาวน์โหลด Excel</button><button class="btn primary" type="button" id="rpPrint">พิมพ์ / PDF</button></div>
     <div id="rpBody"></div>
   </section>
 
   <section id="tab-dash" hidden>
     <h2>Dashboard</h2>
-    <div class="filters" style="max-width:620px"><label>ตั้งแต่<input id="dFrom" type="date"></label><label>ถึง<input id="dTo" type="date"></label><button class="btn" type="button" id="dExport" style="align-self:end">ดาวน์โหลด Excel (CSV)</button></div>
+    <div class="filters" style="max-width:620px"><label>ตั้งแต่<input id="dFrom" type="date"></label><label>ถึง<input id="dTo" type="date"></label><button class="btn" type="button" id="dExport" style="align-self:end">ดาวน์โหลด Excel</button></div>
     <div class="kpis" id="dKpi"></div>
     <div class="two">
       <div class="panel"><h3>ใบงานตามประเภทงาน</h3><div id="dType"></div></div>
@@ -150,6 +150,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="assets/config.js"></script>
 <script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
 <script src="assets/staff.js"></script>
 </body>
 </html>

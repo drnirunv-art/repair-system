@@ -70,9 +70,8 @@
   $("#vFrom").onchange = $("#vTo").onchange = showView;
   $("#vPrint").onclick = () => { document.body.classList.add("qrp"); const d = () => { document.body.classList.remove("qrp"); removeEventListener("afterprint", d); }; addEventListener("afterprint", d); print(); };
   $("#vCsv").onclick = () => {
-    const qv = v => `"${String(v ?? "").replace(/"/g, '""')}"`, head = ["วันที่", "ชื่อ", "หน่วยงาน", "บทบาท", "ความถี่", ...TOPIC.map((t, i) => (i + 1) + ". " + t), "ปัญหาที่พบ", "รายละเอียดปัญหา", "ฟีเจอร์ที่อยากได้", "อยากให้แก้ก่อน", "ข้อเสนอแนะ"];
+    const head = ["วันที่", "ชื่อ", "หน่วยงาน", "บทบาท", "ความถี่", ...TOPIC.map((t, i) => (i + 1) + ". " + t), "ปัญหาที่พบ", "รายละเอียดปัญหา", "ฟีเจอร์ที่อยากได้", "อยากให้แก้ก่อน", "ข้อเสนอแนะ"];
     const body = rows.map(x => [fmt(x.created_at), x.respondent, x.unit, x.role === "other" ? x.role_other : label(ROLE, x.role), label(FREQ, x.frequency), ...TOPIC.map((_, i) => x.scores?.[i + 1] ?? ""), (x.problems || []).map(k => label(PROB, k)).join("; "), x.problem_detail, (x.features || []).map(k => label(FEAT, k)).join("; "), x.first_fix, x.suggestion]);
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob(["﻿" + [head, ...body].map(r => r.map(qv).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" })), download: `survey-${code()}.csv` });
-    document.body.appendChild(a); a.click(); a.remove();
+    Office.table(`survey-${code()}`, head, body, { title: "ผลแบบสอบถามระบบแจ้งซ่อม", org: hospitals.find(h => h.code === code())?.name, period: [$("#vFrom").value, $("#vTo").value].filter(Boolean).join(" ถึง ") });
   };
 })();

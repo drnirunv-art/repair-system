@@ -46,14 +46,14 @@
 
   <section id="tab-sheet" hidden>
     <div class="filters noprint" style="max-width:900px"><label>จุดตรวจ<select id="sPoint"></select></label><label>เดือน<input id="sMonth" type="month"></label>
-      <button class="btn" type="button" id="sCsv" style="align-self:end">Excel (CSV)</button><button class="btn primary" type="button" id="sPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+      <button class="btn" type="button" id="sCsv" style="align-self:end">Excel</button><button class="btn primary" type="button" id="sPrint" style="align-self:end">พิมพ์ / PDF</button></div>
     <div id="sBody"></div>
   </section>
 
   <section id="tab-meter" hidden>
     <h2 class="noprint">สรุปการใช้น้ำ-ไฟจากมิเตอร์</h2>
     <p class="sub noprint">ปริมาณใช้ต่อวัน = (เลขวันนี้ − เลขครั้งก่อน) × ตัวคูณ CT ของมิเตอร์ เทียบ 3 ระดับ: วันนี้กับเมื่อวาน · วันเดียวกันสัปดาห์ก่อน · เดือนนี้กับเดือนก่อน (เฉลี่ยต่อวัน)</p>
-    <div class="filters noprint" style="max-width:700px"><label>วันที่<input id="mDate" type="date"></label><button class="btn" type="button" id="mCsv" style="align-self:end">Excel (CSV)</button><button class="btn primary" type="button" id="mPrint" style="align-self:end">พิมพ์ / PDF</button></div>
+    <div class="filters noprint" style="max-width:700px"><label>วันที่<input id="mDate" type="date"></label><button class="btn" type="button" id="mCsv" style="align-self:end">Excel</button><button class="btn primary" type="button" id="mPrint" style="align-self:end">พิมพ์ / PDF</button></div>
     <div class="scroll"><table id="mTable"></table></div>
   </section>
 
@@ -75,6 +75,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="assets/config.js"></script>
 <script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
 <script src="assets/op.js"></script>
 </body>
 </html>
