@@ -33,6 +33,13 @@
   // finish-time levels chosen at assignment; 0 = over 60 days (no deadline warning)
   const BANDS = [[360, "6 ชม."], [1440, "24 ชม."], [43200, "30 วัน"], [86400, "60 วัน"], [0, "เกิน 60 วัน"]];
   const bandName = m => (BANDS.find(b => b[0] === +m) || [0, dur(m)])[1];
+  // planned finish date of a backlog job: days left (negative = past the plan); open jobs older than a day should have one
+  const BACKLOG = ["register", "assign", "work_on", "on_hold"];
+  const todayTH = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+  const planLeft = j => j.plan_due ? Math.round((new Date(j.plan_due) - new Date(todayTH())) / 864e5) : null;
+  const planLate = j => BACKLOG.includes(j.status) && j.plan_due && planLeft(j) < 0;
+  const noPlan = j => BACKLOG.includes(j.status) && !j.plan_due && (j.status === "on_hold" || mins(j.created_at) > 1440);
+  const planText = j => !BACKLOG.includes(j.status) ? "" : j.plan_due ? `กำหนดเสร็จ ${fmtDate(j.plan_due)}${planLeft(j) < 0 ? ` · <b style="color:var(--bad)">เลยกำหนด ${-planLeft(j)} วัน</b>` : planLeft(j) === 0 ? " · <b>ครบกำหนดวันนี้</b>" : ` · เหลือ ${planLeft(j)} วัน`}` : noPlan(j) ? '<b style="color:var(--bad)">ยังไม่ใส่วันกำหนดเสร็จ</b>' : "";
   const overDue = j => j.due_minutes && ["assign", "work_on", "on_hold"].includes(j.status) ? workMins(j) / j.due_minutes : 0;
   const nameOf = id => (staff.find(s => s.id === id) || {}).full_name || "";
   const typeOf = id => (types.find(t => t.id === id) || {}).name || "ไม่ระบุ";
@@ -90,7 +97,7 @@
     store.set("rs-staff-tab", t);
     render();
   }
-  const VIEWS = [["all", "ทั้งหมด"], ["mine", "งานของฉัน"], ["review", "รอตรวจงาน"], ["approve", "รออนุมัติพักงาน"], ["appoint", "นัดหมาย"]];
+  const VIEWS = [["all", "ทั้งหมด"], ["mine", "งานของฉัน"], ["review", "รอตรวจงาน"], ["approve", "รออนุมัติพักงาน"], ["appoint", "นัดหมาย"], ["noplan", "ยังไม่ใส่วันกำหนดเสร็จ"], ["planlate", "เลยวันกำหนดเสร็จ"]];
   function renderViews() {
     const n = { all: jobs.filter(j => OPEN.includes(j.status)).length, mine: jobs.filter(j => OPEN.includes(j.status) && mine(j)).length,
       review: jobs.filter(j => j.status === "clear").length, approve: jobs.filter(j => j.status === "on_hold" && j.hold_status === "pending").length,
@@ -185,12 +192,13 @@
     }
     if (a === "start") return `${fileInput("iFiles")}<label class="span2">หมายเหตุ<input id="iNote" placeholder="ไม่บังคับ เช่น ตรวจพบว่า..."></label>${ok("start")}`;
     if (a === "on_hold") return `<label>เหตุผลที่พักงาน *<select id="iCat">${reasonOptions()}</select></label>
-        <label>วันนัดกลับมาทำ *<input id="iUntil" type="date"></label><label class="full">หมายเหตุ * (รออะไร จากใคร)<input id="iNote" placeholder="เช่น รอคอมเพรสเซอร์ สั่งแล้ว ของถึง 20 พ.ย."></label>
+        <label>วันนัดกลับมาทำ *<input id="iUntil" type="date" min="${todayTH()}"></label><label>วันกำหนดเสร็จ (ตามแผน) *<input id="iPlan" type="date" min="${todayTH()}" value="${j.plan_due && j.plan_due >= todayTH() ? j.plan_due : ""}"></label><label class="full">หมายเหตุ * (รออะไร จากใคร)<input id="iNote" placeholder="เช่น รอคอมเพรสเซอร์ สั่งแล้ว ของถึง 20 พ.ย."></label>
         ${S.hold_needs_approval ? `<div class="full meta">ใบงานจะขึ้นใน “รออนุมัติพักงาน” ให้ Owner / Admin / Chief Engineer พิจารณา เวลาช่วงพักงานไม่นับใน SLA</div>` : ""}${ok("on_hold")}`;
     if (a === "decide") return `<label>ผลการพิจารณา *<select id="iDec"><option value="ack">รับทราบ (อนุมัติพักงาน)</option><option value="ack_memo">รับทราบ + ขอ Memo</option><option value="rejected">ไม่อนุมัติ (ให้ทำต่อ)</option></select></label>
         <label class="span2">หมายเหตุ<input id="iNote" placeholder="ไม่บังคับ"></label>${ok("decide")}`;
     if (a === "clear") return `<label class="span2">สรุปการซ่อม *<input id="iSum" placeholder="สาเหตุและสิ่งที่แก้ไข"></label><label>งานนี้ใช้อะไหล่ไหม *<select id="iParts"><option value="false">ไม่ใช้อะไหล่</option><option value="true">ใช้อะไหล่</option></select></label>
         ${fileInput("iFiles")}${S.require_photo ? `<div class="full meta">โรงนี้ตั้งให้ต้องแนบรูปหลังซ่อมอย่างน้อย 1 รูป</div>` : ""}${ok("clear")}`;
+    if (a === "plan") return `<label>วันกำหนดเสร็จ (ตามแผน)<input id="iPlan" type="date" min="${todayTH()}" value="${j.plan_due || ""}"></label><label class="span2">${j.plan_due ? "เหตุผลที่เลื่อน (ต้องใส่เมื่อเปลี่ยนวัน)" : "แผนงาน / หมายเหตุ"}<input id="iNote" maxlength="500" placeholder="เช่น รออะไหล่เข้า 20 พ.ย. แล้วเข้าติดตั้ง" value="${j.plan_due ? "" : esc(j.plan_note || "")}"></label>${ok("plan")}`;
     if (a === "appoint") return `<label>วันและเวลานัด<input id="iAt" type="datetime-local" value="${j.appointment_at ? new Date(new Date(j.appointment_at).getTime() + 7 * 36e5).toISOString().slice(0, 16) : ""}"></label><label class="span2">หมายเหตุ<input id="iNote" placeholder="เช่น นัดกับหัวหน้าแผนก"></label>${ok("appoint")}`;
     if (a === "edit") {
       const cur = j.location_id;
@@ -247,7 +255,7 @@
       if (j.status === "on_hold" && j.hold_status === "pending" && isApprover()) acts += b("decide", "พิจารณาพักงาน", 1);
       if (j.status === "work_on") acts += b("clear", "ซ่อมเสร็จ", 1) + b("on_hold", "พักงาน");
       if (j.status === "clear" && isMgr()) acts += b("close", "ตรวจแล้ว ปิดงาน", 1) + b("reopen", "ส่งกลับแก้ไข");
-      if (["register", "assign", "work_on", "on_hold"].includes(j.status)) acts += b("appoint", "นัดหมาย");
+      if (["register", "assign", "work_on", "on_hold"].includes(j.status)) acts += b("appoint", "นัดหมาย") + b("plan", j.plan_due ? "เลื่อนวันกำหนดเสร็จ" : "ใส่วันกำหนดเสร็จ", noPlan(j));
       if (!["close", "cancel"].includes(j.status)) acts += b("parts", "เบิกอะไหล่");
       if (OPEN.includes(j.status)) acts += b("pr", "ขอซื้อ") + b("memo", "เขียน Memo", j.memo_requested && !memos.some(m => m.job_id === j.id && m.status !== "cancel"));
       if (OPEN.includes(j.status) && isMgr()) acts += b("edit", "แก้ไขใบงาน") + b("cancel", "ยกเลิกใบงาน");
@@ -272,7 +280,7 @@
         ${j.rating ? `<div class="meta">ผู้แจ้งให้คะแนน ${"★".repeat(j.rating)}${"☆".repeat(5 - j.rating)}${j.rating_comment ? " · " + esc(j.rating_comment) : ""}</div>` : ""}
         <div class="meta">${photoLinks("ผู้แจ้ง", j.photo_paths)}${photoLinks("ก่อนซ่อม", j.before_photo_paths)}${photoLinks("หลังซ่อม", j.close_photo_paths)}</div></div>
       <div class="side">${pill(j.status, statusLabel(j))}${pr ? `<span class="pr${crit ? " crit" : ""}">${esc(pr.name)}</span>` : ""}
-        <span class="meta">${age}${isLate(j) ? ' · <b style="color:var(--bad)">เกิน SLA</b>' : ""}${respLate(j) ? ` · <b style="color:var(--bad)">เกินเวลาตอบรับ ${respOf(j)} นาที</b>` : ""}</span>
+        ${planText(j) ? `<span class="meta">📅 ${planText(j)}${j.plan_note ? " · " + esc(j.plan_note) : ""}</span>` : ""}<span class="meta">${age}${isLate(j) ? ' · <b style="color:var(--bad)">เกิน SLA</b>' : ""}${respLate(j) ? ` · <b style="color:var(--bad)">เกินเวลาตอบรับ ${respOf(j)} นาที</b>` : ""}</span>
         ${j.due_minutes != null && OPEN.includes(j.status) && j.status !== "clear" ? `<span class="meta">ซ่อมเสร็จภายใน ${bandName(j.due_minutes)}${od > 2 ? ' · <b style="color:var(--bad)">⏰ เกินกำหนด 2 เท่า</b>' : od > 1 ? ' · <b style="color:var(--bad)">⏰ เกินกำหนด</b>' : ""}</span>` : ""}</div>
       ${acts ? `<div class="acts">${acts}</div>` : ""}${inline}</article>`;
   }
@@ -282,6 +290,8 @@
     if (view === "review") return j.status === "clear";
     if (view === "approve") return j.status === "on_hold" && j.hold_status === "pending";
     if (view === "appoint") return OPEN.includes(j.status) && (j.appointment_at || j.hold_until);
+    if (view === "noplan") return noPlan(j);
+    if (view === "planlate") return planLate(j);
     return true;
   }
   // compact one-line-per-job table (like a spreadsheet); "จัดการ" opens the full card under the row
@@ -292,7 +302,7 @@
       return `<tr class="${isLate(j) || overDue(j) > 1 ? "late" : ""}"><td>${i + 1}</td><td class="mono">${esc(j.job_no)}</td><td>${fmt(j.created_at)}</td><td>${days ? `<span class="od">${days}</span>` : ""}</td>
         <td><b>${esc(j.building || "")}</b><br><small>${[j.floor, j.department].filter(Boolean).map(esc).join(" / ")}</small></td><td class="dt">${esc(j.detail)}${n ? ` <small>📷 ${n}</small>` : ""}</td>
         <td>${esc(j.reporter_name)}<br><small>${esc(j.reporter_phone)}</small></td><td>${crew.map(id => esc(nameOf(id))).join(", ") || "-"}</td>
-        <td>${pill(j.status, statusLabel(j))}${j.status === "on_hold" ? `<br><small>${esc(j.hold_category || "")}${j.hold_status ? " · <b>" + HOLD_STATUS[j.hold_status] + "</b>" : ""}</small>` : ""}${timer(j) ? `<br><small>⏱ ${timer(j)}</small>` : ""}${isLate(j) ? '<br><small style="color:var(--bad);font-weight:700">เกิน SLA</small>' : ""}${respLate(j) ? `<br><small style="color:var(--bad);font-weight:700">เกินเวลาตอบรับ ${respOf(j)} นาที</small>` : ""}</td>
+        <td>${pill(j.status, statusLabel(j))}${j.status === "on_hold" ? `<br><small>${esc(j.hold_category || "")}${j.hold_status ? " · <b>" + HOLD_STATUS[j.hold_status] + "</b>" : ""}</small>` : ""}${timer(j) ? `<br><small>⏱ ${timer(j)}</small>` : ""}${planText(j) ? `<br><small>📅 ${planText(j)}</small>` : ""}${isLate(j) ? '<br><small style="color:var(--bad);font-weight:700">เกิน SLA</small>' : ""}${respLate(j) ? `<br><small style="color:var(--bad);font-weight:700">เกินเวลาตอบรับ ${respOf(j)} นาที</small>` : ""}</td>
         <td><button class="btn small" type="button" data-row="${j.id}">${open ? "ปิด" : "จัดการ"}</button></td></tr>${open ? `<tr class="jopen"><td colspan="10">${card(j)}</td></tr>` : ""}`; }).join("")}</tbody></table></div>`;
   }
   // open jobs per technician; tap a name to filter the list
@@ -370,13 +380,17 @@
           await act(id, "reassign", { technicians: [lead, ...ids.filter(x => x !== lead)], priority_id: v("#iPrio"), job_type_id: v("#iType"), due_minutes: v("#iDue"), note: v("#iNote") });
         }
         if (a === "start") await act(id, "start", { photos: await files("#iFiles", "before"), note: v("#iNote") });
-        if (a === "on_hold") { if (!v("#iNote") || !v("#iUntil")) throw new Error("ใส่หมายเหตุและวันนัดให้ครบ"); await act(id, "hold", { category: v("#iCat"), note: v("#iNote"), until: v("#iUntil") }); }
+        if (a === "on_hold") { if (!v("#iNote") || !v("#iUntil")) throw new Error("ใส่หมายเหตุและวันนัดให้ครบ");
+          const plan = v("#iPlan"); if (!plan) throw new Error("งานที่พักต้องใส่วันกำหนดเสร็จตามแผน"); if (plan < v("#iUntil")) throw new Error("วันกำหนดเสร็จต้องไม่ก่อนวันนัดกลับมาทำ");
+          await act(id, "hold", { category: v("#iCat"), note: v("#iNote"), until: v("#iUntil") });
+          const { error } = await sb.rpc("job_plan", { p_job_id: id, p_date: plan, p_note: [v("#iCat"), v("#iNote")].filter(Boolean).join(" · ") }); if (error) throw error; }
         if (a === "decide") await act(id, "hold_decide", { decision: v("#iDec"), note: v("#iNote") });
         if (a === "clear") {
           if (!v("#iSum")) throw new Error("ใส่สรุปการซ่อม");
           if (S.require_photo && !($("#iFiles").files || []).length) throw new Error("แนบรูปหลังซ่อมอย่างน้อย 1 รูป");
           await act(id, "clear", { note: v("#iSum"), uses_parts: v("#iParts") === "true", photos: await files("#iFiles", "after") });
         }
+        if (a === "plan") { if (!v("#iPlan")) throw new Error("เลือกวันกำหนดเสร็จ"); const { error } = await sb.rpc("job_plan", { p_job_id: id, p_date: v("#iPlan"), p_note: v("#iNote") || null }); if (error) throw error; }
         if (a === "appoint") await act(id, "appoint", { at: v("#iAt") ? new Date(v("#iAt") + ":00+07:00").toISOString() : "", note: v("#iNote") });
         if (a === "edit") { if (!v("#iNote")) throw new Error("ใส่เหตุผลที่แก้"); await act(id, "edit", { detail: v("#eDetail"), location_id: v("#eLoc"), equipment_text: v("#eEquip"), reporter_name: v("#eName"), reporter_phone: v("#ePhone"), note: v("#iNote") }); }
         if (a === "parts") {
@@ -771,12 +785,12 @@
   function renderReport() {
     const gs = reportGroups(), total = gs.reduce((s, x) => s + x[1].length, 0);
     $("#rpBody").innerHTML = `<p class="meta">${esc(H.name)} · ข้อมูล ณ ${fmt(new Date().toISOString())} · ใบงานค้างทั้งหมด ${total} ใบ</p>` + (gs.map(([k, l]) => `<h3 class="grp">${esc(k)} (${l.length})</h3>
-      <div class="scroll"><table><tr><th>เลขใบงาน</th><th>วันที่แจ้ง</th><th class="num">ค้าง (วัน)</th><th>แผนก</th><th>รายละเอียด</th><th>ช่าง</th><th>เหตุผล / หมายเหตุ</th><th>นัด</th></tr>${l.map(j => `<tr${isLate(j) ? ' class="low"' : ""}><td class="mono">${esc(j.job_no)}</td><td>${fmt(j.created_at)}</td><td class="num">${daysOpen(j)}</td>
-        <td>${esc(j.department || "")}</td><td>${esc(j.detail)}</td><td>${esc(crewOf(j).map(nameOf).join(", "))}</td><td>${esc([j.hold_category, j.hold_reason].filter(Boolean).join(" · ") || statusLabel(j))}</td><td>${j.hold_until ? fmtDate(j.hold_until) : j.appointment_at ? fmt(j.appointment_at) : "-"}</td></tr>`).join("")}</table></div>`).join("") || `<div class="empty">ไม่มีงานค้าง</div>`);
+      <div class="scroll"><table><tr><th>เลขใบงาน</th><th>วันที่แจ้ง</th><th class="num">ค้าง (วัน)</th><th>แผนก</th><th>รายละเอียด</th><th>ช่าง</th><th>เหตุผล / หมายเหตุ</th><th>นัด</th><th>กำหนดเสร็จ (แผน)</th></tr>${l.map(j => `<tr${isLate(j) || planLate(j) ? ' class="low"' : ""}><td class="mono">${esc(j.job_no)}</td><td>${fmt(j.created_at)}</td><td class="num">${daysOpen(j)}</td>
+        <td>${esc(j.department || "")}</td><td>${esc(j.detail)}</td><td>${esc(crewOf(j).map(nameOf).join(", "))}</td><td>${esc([j.hold_category, j.hold_reason].filter(Boolean).join(" · ") || statusLabel(j))}</td><td>${j.hold_until ? fmtDate(j.hold_until) : j.appointment_at ? fmt(j.appointment_at) : "-"}</td><td>${planText(j) || "-"}${j.plan_note ? "<br><small>" + esc(j.plan_note) + "</small>" : ""}</td></tr>`).join("")}</table></div>`).join("") || `<div class="empty">ไม่มีงานค้าง</div>`);
   }
   $("#rpPrint").onclick = () => window.print();
-  $("#rpExport").onclick = () => csv(`รายงานงานค้าง-${H.code}-${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })}.csv`, ["กลุ่ม", "เลขใบงาน", "วันที่แจ้ง", "ค้าง (วัน)", "อาคาร", "ชั้น", "แผนก", "รายละเอียด", "ช่าง", "สถานะ", "เหตุผลพักงาน", "หมายเหตุพักงาน", "วันนัด", "เกิน SLA"],
-    reportGroups().flatMap(([k, l]) => l.map(j => [k, j.job_no, fmt(j.created_at), daysOpen(j), j.building, j.floor, j.department, j.detail, crewOf(j).map(nameOf).join(", "), statusLabel(j), j.hold_category, j.hold_reason, j.hold_until || fmt(j.appointment_at), isLate(j) ? "เกิน" : ""])));
+  $("#rpExport").onclick = () => csv(`รายงานงานค้าง-${H.code}-${new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })}.csv`, ["กลุ่ม", "เลขใบงาน", "วันที่แจ้ง", "ค้าง (วัน)", "อาคาร", "ชั้น", "แผนก", "รายละเอียด", "ช่าง", "สถานะ", "เหตุผลพักงาน", "หมายเหตุพักงาน", "วันนัด", "เกิน SLA", "กำหนดเสร็จ (แผน)", "เลยกำหนด (วัน)", "แผนงาน"],
+    reportGroups().flatMap(([k, l]) => l.map(j => [k, j.job_no, fmt(j.created_at), daysOpen(j), j.building, j.floor, j.department, j.detail, crewOf(j).map(nameOf).join(", "), statusLabel(j), j.hold_category, j.hold_reason, j.hold_until || fmt(j.appointment_at), isLate(j) ? "เกิน" : "", j.plan_due || "", planLate(j) ? -planLeft(j) : "", j.plan_note || ""])));
 
   function render() {
     if (!H) return;
