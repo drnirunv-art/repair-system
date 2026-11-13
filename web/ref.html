@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ข้อมูลพื้นที่และเบอร์ภายใน | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .need{display:inline-block;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:700;white-space:nowrap;color:#111}
+  .need.y{background:#ffb3ad}.need.n{background:#9be3b0}.need.u{background:#ddd}
+  td.nums{font-family:"IBM Plex Mono",monospace;font-weight:500;overflow-wrap:anywhere}
+  @media (max-width:760px){table.stack,table.stack tbody,table.stack tr,table.stack td{display:block}table.stack tr:first-child{display:none}table.stack td{border:0;padding:2px 0}table.stack tr{border-top:1px solid var(--line);padding:8px 0}table.stack td[data-l]:not(:empty)::before{content:attr(data-l) ": ";color:var(--muted);font-size:12px}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">REF</span><h1 id="title">ข้อมูลพื้นที่และเบอร์ภายใน</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าเจ้าหน้าที่</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="phone" aria-selected="true">เบอร์ภายใน</button>
+    <button role="tab" data-tab="area" aria-selected="false">พื้นที่ / ผลกระทบเมื่อปิดแอร์</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <section id="tab-phone" hidden>
+    <p class="sub">ค้นหาเบอร์ต่อภายในของหน่วยงาน เห็นเฉพาะเจ้าหน้าที่ของโรงพยาบาลนี้ที่เข้าสู่ระบบแล้ว</p>
+    <div class="filters"><input id="pQ" placeholder="ค้นหาหน่วยงาน หรือเบอร์ เช่น ER, 4149"><select id="pK"><option value="">ทุกประเภท</option><option value="internal">เบอร์ต่อภายใน</option><option value="emergency">เบอร์ฉุกเฉิน (Analog)</option><option value="direct">Fax / เบอร์ตรง</option></select><select id="pB"></select><button class="btn" type="button" id="pX">Excel</button></div>
+    <div id="pN" class="meta"></div>
+    <div class="scroll"><table id="pT" class="stack"></table></div>
+  </section>
+  <section id="tab-area" hidden>
+    <p class="sub">ข้อมูลหน่วยงานรายชั้น เวลาทำงาน และผลกระทบเมื่อปิดแอร์เพื่อลดโหลด Chiller ใช้ประกอบการวางแผนงานและการแจ้งหน่วยงานก่อนปิดระบบ</p>
+    <div class="kpis" id="aK"></div>
+    <div class="filters"><input id="aQ" placeholder="ค้นหาหน่วยงาน ฝ่าย"><select id="aB"></select><select id="aN"><option value="">ทุกพื้นที่</option><option value="y">จำเป็นต้องเปิดแอร์</option><option value="n">ปิดแอร์ได้</option></select><select id="aG"><option value="">ทุกกลุ่มงาน</option><option>OPD</option><option>IPD</option><option>OFFICE</option></select><button class="btn" type="button" id="aX">Excel</button></div>
+    <div id="aN2" class="meta"></div>
+    <div class="scroll"><table id="aT" class="stack"></table></div>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+<script src="assets/ref.js"></script>
+</body>
+</html>
