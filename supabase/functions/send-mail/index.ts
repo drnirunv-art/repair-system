@@ -28,7 +28,7 @@ async function attachment(r: any) {
   if (a.kind === "pm_month") {
     const f = await db.rpc("pm_followup_core", { p_hospital: r.hospital_id, p_year: a.year, p_month: a.month }); if (f.error) throw new Error(f.error.message);
     const tasks = await all((from) => db.from("pm_tasks").select("equipment_id,week,status,score,abnormal,submitted_at,eng_at").eq("hospital_id", r.hospital_id).eq("year", a.year).eq("month", a.month).order("id").range(from, from + 999));
-    return [{ filename: `PM-result-${h.code}-${a.year}-${String(a.month).padStart(2, "0")}.xlsx`, content: Buffer.from(monthResult(h.name, h.code, a.year, a.month, f.data ?? [], equip, tasks)), contentType: type }];
+    return [{ filename: `PM-result-${h.code}-${a.year + 543}-${String(a.month).padStart(2, "0")}.xlsx`, content: Buffer.from(monthResult(h.name, h.code, a.year, a.month, f.data ?? [], equip, tasks)), contentType: type }];
   }
   return [];
 }
