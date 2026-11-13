@@ -573,24 +573,46 @@
   /* ---------- Master Plan view: the year's plan of this scope (PM Inhouse = TW, PM MA = contractor) ---------- */
   let mpLimit = 150;
   const mpYearCE = () => ceYear($("#mpYear").value) || new Date().getFullYear();
-  const mpList = () => { const q = $("#mpQ").value.trim().toLowerCase(), sy = $("#mpSys").value, b = $("#mpB").value;
-    return planSort(equip.filter(e => (e.pm_months || []).length && (!q || [e.tag, e.name, where(e)].join(" ").toLowerCase().includes(q)) && (!sy || grpOf(e) === sy) && (!b || e.building === b))); };
+  // machine Type: the register's type when set, otherwise the machine name without its running number ("FAN COIL UNIT 12" -> "FAN COIL UNIT")
+  const typeOf = e => (e.eq_type && e.eq_type !== "ทั่วไป" ? e.eq_type : String(e.name || "").trim().replace(/[\s\-#]*(no\.?\s*)?[\d/.,\- ]+$/i, "").trim() || e.eq_type || "ไม่ระบุ").toUpperCase();
+  const typeRows = l => { const m = new Map();
+    l.forEach(e => { const k = typeOf(e); if (!m.has(k)) m.set(k, { name: k, n: 0, v: 0, g: new Set(), c: new Set() }); const t = m.get(k); t.n++; t.v += Object.keys(gridOf(e)).length; t.g.add(grpOf(e)); if ((e.pm_vendor || "").trim()) t.c.add(e.pm_vendor.trim().toLowerCase()); });
+    return [...m.values()].map(t => ({ ...t, g: [...t.g].sort(), c: t.c.size })).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, "th")); };
+  const typeSheet = (l, y) => { const t = typeRows(l);
+    return { name: "สรุปตาม Type", rows: [[`สรุปตาม Type ของเครื่องจักร ${SCN} ปี ${y + 543} · ${H.name}`], ["ลำดับ", "Type ของเครื่องจักร", "จำนวนเครื่อง", "จำนวนครั้งตามแผนทั้งปี", "ระบบ / กลุ่ม"].concat(SC === "MA" ? ["จำนวนสัญญา"] : []),
+      ...t.map((r, i) => [i + 1, r.name, r.n, r.v, r.g.join(", ")].concat(SC === "MA" ? [r.c] : [])), ["", `รวม ${t.length} Type`, l.length, l.reduce((s, e) => s + Object.keys(gridOf(e)).length, 0), ""]], styles: { 0: 2, 1: 1 } }; };
+  const mpList = () => { const q = $("#mpQ").value.trim().toLowerCase(), sy = $("#mpSys").value, b = $("#mpB").value, ty = $("#mpType").value;
+    return planSort(equip.filter(e => (e.pm_months || []).length && (!q || [e.tag, e.name, where(e)].join(" ").toLowerCase().includes(q)) && (!sy || grpOf(e) === sy) && (!ty || typeOf(e) === ty) && (!b || e.building === b))); };
   // PM MA: one contractor name in the plan = one contract; blank names are listed last and not counted as a contract
-  const conRows = l => { const m = new Map();
-    l.forEach(e => { const k = (e.pm_vendor || "").trim().replace(/\s+/g, " "), key = k.toLowerCase(); if (!m.has(key)) m.set(key, { name: k, n: 0, v: 0, g: new Set() }); const c = m.get(key); c.n++; c.v += Object.keys(gridOf(e)).length; c.g.add(grpOf(e)); });
+  const conRows = (l, dn) => { const m = new Map();
+    l.forEach(e => { const k = (e.pm_vendor || "").trim().replace(/\s+/g, " "), key = k.toLowerCase(); if (!m.has(key)) m.set(key, { name: k, n: 0, d: 0, v: 0, g: new Set() }); const c = m.get(key); c.n++; if (dn && dn.has(e.id)) c.d++; c.v += Object.keys(gridOf(e)).length; c.g.add(grpOf(e)); });
     return [...m.values()].map(c => ({ ...c, g: [...c.g].sort() })).sort((a, b) => !a.name - !b.name || b.n - a.n || a.name.localeCompare(b.name, "th")); };
+  // machines of the year whose PM was actually carried out (check sheet sent, waiting for signatures or approved)
+  let mpDone = { key: "", set: new Set(), loading: false };
+  async function mpLoadDone(y) { const key = H.id + ":" + y; if (mpDone.key === key || mpDone.loading) return; mpDone.loading = true; const set = new Set();
+    for (let from = 0; ; from += 1000) { const r = await sb.from("pm_tasks").select("equipment_id").eq("hospital_id", H.id).eq("year", y).in("status", ["submitted", "head_signed", "approved"]).order("id").range(from, from + 999); if (r.error || !r.data) break; r.data.forEach(t => set.add(t.equipment_id)); if (r.data.length < 1000) break; }
+    mpDone = { key, set, loading: false }; if (!$("#tab-plan").hidden) renderPlan(); }
+  const pctOf = (a, b) => b ? Math.round(a * 100 / b) + "%" : "-";
   function renderPlan() {
     if (!$("#mpYear").value) { const py = (equip.find(e => e.pm_year) || {}).pm_year; $("#mpYear").value = (py || new Date().getFullYear()) + 543; }
     const planned = equip.filter(e => (e.pm_months || []).length), opt = (id, all, vals) => { const cur = $(id).value; $(id).innerHTML = `<option value="">${all}</option>` + vals.map(v => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`).join(""); };
-    opt("#mpSys", "ทุกระบบ / กลุ่ม", [...new Set(planned.map(grpOf))].sort((a, b) => a.localeCompare(b, "th"))); opt("#mpB", "ทุกอาคาร", [...new Set(planned.map(e => e.building).filter(Boolean))].sort());
+    opt("#mpSys", "ทุกระบบ / กลุ่ม", [...new Set(planned.map(grpOf))].sort((a, b) => a.localeCompare(b, "th"))); opt("#mpType", "ทุก Type เครื่องจักร", [...new Set(planned.map(typeOf))].sort((a, b) => a.localeCompare(b, "th"))); opt("#mpB", "ทุกอาคาร", [...new Set(planned.map(e => e.building).filter(Boolean))].sort());
     const l = mpList(), y = mpYearCE(), visits = l.reduce((s, e) => s + Object.keys(gridOf(e)).length, 0), other = equipAll.filter(e => (SC === "MA" ? e.pm_by !== "MA" : (e.pm_by === "MA" || /MA/i.test(e.pm_by_raw || ""))) && (e.pm_months || []).length).length;
     $("#mpTitle").textContent = `PM Master Plan ${SCN} ปี ${y + 543} · ${H.name}`;
     $("#mpSub").textContent = SC === "MA" ? "แผน PM ทั้งปีของเครื่องที่ผู้รับเหมา (MA) เป็นผู้ทำ ตามคอลัมน์ MAINTAIN BY ใน Master Plan" : "แผน PM ทั้งปีของเครื่องที่ทีม TW ทำเอง ตามคอลัมน์ MAINTAIN BY ใน Master Plan";
-    $("#mpKpi").innerHTML = kpis([["เครื่องในแผน " + SCN, l.length.toLocaleString()], ["จำนวนครั้งตามแผนทั้งปี", visits.toLocaleString()], ["เครื่องที่ยังไม่มีแผน", (equip.length - planned.length).toLocaleString()], [SC === "MA" ? "เครื่องในแผน PM Inhouse (ดูอีกเมนู)" : "เครื่องในแผน PM MA (ดูอีกเมนู)", other.toLocaleString()]]);
-    const con = conRows(l), nCon = con.filter(c => c.name).length, noCon = con.find(c => !c.name);
-    $("#mpCon").innerHTML = SC === "MA" && l.length ? `<div class="panel"><h3 style="margin:0 0 4px">สรุปสัญญา MA ตามแผนที่วาง ปี ${y + 543}</h3><p class="meta">นับจากคอลัมน์ CONTRACTOR ใน Master Plan · 1 ผู้รับเหมา = 1 สัญญา · ${nCon.toLocaleString()} สัญญา · ${l.length.toLocaleString()} เครื่อง${noCon ? ` · ยังไม่ระบุผู้รับเหมา ${noCon.n.toLocaleString()} เครื่อง` : ""}</p><div class="scroll"><table><tr><th>#</th><th>สัญญา / ผู้รับเหมา</th><th style="text-align:right">จำนวนอุปกรณ์</th><th style="text-align:right">จำนวนครั้งตามแผนทั้งปี</th><th>ระบบ / กลุ่ม</th></tr>` +
-      con.map((c, i) => `<tr><td>${c.name ? i + 1 : ""}</td><td>${c.name ? esc(c.name) : "<i>ยังไม่ระบุผู้รับเหมา (ช่อง CONTRACTOR ว่าง)</i>"}</td><td style="text-align:right">${c.n.toLocaleString()}</td><td style="text-align:right">${c.v.toLocaleString()}</td><td class="meta">${esc(c.g.slice(0, 4).join(", "))}${c.g.length > 4 ? ` และอีก ${c.g.length - 4}` : ""}</td></tr>`).join("") +
-      `<tr style="font-weight:700;background:#eef3f8"><td></td><td>รวม ${nCon.toLocaleString()} สัญญา</td><td style="text-align:right">${l.length.toLocaleString()}</td><td style="text-align:right">${visits.toLocaleString()}</td><td></td></tr></table></div></div>` : "";
+    mpLoadDone(y); const dn = mpDone.set, conK = e => (e.pm_vendor || "").trim().replace(/\s+/g, " ").toLowerCase();
+    const mDone = l.filter(e => dn.has(e.id)).length, cPlan = new Set(l.map(conK).filter(Boolean)).size, cDone = new Set(l.filter(e => dn.has(e.id)).map(conK).filter(Boolean)).size;
+    $("#mpKpi").innerHTML = SC === "MA"
+      ? kpis([["แผนจำนวนสัญญา MA / จำนวนอุปกรณ์", `${cPlan.toLocaleString()} / ${l.length.toLocaleString()}`], ["สัญญาทำจริง / จำนวนอุปกรณ์ที่มาทำจริง", `${cDone.toLocaleString()} / ${mDone.toLocaleString()}`], ["เครื่องที่ยังไม่มีแผน", (equip.length - planned.length).toLocaleString()], ["% สัญญา / % อุปกรณ์ที่ทำจริง", `${pctOf(cDone, cPlan)} / ${pctOf(mDone, l.length)}`]])
+      : kpis([["เครื่องในแผน " + SCN, l.length.toLocaleString()], ["จำนวนครั้งตามแผนทั้งปี", visits.toLocaleString()], ["เครื่องที่ยังไม่มีแผน", (equip.length - planned.length).toLocaleString()], ["เครื่องในแผน PM MA (ดูอีกเมนู)", other.toLocaleString()]]);
+    const con = conRows(l, dn), nCon = con.filter(c => c.name).length, noCon = con.find(c => !c.name);
+    $("#mpCon").innerHTML = SC === "MA" && l.length ? `<div class="panel"><h3 style="margin:0 0 4px">สรุปสัญญา MA ตามแผนที่วาง ปี ${y + 543}</h3><p class="meta">นับจากคอลัมน์ CONTRACTOR ใน Master Plan · 1 ผู้รับเหมา = 1 สัญญา · ${nCon.toLocaleString()} สัญญา · ${l.length.toLocaleString()} เครื่อง${noCon ? ` · ยังไม่ระบุผู้รับเหมา ${noCon.n.toLocaleString()} เครื่อง` : ""}</p><div class="scroll"><table><tr><th>#</th><th>สัญญา / ผู้รับเหมา</th><th style="text-align:right">จำนวนอุปกรณ์ (แผน)</th><th style="text-align:right">มาทำจริง (เครื่อง)</th><th style="text-align:right">% ทำจริง</th><th style="text-align:right">จำนวนครั้งตามแผนทั้งปี</th><th>ระบบ / กลุ่ม</th></tr>` +
+      con.map((c, i) => `<tr><td>${c.name ? i + 1 : ""}</td><td>${c.name ? esc(c.name) : "<i>ยังไม่ระบุผู้รับเหมา (ช่อง CONTRACTOR ว่าง)</i>"}</td><td style="text-align:right">${c.n.toLocaleString()}</td><td style="text-align:right">${c.d.toLocaleString()}</td><td style="text-align:right">${pctOf(c.d, c.n)}</td><td style="text-align:right">${c.v.toLocaleString()}</td><td class="meta">${esc(c.g.slice(0, 4).join(", "))}${c.g.length > 4 ? ` และอีก ${c.g.length - 4}` : ""}</td></tr>`).join("") +
+      `<tr style="font-weight:700;background:#eef3f8"><td></td><td>รวม ${nCon.toLocaleString()} สัญญา</td><td style="text-align:right">${l.length.toLocaleString()}</td><td style="text-align:right">${mDone.toLocaleString()}</td><td style="text-align:right">${pctOf(mDone, l.length)}</td><td style="text-align:right">${visits.toLocaleString()}</td><td></td></tr></table></div></div>` : "";
+    const tr = typeRows(l);
+    $("#mpTypeBox").innerHTML = l.length ? `<details class="panel" open><summary style="cursor:pointer;font-weight:600">สรุปตาม Type ของเครื่องจักร · ${tr.length.toLocaleString()} Type · ${l.length.toLocaleString()} เครื่อง</summary><p class="meta" style="margin-top:8px">แตะแถวเพื่อดูเฉพาะ Type นั้นในตารางแผนด้านล่าง</p><div style="overflow:auto;max-height:340px"><table><tr><th>#</th><th>Type ของเครื่องจักร</th><th style="text-align:right">จำนวนเครื่อง</th><th style="text-align:right">จำนวนครั้งตามแผนทั้งปี</th>${SC === "MA" ? '<th style="text-align:right">จำนวนสัญญา</th>' : ""}<th>ระบบ / กลุ่ม</th></tr>` +
+      tr.map((t, i) => `<tr data-mptype="${esc(t.name)}" style="cursor:pointer"><td>${i + 1}</td><td>${esc(t.name)}</td><td style="text-align:right">${t.n.toLocaleString()}</td><td style="text-align:right">${t.v.toLocaleString()}</td>${SC === "MA" ? `<td style="text-align:right">${t.c || "-"}</td>` : ""}<td class="meta">${esc(t.g.slice(0, 2).join(", "))}${t.g.length > 2 ? ` และอีก ${t.g.length - 2}` : ""}</td></tr>`).join("") +
+      `<tr style="font-weight:700;background:#eef3f8"><td></td><td>รวม ${tr.length.toLocaleString()} Type</td><td style="text-align:right">${l.length.toLocaleString()}</td><td style="text-align:right">${visits.toLocaleString()}</td>${SC === "MA" ? "<td></td>" : ""}<td></td></tr></table></div></details>` : "";
     const th = TH_M.map(m => `<th colspan="4" style="text-align:center">${m}</th>`).join("");
     let g = null;
     $("#mpTable").innerHTML = l.length ? `<table class="mp"><tr><th rowspan="2">TAG</th><th rowspan="2">ชื่อเครื่อง</th><th rowspan="2">ที่ตั้ง</th>${th}<th rowspan="2">ผู้ทำ</th><th rowspan="2">ผู้รับเหมา</th></tr><tr>${[...Array(48)].map((_, i) => `<th style="padding:2px 3px;font-weight:400">${(i % 4) + 1}</th>`).join("")}</tr>` +
@@ -599,15 +621,16 @@
       : `<div class="empty">ยังไม่มีแผน ${SCN} ของปีนี้ นำเข้าไฟล์ Master Plan ได้ที่แท็บ “ทะเบียน & แผนปี”</div>`;
     $("#mpMore").innerHTML = l.length > mpLimit ? `<div class="row noprint" style="margin-top:10px"><span class="meta">แสดง ${mpLimit} จาก ${l.length.toLocaleString()} เครื่อง (ไฟล์ Excel มีครบทุกเครื่อง)</span><button class="btn small" type="button" id="mpAll">แสดงเพิ่ม 500 เครื่อง</button></div>` : "";
   }
-  $("#mpQ").oninput = $("#mpSys").onchange = $("#mpB").onchange = $("#mpYear").onchange = () => { mpLimit = 150; renderPlan(); };
+  $("#mpQ").oninput = $("#mpSys").onchange = $("#mpType").onchange = $("#mpB").onchange = $("#mpYear").onchange = () => { mpLimit = 150; renderPlan(); };
   document.addEventListener("click", e => { if (e.target.id === "mpAll") { mpLimit += 500; renderPlan(); } });
+  document.addEventListener("click", e => { const r = e.target.closest && e.target.closest("[data-mptype]"); if (!r) return; $("#mpType").value = $("#mpType").value === r.dataset.mptype ? "" : r.dataset.mptype; mpLimit = 150; renderPlan(); });
   $("#mpPrint").onclick = () => window.print();
   $("#mpXlsx").onclick = () => { const y = mpYearCE(), l = mpList();
-    Office.xlsx(`PM_${H.code}_${y + 543}_${SC === "MA" ? "PM-MA" : "PM-Inhouse"}`, [{ name: "PM_Plan", rows: planRows(l, y, SCN), styles: { 0: 2, 1: 3, 2: 1, 3: 1 } }].concat(SC === "MA" ? [conSheet(l, y)] : [])); };
-  const conSheet = (l, y) => { const con = conRows(l), nCon = con.filter(c => c.name).length;
-    return { name: "สรุปสัญญา MA", rows: [[`สรุปสัญญา MA ตามแผนที่วาง ปี ${y + 543} · ${H.name}`], ["ลำดับ", "สัญญา / ผู้รับเหมา", "จำนวนอุปกรณ์", "จำนวนครั้งตามแผนทั้งปี", "ระบบ / กลุ่ม"],
-      ...con.map((c, i) => [c.name ? i + 1 : "", c.name || "ยังไม่ระบุผู้รับเหมา (ช่อง CONTRACTOR ว่าง)", c.n, c.v, c.g.join(", ")]),
-      ["", `รวม ${nCon} สัญญา`, l.length, l.reduce((s, e) => s + Object.keys(gridOf(e)).length, 0), ""]], styles: { 0: 2, 1: 1 } }; };
+    Office.xlsx(`PM_${H.code}_${y + 543}_${SC === "MA" ? "PM-MA" : "PM-Inhouse"}`, [{ name: "PM_Plan", rows: planRows(l, y, SCN), styles: { 0: 2, 1: 3, 2: 1, 3: 1 } }].concat(SC === "MA" ? [conSheet(l, y)] : [], [typeSheet(l, y)])); };
+  const conSheet = (l, y) => { const dn = mpDone.set, con = conRows(l, dn), nCon = con.filter(c => c.name).length;
+    return { name: "สรุปสัญญา MA", rows: [[`สรุปสัญญา MA ตามแผนที่วาง ปี ${y + 543} · ${H.name}`], ["ลำดับ", "สัญญา / ผู้รับเหมา", "จำนวนอุปกรณ์ (แผน)", "มาทำจริง (เครื่อง)", "% ทำจริง", "จำนวนครั้งตามแผนทั้งปี", "ระบบ / กลุ่ม"],
+      ...con.map((c, i) => [c.name ? i + 1 : "", c.name || "ยังไม่ระบุผู้รับเหมา (ช่อง CONTRACTOR ว่าง)", c.n, c.d, pctOf(c.d, c.n), c.v, c.g.join(", ")]),
+      ["", `รวม ${nCon} สัญญา`, l.length, l.filter(e => dn.has(e.id)).length, pctOf(l.filter(e => dn.has(e.id)).length, l.length), l.reduce((s, e) => s + Object.keys(gridOf(e)).length, 0), ""]], styles: { 0: 2, 1: 1 } }; };
 
   /* ---------- QR stickers ---------- */
   const tagUrl = e => { const u = new URL("pm.html", location.href); u.search = ""; u.searchParams.set("h", H.code); u.searchParams.set("tag", e.tag); return u.toString(); };
