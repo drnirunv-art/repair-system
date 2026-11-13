@@ -29,7 +29,7 @@
     const [l, t, e, st] = await Promise.all([
       sb.from("locations").select("id,building,floor,department").eq("hospital_id", H.id).order("sort").order("building").order("floor"),
       sb.from("job_types").select("id,name").eq("hospital_id", H.id).order("name"),
-      sb.from("equipment").select("id,name,location_id").eq("hospital_id", H.id).order("name"),
+      sb.from("equipment").select("id,name,location_id").eq("hospital_id", H.id).eq("in_form", true).order("name"),
       sb.from("hospital_settings").select("max_photos,require_photo").eq("hospital_id", H.id).maybeSingle()]);
     if (l.error || t.error) { $("#rMsg").innerHTML = `<div class="note bad">โหลดรายชื่ออาคาร/ชั้น/แผนกไม่สำเร็จ กด “โหลดข้อมูลตำแหน่งใหม่”</div>`; return; }
     locs = l.data; equip = e.data || []; if (st.data) S = st.data;

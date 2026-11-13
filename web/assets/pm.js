@@ -432,6 +432,77 @@
     await loadEquip(); fillFilters(); renderReg();
   });
 
+  /* ---------- yearly master plan from the Excel template ---------- */
+  // PM_Plan sheet: a header row starting with NO., month names over 4 week columns each, marks (M Q S Y W 2M ...) in the week to do the work
+  const MONTHS = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+  let xRows = [];
+  const cellS = v => String(v ?? "").replace(/\s+/g, " ").trim();
+  function parsePlan(rows) {
+    const hi = rows.findIndex(r => /^NO\.?$/i.test(cellS(r[0])) && r.some(c => /MACHINE\s*NAME/i.test(cellS(c))));
+    if (hi < 0) throw new Error("ไม่พบหัวตาราง (NO. / MACHINE NAME) ในไฟล์ ตรวจว่าใช้ Template Master Plan");
+    const hd = rows[hi].map(c => cellS(c).toUpperCase()), at = re => hd.findIndex(h => re.test(h)), c = { name: at(/MACHINE\s*NAME/), tag: at(/MACHINE\s*TAG/), place: at(/^LOCATION/), b: at(/^BUILDING/), f: at(/^FLOOR/), jan: at(/^JANUARY/), sys: at(/^SYSTEM/), by: at(/^MAINTAIN/), ven: at(/CONTRACTOR|VENDOR/) };
+    if (c.tag < 0 || c.jan < 0 || MONTHS.some((m, i) => hd[c.jan + i * 4] !== m)) throw new Error("หัวตารางไม่ตรง Template: ต้องมี MACHINE TAG และเดือน JANUARY ถึง DECEMBER เดือนละ 4 ช่อง");
+    const out = [], seen = {}; let grp = "";
+    rows.slice(hi + 2).forEach((r, i) => {
+      const name = cellS(r[c.name]);
+      if (!name) { const t = cellS(r[0]); if (t && !/^[\d.]+$/.test(t)) grp = t; return; }
+      const grid = {}; for (let k = 0; k < 48; k++) { const v = cellS(r[c.jan + k]).toUpperCase(); if (v) grid[k + 1] = v.slice(0, 6); }
+      const w = []; let tag = cellS(r[c.tag]);
+      if (!tag) { let hsh = 0; for (const ch of [name, cellS(r[c.b]), cellS(r[c.f]), cellS(r[c.place])].join("|")) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0; tag = "AUTO-" + hsh.toString(36).toUpperCase(); w.push("ไม่มี TAG ในไฟล์ ระบบตั้งให้"); }
+      const k0 = tag.toUpperCase(); seen[k0] = (seen[k0] || 0) + 1; if (seen[k0] > 1) { tag = `${tag}-${seen[k0]}`; w.push("TAG ซ้ำในไฟล์ ระบบเติมเลขต่อท้าย"); }
+      if (!Object.keys(grid).length) w.push("ไม่มีแผนในปีนี้");
+      out.push({ n: hi + 3 + i, w, row: { tag, name, building: cellS(r[c.b]), floor: cellS(r[c.f]), place: cellS(r[c.place]), system: c.sys < 0 ? "" : cellS(r[c.sys]), grp, by: c.by < 0 ? "" : cellS(r[c.by]), vendor: c.ven < 0 ? "" : cellS(r[c.ven]), grid } });
+    });
+    return out;
+  }
+  if ($("#xYear")) $("#xYear").value = new Date().getFullYear();
+  $("#xFile").onchange = async ev => {
+    const f = ev.target.files[0]; if (!f) return; note("#xMsg"); $("#xPrev").innerHTML = '<div class="empty">กำลังอ่านไฟล์…</div>';
+    try {
+      const wb = await Office.readXlsx(f), sheet = wb.PM_Plan || Object.values(wb).find(r => r.some(x => /^NO\.?$/i.test(cellS(x[0])) && x.some(c => /MACHINE\s*NAME/i.test(cellS(c)))));
+      if (!sheet) throw new Error("ไม่พบแผ่นงาน PM_Plan ในไฟล์");
+      const proj = cellS((sheet.find(r => /PROJECT/i.test(cellS(r[0]))) || [])[0]), code = (/PROJECT\s*:\s*([A-Z0-9]+)/i.exec(proj) || [])[1], be = +(/(25\d\d)/.exec(proj) || [])[1];
+      if (be) $("#xYear").value = be - 543;
+      xRows = parsePlan(sheet);
+      const have = new Set(equip.map(e => (e.tag || "").toUpperCase())), marks = {}, cnt = t => xRows.filter(x => x.w.some(y => y.startsWith(t))).length;
+      xRows.forEach(x => Object.values(x.row.grid).forEach(v => marks[v] = (marks[v] || 0) + 1));
+      const up = xRows.filter(x => have.has(x.row.tag.toUpperCase())).length, wrong = code && code.toUpperCase() !== H.code.toUpperCase();
+      $("#xPrev").innerHTML = `${wrong ? `<div class="note bad">ไฟล์นี้เป็นของ ${esc(code)} แต่คุณอยู่ที่ ${esc(H.code)} ตรวจให้แน่ใจก่อนนำเข้า</div>` : ""}<div class="kpis" style="margin-top:12px">${kpis([["เครื่องในไฟล์", xRows.length], ["ปรับแผนเครื่องเดิม", up], ["เพิ่มเครื่องใหม่", xRows.length - up], ["ไม่มีแผนในปีนี้", cnt("ไม่มีแผน")], ["TAG ซ้ำในไฟล์", cnt("TAG ซ้ำ")], ["ไม่มี TAG", cnt("ไม่มี TAG")]])}</div>
+        <p class="meta">${esc(proj)} · จำนวนครั้งตามแผนทั้งปี: ${Object.entries(marks).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} ${v.toLocaleString()}`).join(" · ") || "-"}</p>
+        <div class="scroll" style="max-height:340px"><table><tr><th>แถว</th><th>TAG</th><th>ชื่อเครื่อง</th><th>ที่ตั้ง</th><th>เดือนที่ทำ</th><th>ผู้ทำ</th><th>หมายเหตุ</th></tr>${xRows.slice(0, 200).map(x => `<tr><td>${x.n}</td><td class="mono">${esc(x.row.tag)}</td><td>${esc(x.row.name)}</td><td>${esc([x.row.building, x.row.floor, x.row.place].filter(Boolean).join(" · "))}</td><td>${[...new Set(Object.keys(x.row.grid).map(k => Math.ceil(k / 4)))].join(", ")}</td><td>${esc(x.row.by)}</td><td class="meta">${esc(x.w.join(" · "))}</td></tr>`).join("")}</table></div>
+        ${xRows.length > 200 ? `<p class="meta">แสดง 200 แถวแรก จากทั้งหมด ${xRows.length.toLocaleString()} แถว</p>` : ""}
+        <div class="row" style="margin-top:10px"><button class="btn primary" type="button" id="xGo"${xRows.length ? "" : " disabled"}>ยืนยันนำเข้าแผน ${xRows.length.toLocaleString()} เครื่อง</button><button class="btn" type="button" id="xDrop">ยกเลิก</button></div>`;
+    } catch (err) { xRows = []; $("#xPrev").innerHTML = ""; note("#xMsg", err); }
+  };
+  document.addEventListener("click", async e => {
+    if (e.target.id === "xDrop") { xRows = []; $("#xPrev").innerHTML = ""; $("#xFile").value = ""; return; }
+    if (e.target.id !== "xGo") return;
+    const y = +$("#xYear").value; if (!(y >= 2024 && y <= 2100)) return note("#xMsg", new Error("ใส่ปีของแผนเป็น ค.ศ. เช่น 2026"));
+    if (!confirm(`นำเข้าแผน PM ปี ${y} (พ.ศ. ${y + 543}) จำนวน ${xRows.length.toLocaleString()} เครื่อง เข้า ${H.name}?`)) return;
+    e.target.disabled = true; let up = 0, add = 0;
+    try {
+      for (let i = 0; i < xRows.length; i += 400) {
+        e.target.textContent = `กำลังนำเข้า ${Math.min(i + 400, xRows.length).toLocaleString()} / ${xRows.length.toLocaleString()}`;
+        const { data, error } = await sb.rpc("pm_import", { p_year: y, p_rows: xRows.slice(i, i + 400).map(x => x.row) });
+        if (error) throw new Error(`แถว ${xRows[i].n} เป็นต้นไป: ${errText(error)} (แถวก่อนหน้านี้นำเข้าแล้ว นำเข้าไฟล์เดิมซ้ำได้)`);
+        up += data.updated; add += data.added;
+      }
+      xRows = []; $("#xPrev").innerHTML = ""; $("#xFile").value = ""; note("#xMsg", null, `นำเข้าแผนปี ${y} แล้ว: ปรับแผนเครื่องเดิม ${up.toLocaleString()} · เพิ่มเครื่องใหม่ ${add.toLocaleString()} · ไปที่ “สร้างงาน PM ของเดือนจากแผน” เพื่อออกงานของแต่ละเดือน`);
+    } catch (err) { note("#xMsg", err); e.target.disabled = false; e.target.textContent = "ลองนำเข้าอีกครั้ง"; }
+    await loadEquip(); fillFilters(); renderReg();
+  });
+  // the current register in the same template, ready to edit for next year and upload again
+  $("#xTpl").onclick = () => {
+    const y = +$("#xYear").value || new Date().getFullYear(), wk = [...Array(48)].map((_, i) => (i % 4) + 1), mh = MONTHS.flatMap(m => [m, "", "", ""]);
+    const list = equip.filter(e => e.tag).sort((a, b) => (a.system || "").localeCompare(b.system || "") || (a.pm_group || "").localeCompare(b.pm_group || "") || a.tag.localeCompare(b.tag));
+    const rows = [["MASTER PLAN PREVENTIVE MAINTENANCE"], [`PROJECT :  ${H.code}    ปี ${y + 543}`], ["NO.", "MACHINE NAME", "MACHINE TAG", "LOCATION", "BUILDING", "FLOOR", "PERIODES", ...mh, "SYSTEM", "MAINTAIN BY (TW/MA)", "CONTRACTOR / VENDOR"], ["", "", "", "", "", "", "", ...wk]];
+    let g = null, n = 0;
+    list.forEach(e => { const grp = e.pm_group || e.system || e.eq_type || "อื่น ๆ"; if (grp !== g) { rows.push([grp]); g = grp; }
+      const grid = e.pm_grid && Object.keys(e.pm_grid).length ? e.pm_grid : Object.fromEntries((e.pm_months || []).map(m => [(m - 1) * 4 + (e.pm_week || 1), e.pm_freq || "M"]));
+      rows.push([++n, e.name, e.tag, e.place || "", e.building || "", e.floor || "", [...new Set(Object.values(grid))].join("/"), ...wk.map((_, i) => grid[i + 1] || ""), e.system || "", e.pm_by || "TW", e.pm_vendor || ""]); });
+    Office.xlsx(`PM_${H.code}_${y + 543}`, [{ name: "PM_Plan", rows, styles: { 0: 2, 1: 3, 2: 1, 3: 1 } }, { name: "วิธีใช้", rows: [["วิธีใช้ Template นี้"], ["1. แก้ไขได้เฉพาะแผ่นงาน PM_Plan ห้ามลบหรือย้ายคอลัมน์ และคงหัวตารางแถวที่ 3 ไว้"], ["2. หนึ่งแถวคือหนึ่งเครื่อง MACHINE TAG ต้องไม่ซ้ำกัน เครื่องใหม่ให้เพิ่มแถวและตั้ง TAG ใหม่"], ["3. ใส่ตัวอักษรแผนในช่องสัปดาห์ที่ต้องทำ: M รายเดือน, Q ราย 3 เดือน, S ราย 6 เดือน, Y รายปี (ใช้ตัวอื่นเช่น W, 2M ได้)"], ["4. MAINTAIN BY ใส่ TW หรือ MA"], ["5. บันทึกเป็น .xlsx แล้วอัปโหลดที่หน้า PM Inhouse > ทะเบียนเครื่อง > นำเข้าแผน PM ทั้งปีจากไฟล์ Excel"], ["6. เครื่องที่ไม่อยู่ในไฟล์จะไม่ถูกลบออกจากระบบ"]], styles: { 0: 2 } }]);
+  };
+
   /* ---------- QR stickers ---------- */
   const tagUrl = e => { const u = new URL("pm.html", location.href); u.search = ""; u.searchParams.set("h", H.code); u.searchParams.set("tag", e.tag); return u.toString(); };
   const qSel = new Set();

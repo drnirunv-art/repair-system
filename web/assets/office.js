@@ -125,5 +125,38 @@ window.Office = (() => {
     if ((d.notes || []).length) { s = p.addSlide(); head(s, "ข้อสังเกตและข้อเสนอแนะ"); bullets(s, d.notes.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
     await p.writeFile({ fileName: name.replace(/\.pptx$/i, "") + ".pptx" });
   }
-  return { xlsx, table, analyze, summarySheet, pptx, zip, xlsxParts };
+  // read an .xlsx in the browser: { sheetName: [[cell text]] }. Only what an import needs: cell values as text (cached results for formulas).
+  async function readXlsx(file) {
+    const buf = new Uint8Array(await file.arrayBuffer()), dv = new DataView(buf.buffer), dec = new TextDecoder();
+    let e = buf.length - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+    if (e < 0) throw new Error("ไฟล์นี้ไม่ใช่ Excel (.xlsx)");
+    const files = {}; let p = dv.getUint32(e + 16, true);
+    for (let n = dv.getUint16(e + 10, true); n > 0; n--) {
+      const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+      files[dec.decode(buf.subarray(p + 46, p + 46 + nl))] = { method, csize, off }; p += 46 + nl + xl + cl;
+    }
+    const text = async name => { const f = files[name]; if (!f) return null;
+      const s = f.off + 30 + dv.getUint16(f.off + 26, true) + dv.getUint16(f.off + 28, true), raw = buf.subarray(s, s + f.csize);
+      if (f.method === 0) return dec.decode(raw);
+      if (f.method !== 8 || !window.DecompressionStream) throw new Error("เบราว์เซอร์นี้อ่านไฟล์ Excel ไม่ได้ กรุณาใช้ Chrome รุ่นใหม่");
+      return await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text(); };
+    const xml = t => new DOMParser().parseFromString(t, "application/xml"), tx = n => [...n.getElementsByTagName("t")].filter(t => t.parentNode.nodeName !== "rPh").map(t => t.textContent).join("");
+    const sst = await text("xl/sharedStrings.xml"), shared = sst ? [...xml(sst).getElementsByTagName("si")].map(tx) : [];
+    const wb = xml(await text("xl/workbook.xml")), rels = xml(await text("xl/_rels/workbook.xml.rels")), target = {};
+    [...rels.getElementsByTagName("Relationship")].forEach(r => target[r.getAttribute("Id")] = r.getAttribute("Target").replace(/^\/?(xl\/)?/, "xl/"));
+    const out = {};
+    for (const sh of wb.getElementsByTagName("sheet")) {
+      const t = await text(target[sh.getAttribute("r:id") || sh.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id")]); if (!t) continue;
+      const rows = [];
+      for (const r of xml(t).getElementsByTagName("row")) { const row = []; let ci = 0;
+        for (const c of r.getElementsByTagName("c")) { const ref = c.getAttribute("r");
+          if (ref) { ci = 0; for (const ch of ref.replace(/\d+/g, "")) ci = ci * 26 + ch.charCodeAt(0) - 64; ci--; }
+          const ty = c.getAttribute("t"), v = c.getElementsByTagName("v")[0];
+          row[ci++] = ty === "s" ? shared[+v?.textContent] ?? "" : ty === "inlineStr" ? tx(c) : v ? v.textContent : ""; }
+        rows[(+r.getAttribute("r") || rows.length + 1) - 1] = Array.from(row, x => x ?? ""); }
+      out[sh.getAttribute("name")] = Array.from(rows, x => x || []);
+    }
+    return out;
+  }
+  return { xlsx, table, analyze, summarySheet, pptx, zip, xlsxParts, readXlsx };
 })();
