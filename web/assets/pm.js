@@ -449,7 +449,9 @@
   const fTable = (head, rows, bold) => `<tr>${head.map((h, i) => `<th${i ? ' class="num"' : ""}>${h}</th>`).join("")}</tr>` + rows.map(r => `<tr${bold(r) ? ' style="font-weight:700"' : ""}>${r.map((v, i) => `<td${i ? ' class="num"' : ""}>${esc(v ?? "")}</td>`).join("")}</tr>`).join("");
   async function renderFollow() {
     const [y, m] = ym($("#fMonth").value); note("#fMsg");
-    const [a, ex] = await Promise.all([sb.rpc("pm_followup_by", { p_year: y, p_month: m, p_by: SC }), sb.rpc("am_exec")]);
+    // until migration 0030 is on the database the per-part functions do not exist: fall back to the whole-hospital ones
+    const fRpc = async (fn, old) => { const r = await sb.rpc(fn, { p_year: y, p_month: m, p_by: SC }); return r.error && /PGRST202|42883|not find|does not exist/i.test((r.error.code || "") + " " + (r.error.message || "")) ? sb.rpc(old, { p_year: y, p_month: m }) : r; };
+    const [a, ex] = await Promise.all([fRpc("pm_followup_by", "pm_followup"), sb.rpc("am_exec")]);
     if (a.error) return note("#fMsg", a.error);
     fRows = a.data || []; fExec = ex.data === true;
     const tot = fRows.find(r => r.grp === "รวม") || { planned: 0, done: 0, waiting_sign: 0, not_done: 0, abnormal: 0 };
@@ -464,7 +466,7 @@
       : `<b>บทสรุปผู้บริหาร:</b> แผนเดือนนี้ ${tot.planned} เครื่อง ทำเสร็จและอนุมัติแล้ว ${tot.done} เครื่อง (${tot.pct}%) รอเซ็น ${tot.waiting_sign} ยังไม่ทำ ${tot.not_done}${late.length ? ` · ระบบที่ค้างมากที่สุด: ${late.slice(0, 3).map(r => `${esc(r.grp)} ${r.not_done}`).join(", ")}` : " · ไม่มีระบบที่ค้าง"}${tot.abnormal ? ` · พบผิดปกติ ${tot.abnormal} ใบ ควรเปิดใบแจ้งซ่อมตาม` : ""}`;
     $("#fTable").innerHTML = fTable(fHead, fRows.map(r => [r.grp, ...fLine(r)]), r => r[0] === "รวม");
     $("#fAllBox").hidden = !fExec;
-    if (fExec) { const b = await sb.rpc("pm_followup_all_by", { p_year: y, p_month: m, p_by: SC }); fAll = b.data || [];
+    if (fExec) { const b = await fRpc("pm_followup_all_by", "pm_followup_all"); fAll = b.data || [];
       $("#fAll").innerHTML = b.error ? "" : fTable(["โรงพยาบาล", "เครื่องในแผน PM", ...fHead.slice(1)], fAll.map(r => [`${r.code} ${r.name}`, r.machines, ...fLine({ ...r, planned: r.planned ?? 0, done: r.done ?? 0, waiting_sign: r.waiting_sign ?? 0, not_done: r.not_done ?? 0, abnormal: r.abnormal ?? 0, ytd_planned: r.ytd_planned ?? 0, ytd_done: r.ytd_done ?? 0 })]), () => false); }
     if (fExec && !fHosp.length) { fHosp = (await sb.from("hospitals").select("id,code,name").order("code")).data || []; $("#fHosp").innerHTML = fHosp.map(x => `<option value="${x.id}"${x.id === H.id ? " selected" : ""}>${esc(x.code)} ${esc(x.name)}</option>`).join(""); }
     $("#fHospL").hidden = !fExec; if (fExec) $("#fRcpBox").hidden = false;
