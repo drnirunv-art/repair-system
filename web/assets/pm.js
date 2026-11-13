@@ -455,7 +455,7 @@
       $("#fAll").innerHTML = b.error ? "" : fTable(["โรงพยาบาล", "เครื่องในแผน PM", ...fHead.slice(1)], fAll.map(r => [`${r.code} ${r.name}`, r.machines, ...fLine({ ...r, planned: r.planned ?? 0, done: r.done ?? 0, waiting_sign: r.waiting_sign ?? 0, not_done: r.not_done ?? 0, abnormal: r.abnormal ?? 0, ytd_planned: r.ytd_planned ?? 0, ytd_done: r.ytd_done ?? 0 })]), () => false); }
     if (fExec && !fHosp.length) { fHosp = (await sb.from("hospitals").select("id,code,name").order("code")).data || []; $("#fHosp").innerHTML = fHosp.map(x => `<option value="${x.id}"${x.id === H.id ? " selected" : ""}>${esc(x.code)} ${esc(x.name)}</option>`).join(""); }
     $("#fHospL").hidden = !fExec; if (fExec) $("#fRcpBox").hidden = false;
-    $("#fTest").hidden = fHid() !== H.id || !isMgr();
+    $("#fTest").hidden = $("#fPlan").hidden = fHid() !== H.id || !isMgr();
     if (isMgr() || fExec) { const r = await sb.from("report_recipients").select("*").eq("hospital_id", fHid()).eq("kind", "pm_followup").order("created_at"); fRcp = r.data || [];
       $("#fRcp").innerHTML = fRcp.map(x => `<tr${x.active ? "" : ' style="opacity:.55"'}><td>${esc(x.email)}</td><td>${x.active ? "ส่งอยู่" : "หยุดส่ง"}</td><td><button class="btn small" type="button" data-rcp="${x.id}">${x.active ? "หยุดส่ง" : "ส่งอีกครั้ง"}</button></td></tr>`).join("") || '<tr><td class="empty">ยังไม่ได้ตั้ง email ผู้รับ</td></tr>'; }
   }
@@ -468,9 +468,11 @@
   $("#fAdd").onclick = async () => { const em = $("#fEmail").value.trim().toLowerCase(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return note("#fMsg", new Error("รูปแบบ email ไม่ถูกต้อง"));
     const { error } = await sb.from("report_recipients").insert({ hospital_id: fHid(), kind: "pm_followup", email: em, created_by: me.id });
     if (error) return note("#fMsg", /duplicate|report_recipients_uq/.test(error.message || "") ? new Error("email นี้มีอยู่แล้ว") : error); $("#fEmail").value = ""; note("#fMsg", null, "เพิ่มผู้รับแล้ว"); renderFollow(); };
-  $("#fTest").onclick = async () => { if (!fRcp.some(x => x.active)) return note("#fMsg", new Error("ยังไม่มี email ผู้รับที่เปิดส่งอยู่"));
-    if (!confirm(`ส่งตารางของ${monthLabel($("#fMonth").value)} ไปที่ email ผู้รับ ${fRcp.filter(x => x.active).length} ราย ตอนนี้เลย?`)) return;
-    const [y, m] = ym($("#fMonth").value), { data, error } = await sb.rpc("pm_followup_send_now", { p_year: y, p_month: m }); note("#fMsg", error, error ? "" : `เข้าคิวส่ง ${data} ฉบับแล้ว จะถึงผู้รับภายในไม่กี่นาที`); };
+  const fSend = plan => async () => { if (!fRcp.some(x => x.active)) return note("#fMsg", new Error("ยังไม่มี email ผู้รับที่เปิดส่งอยู่"));
+    const [y, m] = ym($("#fMonth").value), n = fRcp.filter(x => x.active).length;
+    if (!confirm(plan ? `ส่งผลงาน PM ของ${monthLabel($("#fMonth").value)} พร้อม Master Plan PM ปี ${y + 543} (ไฟล์ Excel) ไปที่ email ผู้รับ ${n} ราย ตอนนี้เลย?` : `ส่งตารางของ${monthLabel($("#fMonth").value)} ไปที่ email ผู้รับ ${n} ราย ตอนนี้เลย?`)) return;
+    const { data, error } = await sb.rpc("pm_followup_send_now", { p_year: y, p_month: m, p_plan: plan }); note("#fMsg", error, error ? "" : `เข้าคิวส่ง ${data} ฉบับแล้ว จะถึงผู้รับภายในไม่กี่นาที`); };
+  $("#fTest").onclick = fSend(false); $("#fPlan").onclick = fSend(true);
   document.addEventListener("click", async e => { const b = e.target.closest("[data-rcp]"); if (!b) return; const x = fRcp.find(z => z.id === b.dataset.rcp);
     const { error } = await sb.from("report_recipients").update({ active: !x.active }).eq("id", x.id); if (error) return note("#fMsg", error); renderFollow(); });
 

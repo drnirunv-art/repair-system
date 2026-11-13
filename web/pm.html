@@ -82,7 +82,7 @@
 
   <section id="tab-follow" hidden>
     <h2 class="noprint">ตารางติดตามแผน PM</h2>
-    <p class="sub noprint">เทียบแผน PM ของเดือนกับงานที่ทำเสร็จ แยกตามระบบ ระบบส่งตารางนี้ทาง email ให้ผู้รับของโรงพยาบาลอัตโนมัติทุกวันที่ 28 เวลา 08:00 น.</p>
+    <p class="sub noprint">เทียบแผน PM ของเดือนกับงานที่ทำเสร็จ แยกตามระบบ ระบบส่งผลงาน PM รายเดือนทาง email (แนบไฟล์ Excel) ให้ผู้รับของโรงพยาบาลอัตโนมัติทุกวันที่ 28 เวลา 08:00 น. และวันที่ 28 ธันวาคมของทุกปี ส่ง Master Plan PM ทั้งปี (ไฟล์ Excel รูปแบบ Template) เพิ่มอีก 1 ฉบับ</p>
     <div class="filters noprint" style="max-width:860px"><label>เดือน<input id="fMonth" type="month"></label>
       <button class="btn" type="button" id="fCsv" style="align-self:end">ดาวน์โหลด Excel</button><button class="btn primary" type="button" id="fPrint" style="align-self:end">PDF / พิมพ์</button></div>
     <p class="meta noprint">ปุ่ม PDF / พิมพ์: ในหน้าต่างพิมพ์ ช่อง “ปลายทาง” เลือก “บันทึกเป็น PDF”</p>
@@ -92,7 +92,7 @@
     <div class="scroll"><table id="fTable"></table></div>
     <div id="fAllBox" hidden><h3 style="margin-top:18px">ภาพรวม 12 โรงพยาบาล</h3><div class="scroll"><table id="fAll"></table></div></div>
     <div class="panel noprint" data-manager hidden id="fRcpBox" style="margin-top:18px"><h3 style="margin-top:0">email ผู้รับตารางทุกวันที่ 28</h3>
-      <div class="row"><label id="fHospL" hidden>โรงพยาบาล<select id="fHosp"></select></label><input id="fEmail" type="email" placeholder="name@example.com" style="max-width:320px"><button class="btn primary" type="button" id="fAdd">เพิ่มผู้รับ</button><button class="btn" type="button" id="fTest">ส่งทดสอบตอนนี้</button></div>
+      <div class="row"><label id="fHospL" hidden>โรงพยาบาล<select id="fHosp"></select></label><input id="fEmail" type="email" placeholder="name@example.com" style="max-width:320px"><button class="btn primary" type="button" id="fAdd">เพิ่มผู้รับ</button><button class="btn" type="button" id="fTest">ส่งทดสอบตอนนี้</button><button class="btn" type="button" id="fPlan">ส่ง Master Plan ตอนนี้</button></div>
       <div class="scroll" style="margin-top:10px"><table id="fRcp"></table></div></div>
     <div id="fMsg" class="noprint"></div>
   </section>

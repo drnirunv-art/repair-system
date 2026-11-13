@@ -1,4 +1,5 @@
 -- PM follow-up table per hospital (plan of the month against what was done) and its monthly e-mail on the 28th.
+-- Contract duty: PM results go to the hospital every month, and the yearly master plan once before the year ends.
 -- Recipients are set per hospital by that hospital's managers (people with the 12-hospital view can set any hospital).
 create table if not exists public.report_recipients (
   id uuid primary key default gen_random_uuid(),
@@ -64,10 +65,14 @@ end $$;
 revoke all on function public.pm_followup(int, int), public.pm_followup_all(int, int) from public, anon;
 grant execute on function public.pm_followup(int, int), public.pm_followup_all(int, int) to authenticated;
 
+-- the sender attaches an Excel file built from live data: {"kind":"pm_month","year":2026,"month":11} or {"kind":"pm_master_plan","year":2026}
+alter table public.email_outbox add column if not exists attach jsonb;
+grant execute on function public.pm_followup_core(uuid, int, int) to service_role;
+
 -- queue the table as a plain-text e-mail to the hospital's recipients; returns how many mails were queued
-create or replace function public.pm_followup_queue(p_hospital uuid, p_year int, p_month int) returns int
+create or replace function public.pm_followup_queue(p_hospital uuid, p_year int, p_month int, p_plan boolean default false) returns int
 language plpgsql security definer set search_path = public as $$
-declare h hospitals; body text; r record; n int := 0; tot record;
+declare h hospitals; body text; r record; n int := 0; n2 int := 0; tot record;
   mth text := (array['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'])[p_month] || ' ' || (p_year + 543);
 begin
   select * into h from hospitals where id = p_hospital;
@@ -82,15 +87,28 @@ begin
     body := body || '- ' || r.grp || ': ' || r.planned || ' / ' || r.done || ' / ' || r.waiting_sign || ' / ' || r.not_done || ' / ' || coalesce(r.pct::text || '%', '-') || E'\n';
   end loop;
   if coalesce(tot.planned, 0) = 0 then body := body || E'(เดือนนี้ยังไม่มีเครื่องในแผน PM ของระบบ)\n'; end if;
-  body := body || E'\nเปิดตารางเต็ม ดาวน์โหลด Excel หรือ PDF: https://drnirunv-art.github.io/repair-system/pm.html?tab=follow\n\n' ||
+  body := body || E'\nรายละเอียดรายเครื่องอยู่ในไฟล์ Excel ที่แนบมากับอีเมลนี้\n\n' ||
     h.name || E' งานวิศวกรรมอาคาร\n(อีเมลนี้ส่งอัตโนมัติทุกวันที่ 28 ของเดือน กรุณาอย่าตอบกลับ)';
-  insert into email_outbox (hospital_id, to_email, subject, body_text)
-  select p_hospital, rr.email, 'ติดตามแผน PM ' || h.code || ' เดือน' || mth || ': เสร็จ ' || coalesce(tot.done, 0) || ' จาก ' || coalesce(tot.planned, 0) || ' เครื่อง', body
+  insert into email_outbox (hospital_id, to_email, subject, body_text, attach)
+  select p_hospital, rr.email, 'ผลงาน PM ' || h.code || ' เดือน' || mth || ': เสร็จ ' || coalesce(tot.done, 0) || ' จาก ' || coalesce(tot.planned, 0) || ' เครื่อง', body,
+    jsonb_build_object('kind', 'pm_month', 'year', p_year, 'month', p_month)
   from report_recipients rr where rr.hospital_id = p_hospital and rr.kind = 'pm_followup' and rr.active;
   get diagnostics n = row_count;
-  return n;
+  -- once a year (the December run, or when asked): the master plan in the template layout
+  if p_plan or p_month = 12 then
+    insert into email_outbox (hospital_id, to_email, subject, body_text, attach)
+    select p_hospital, rr.email, 'Master Plan PM ' || h.code || ' ปี ' || (p_year + 543),
+      'Master Plan Preventive Maintenance ปี ' || (p_year + 543) || E'\n' || h.name || ' (' || h.code || E')\n\n' ||
+      'แนบไฟล์ Excel แผน PM ทั้งปีรายเครื่อง (12 เดือน เดือนละ 4 สัปดาห์) ตามรูปแบบ Master Plan จำนวน ' ||
+      (select count(*) from equipment e where e.hospital_id = p_hospital and e.active and e.tag is not null and cardinality(e.pm_months) > 0) || E' เครื่อง\n\n' ||
+      h.name || E' งานวิศวกรรมอาคาร\n(อีเมลนี้ส่งอัตโนมัติปีละ 1 ครั้ง วันที่ 28 ธันวาคม กรุณาอย่าตอบกลับ)',
+      jsonb_build_object('kind', 'pm_master_plan', 'year', p_year)
+    from report_recipients rr where rr.hospital_id = p_hospital and rr.kind = 'pm_followup' and rr.active;
+    get diagnostics n2 = row_count;
+  end if;
+  return n + n2;
 end $$;
-revoke all on function public.pm_followup_queue(uuid, int, int) from public, anon, authenticated;
+revoke all on function public.pm_followup_queue(uuid, int, int, boolean) from public, anon, authenticated;
 
 -- the 28th job: every hospital that has recipients
 create or replace function public.pm_followup_send_all() returns int
@@ -102,15 +120,15 @@ begin
 end $$;
 revoke all on function public.pm_followup_send_all() from public, anon, authenticated;
 -- managers can send their own hospital's table now (to check the addresses)
-create or replace function public.pm_followup_send_now(p_year int, p_month int) returns int
+create or replace function public.pm_followup_send_now(p_year int, p_month int, p_plan boolean default false) returns int
 language plpgsql security definer set search_path = public as $$
 begin
   if not public.is_manager() then raise exception 'เฉพาะหัวหน้า / Admin ส่งอีเมลได้'; end if;
   if p_month not between 1 and 12 then raise exception 'เดือนไม่ถูกต้อง'; end if;
-  return public.pm_followup_queue(public.my_hospital(), p_year, p_month);
+  return public.pm_followup_queue(public.my_hospital(), p_year, p_month, coalesce(p_plan, false));
 end $$;
-revoke all on function public.pm_followup_send_now(int, int) from public, anon;
-grant execute on function public.pm_followup_send_now(int, int) to authenticated;
+revoke all on function public.pm_followup_send_now(int, int, boolean) from public, anon;
+grant execute on function public.pm_followup_send_now(int, int, boolean) to authenticated;
 
 -- 08:00 Bangkok on the 28th of every month
 select cron.schedule('pm-followup-28', '0 1 28 * *', $$select public.pm_followup_send_all()$$);
