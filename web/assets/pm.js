@@ -444,8 +444,8 @@
   /* ---------- follow-up table: plan of the month against what was done; mailed on the 20th ---------- */
   let fRows = [], fAll = [], fRcp = [], fExec = false, fHosp = [];
   const fHid = () => (fExec && $("#fHosp").value) || H.id;
-  const fHead = ["ระบบ", "แผนเดือนนี้ (เครื่อง)", "เสร็จและอนุมัติ", "รอเซ็น", "ยังไม่ทำ", "พบผิดปกติ (ใบ)", "% เสร็จ", "แผนสะสมทั้งปี (ครั้ง)", "ทำแล้วสะสม", "% สะสม"];
-  const fLine = r => [r.planned, r.done, r.waiting_sign, r.not_done, r.abnormal, r.pct == null ? "-" : r.pct + "%", r.ytd_planned, r.ytd_done, r.ytd_pct == null ? "-" : r.ytd_pct + "%"];
+  const fHead = ["ระบบ", "แผนเดือนนี้ (เครื่อง)", "เสร็จและอนุมัติ", "รอเซ็น", "ยังไม่ทำ", "พบผิดปกติ (ใบ)", "% เสร็จ", "แผนสะสมทั้งปี (ครั้ง)", "ทำแล้วสะสม", "% สะสม", "งานค้างเดือนนี้", "งานค้างสะสม"];
+  const fLine = r => [r.planned, r.done, r.waiting_sign, r.not_done, r.abnormal, r.pct == null ? "-" : r.pct + "%", r.ytd_planned, r.ytd_done, r.ytd_pct == null ? "-" : r.ytd_pct + "%", Math.max(0, (r.planned || 0) - (r.done || 0)), Math.max(0, (r.ytd_planned || 0) - (r.ytd_done || 0))];
   const fTable = (head, rows, bold) => `<tr>${head.map((h, i) => `<th${i ? ' class="num"' : ""}>${h}</th>`).join("")}</tr>` + rows.map(r => `<tr${bold(r) ? ' style="font-weight:700"' : ""}>${r.map((v, i) => `<td${i ? ' class="num"' : ""}>${esc(v ?? "")}</td>`).join("")}</tr>`).join("");
   async function renderFollow() {
     const [y, m] = ym($("#fMonth").value); note("#fMsg");
@@ -454,6 +454,10 @@
     fRows = a.data || []; fExec = ex.data === true;
     const tot = fRows.find(r => r.grp === "รวม") || { planned: 0, done: 0, waiting_sign: 0, not_done: 0, abnormal: 0 };
     $("#fTitle").textContent = `ตารางติดตามแผน PM ${H.name} ${monthLabel($("#fMonth").value)}`;
+    const nMach = equip.length, nPlan = equip.filter(e => (e.pm_months || []).length).length;
+    $("#fDashT").textContent = `ภาพรวม ${SCN} ${monthLabel($("#fMonth").value)}`;
+    $("#fDash").innerHTML = kpis([["จำนวนเครื่องจักรและอุปกรณ์", nMach.toLocaleString()], ["วางแผน (เดือนนี้)", tot.planned], ["เสร็จจริง", tot.done], ["งานค้างรายเดือน", Math.max(0, (tot.planned || 0) - (tot.done || 0)), 1], ["งานค้างสะสม (ตั้งแต่ต้นปี)", Math.max(0, (tot.ytd_planned || 0) - (tot.ytd_done || 0)), 1], ["อุปกรณ์ที่ไม่พร้อมใช้", tot.abnormal, 1]]);
+    $("#fDashN").textContent = `เครื่องทั้งหมดในส่วน ${SCN} ${nMach.toLocaleString()} เครื่อง มีแผน PM ${nPlan.toLocaleString()} เครื่อง · งานค้าง = แผน ลบ งานที่เสร็จและอนุมัติครบ · อุปกรณ์ที่ไม่พร้อมใช้ = เครื่องที่ผลตรวจ PM เดือนนี้พบผิดปกติ`;
     $("#fKpi").innerHTML = kpis([["แผนเดือนนี้ (เครื่อง)", tot.planned], ["เสร็จและอนุมัติ", tot.done], ["รอเซ็น", tot.waiting_sign], ["ยังไม่ทำ", tot.not_done, 1], ["พบผิดปกติ (ใบ)", tot.abnormal, 1], ["% เสร็จ", tot.pct == null ? "-" : tot.pct + "%"], ["% สะสมทั้งปี", tot.ytd_pct == null ? "-" : tot.ytd_pct + "%"]]);
     const late = fRows.filter(r => r.grp !== "รวม" && r.not_done > 0).sort((x, z) => z.not_done - x.not_done);
     $("#fSum").innerHTML = !tot.planned ? '<div class="empty">เดือนนี้ยังไม่มีเครื่องในแผน PM นำเข้าแผนได้ที่แท็บ “ทะเบียน &amp; แผนปี”</div>'
