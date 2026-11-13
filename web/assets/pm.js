@@ -571,6 +571,10 @@
   const mpYearCE = () => ceYear($("#mpYear").value) || new Date().getFullYear();
   const mpList = () => { const q = $("#mpQ").value.trim().toLowerCase(), sy = $("#mpSys").value, b = $("#mpB").value;
     return planSort(equip.filter(e => (e.pm_months || []).length && (!q || [e.tag, e.name, where(e)].join(" ").toLowerCase().includes(q)) && (!sy || grpOf(e) === sy) && (!b || e.building === b))); };
+  // PM MA: one contractor name in the plan = one contract; blank names are listed last and not counted as a contract
+  const conRows = l => { const m = new Map();
+    l.forEach(e => { const k = (e.pm_vendor || "").trim().replace(/\s+/g, " "), key = k.toLowerCase(); if (!m.has(key)) m.set(key, { name: k, n: 0, v: 0, g: new Set() }); const c = m.get(key); c.n++; c.v += Object.keys(gridOf(e)).length; c.g.add(grpOf(e)); });
+    return [...m.values()].map(c => ({ ...c, g: [...c.g].sort() })).sort((a, b) => !a.name - !b.name || b.n - a.n || a.name.localeCompare(b.name, "th")); };
   function renderPlan() {
     if (!$("#mpYear").value) { const py = (equip.find(e => e.pm_year) || {}).pm_year; $("#mpYear").value = (py || new Date().getFullYear()) + 543; }
     const planned = equip.filter(e => (e.pm_months || []).length), opt = (id, all, vals) => { const cur = $(id).value; $(id).innerHTML = `<option value="">${all}</option>` + vals.map(v => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`).join(""); };
@@ -579,6 +583,10 @@
     $("#mpTitle").textContent = `PM Master Plan ${SCN} ปี ${y + 543} · ${H.name}`;
     $("#mpSub").textContent = SC === "MA" ? "แผน PM ทั้งปีของเครื่องที่ผู้รับเหมา (MA) เป็นผู้ทำ ตามคอลัมน์ MAINTAIN BY ใน Master Plan" : "แผน PM ทั้งปีของเครื่องที่ทีม TW ทำเอง ตามคอลัมน์ MAINTAIN BY ใน Master Plan";
     $("#mpKpi").innerHTML = kpis([["เครื่องในแผน " + SCN, l.length.toLocaleString()], ["จำนวนครั้งตามแผนทั้งปี", visits.toLocaleString()], ["เครื่องที่ยังไม่มีแผน", (equip.length - planned.length).toLocaleString()], [SC === "MA" ? "เครื่องในแผน PM Inhouse (ดูอีกเมนู)" : "เครื่องในแผน PM MA (ดูอีกเมนู)", other.toLocaleString()]]);
+    const con = conRows(l), nCon = con.filter(c => c.name).length, noCon = con.find(c => !c.name);
+    $("#mpCon").innerHTML = SC === "MA" && l.length ? `<div class="panel"><h3 style="margin:0 0 4px">สรุปสัญญา MA ตามแผนที่วาง ปี ${y + 543}</h3><p class="meta">นับจากคอลัมน์ CONTRACTOR ใน Master Plan · 1 ผู้รับเหมา = 1 สัญญา · ${nCon.toLocaleString()} สัญญา · ${l.length.toLocaleString()} เครื่อง${noCon ? ` · ยังไม่ระบุผู้รับเหมา ${noCon.n.toLocaleString()} เครื่อง` : ""}</p><div class="scroll"><table><tr><th>#</th><th>สัญญา / ผู้รับเหมา</th><th style="text-align:right">จำนวนอุปกรณ์</th><th style="text-align:right">จำนวนครั้งตามแผนทั้งปี</th><th>ระบบ / กลุ่ม</th></tr>` +
+      con.map((c, i) => `<tr><td>${c.name ? i + 1 : ""}</td><td>${c.name ? esc(c.name) : "<i>ยังไม่ระบุผู้รับเหมา (ช่อง CONTRACTOR ว่าง)</i>"}</td><td style="text-align:right">${c.n.toLocaleString()}</td><td style="text-align:right">${c.v.toLocaleString()}</td><td class="meta">${esc(c.g.slice(0, 4).join(", "))}${c.g.length > 4 ? ` และอีก ${c.g.length - 4}` : ""}</td></tr>`).join("") +
+      `<tr style="font-weight:700;background:#eef3f8"><td></td><td>รวม ${nCon.toLocaleString()} สัญญา</td><td style="text-align:right">${l.length.toLocaleString()}</td><td style="text-align:right">${visits.toLocaleString()}</td><td></td></tr></table></div></div>` : "";
     const th = TH_M.map(m => `<th colspan="4" style="text-align:center">${m}</th>`).join("");
     let g = null;
     $("#mpTable").innerHTML = l.length ? `<table class="mp"><tr><th rowspan="2">TAG</th><th rowspan="2">ชื่อเครื่อง</th><th rowspan="2">ที่ตั้ง</th>${th}<th rowspan="2">ผู้ทำ</th><th rowspan="2">ผู้รับเหมา</th></tr><tr>${[...Array(48)].map((_, i) => `<th style="padding:2px 3px;font-weight:400">${(i % 4) + 1}</th>`).join("")}</tr>` +
@@ -591,7 +599,11 @@
   document.addEventListener("click", e => { if (e.target.id === "mpAll") { mpLimit += 500; renderPlan(); } });
   $("#mpPrint").onclick = () => window.print();
   $("#mpXlsx").onclick = () => { const y = mpYearCE(), l = mpList();
-    Office.xlsx(`PM_${H.code}_${y + 543}_${SC === "MA" ? "PM-MA" : "PM-Inhouse"}`, [{ name: "PM_Plan", rows: planRows(l, y, SCN), styles: { 0: 2, 1: 3, 2: 1, 3: 1 } }]); };
+    Office.xlsx(`PM_${H.code}_${y + 543}_${SC === "MA" ? "PM-MA" : "PM-Inhouse"}`, [{ name: "PM_Plan", rows: planRows(l, y, SCN), styles: { 0: 2, 1: 3, 2: 1, 3: 1 } }].concat(SC === "MA" ? [conSheet(l, y)] : [])); };
+  const conSheet = (l, y) => { const con = conRows(l), nCon = con.filter(c => c.name).length;
+    return { name: "สรุปสัญญา MA", rows: [[`สรุปสัญญา MA ตามแผนที่วาง ปี ${y + 543} · ${H.name}`], ["ลำดับ", "สัญญา / ผู้รับเหมา", "จำนวนอุปกรณ์", "จำนวนครั้งตามแผนทั้งปี", "ระบบ / กลุ่ม"],
+      ...con.map((c, i) => [c.name ? i + 1 : "", c.name || "ยังไม่ระบุผู้รับเหมา (ช่อง CONTRACTOR ว่าง)", c.n, c.v, c.g.join(", ")]),
+      ["", `รวม ${nCon} สัญญา`, l.length, l.reduce((s, e) => s + Object.keys(gridOf(e)).length, 0), ""]], styles: { 0: 2, 1: 1 } }; };
 
   /* ---------- QR stickers ---------- */
   const tagUrl = e => { const u = new URL("pm.html", location.href); u.search = ""; u.searchParams.set("h", H.code); u.searchParams.set("tag", e.tag); return u.toString(); };
