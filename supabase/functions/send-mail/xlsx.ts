@@ -1,4 +1,5 @@
 // Small .xlsx writer (stored zip, inline strings) and the two PM attachments. Plain JavaScript on purpose: no dependencies.
+// @ts-nocheck
 const enc = new TextEncoder();
 const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 const crc32 = (b) => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
@@ -44,16 +45,20 @@ const TH_M = ["มกราคม", "กุมภาพันธ์", "มีน
 const gridOf = (e) => e.pm_grid && Object.keys(e.pm_grid).length ? e.pm_grid : Object.fromEntries((e.pm_months || []).map((m) => [(m - 1) * 4 + (e.pm_week || 1), e.pm_freq || "M"]));
 const grpOf = (e) => e.pm_group || e.system || e.eq_type || "อื่น ๆ";
 
-// yearly master plan in the same layout as the import template (sheet PM_Plan)
-export function masterPlan(code, year, equip) {
+// yearly master plan in the same layout as the import template, in two parts by MAINTAIN BY: PM Inhouse (TW) and PM MA (contractor)
+const isMA = (e) => e.pm_by === "MA" || /MA/i.test(e.pm_by_raw || "");
+function planSheet(name, label, code, year, equip) {
   const wk = [...Array(48)].map((_, i) => (i % 4) + 1), mh = MONTHS.flatMap((m) => [m, "", "", ""]);
   const list = equip.filter((e) => e.tag).sort((a, b) => (a.system || "").localeCompare(b.system || "") || grpOf(a).localeCompare(grpOf(b)) || a.tag.localeCompare(b.tag));
-  const rows = [["MASTER PLAN PREVENTIVE MAINTENANCE"], [`PROJECT :  ${code}    ปี ${year + 543}`], ["NO.", "MACHINE NAME", "MACHINE TAG", "LOCATION", "BUILDING", "FLOOR", "PERIODES", ...mh, "SYSTEM", "MAINTAIN BY (TW/MA)", "CONTRACTOR / VENDOR"], ["", "", "", "", "", "", "", ...wk.map(String)]];
+  const rows = [["MASTER PLAN PREVENTIVE MAINTENANCE : " + label], [`PROJECT :  ${code}    ปี ${year + 543}`], ["NO.", "MACHINE NAME", "MACHINE TAG", "LOCATION", "BUILDING", "FLOOR", "PERIODES", ...mh, "SYSTEM", "MAINTAIN BY (TW/MA)", "CONTRACTOR / VENDOR"], ["", "", "", "", "", "", "", ...wk.map(String)]];
   const bold = [0, 1, 2, 3]; let g = null, n = 0;
   for (const e of list) { if (grpOf(e) !== g) { g = grpOf(e); bold.push(rows.length); rows.push([g]); }
     const grid = gridOf(e);
-    rows.push([++n, e.name, e.tag, e.place || "", e.building || "", e.floor || "", [...new Set(Object.values(grid))].join("/"), ...wk.map((_, i) => grid[i + 1] || ""), e.system || "", e.pm_by || "TW", e.pm_vendor || ""]); }
-  return xlsx([{ name: "PM_Plan", rows, bold, widths: [6, 38, 22, 28, 10, 8, 10, ...Array(48).fill(4), 16, 12, 22] }]);
+    rows.push([++n, e.name, e.tag, e.place || "", e.building || "", e.floor || "", [...new Set(Object.values(grid))].join("/"), ...wk.map((_, i) => grid[i + 1] || ""), e.system || "", e.pm_by_raw || e.pm_by || "TW", e.pm_vendor || ""]); }
+  return { name, rows, bold, widths: [6, 38, 22, 28, 10, 8, 10, ...Array(48).fill(4), 16, 12, 22] };
+}
+export function masterPlan(code, year, equip) {
+  return xlsx([planSheet("PM Inhouse (TW)", "PM Inhouse (TW)", code, year, equip.filter((e) => e.pm_by !== "MA")), planSheet("PM MA", "PM MA", code, year, equip.filter(isMA))]);
 }
 
 // monthly PM results: summary by system and every planned machine of the month with its status

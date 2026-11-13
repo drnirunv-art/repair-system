@@ -21,7 +21,7 @@ async function attachment(r: any) {
   const a = r.attach; if (!a?.kind) return [];
   const { data: h, error } = await db.from("hospitals").select("code,name").eq("id", r.hospital_id).single();
   if (error) throw new Error(error.message);
-  const equip = await all((f) => db.from("equipment").select("id,name,tag,place,building,floor,system,eq_type,pm_group,pm_by,pm_vendor,pm_grid,pm_months,pm_week,pm_freq")
+  const equip = await all((f) => db.from("equipment").select("id,name,tag,place,building,floor,system,eq_type,pm_group,pm_by,pm_by_raw,pm_vendor,pm_grid,pm_months,pm_week,pm_freq")
     .eq("hospital_id", r.hospital_id).eq("active", true).order("tag").range(f, f + 999));
   const type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   if (a.kind === "pm_master_plan") return [{ filename: `PM_${h.code}_${a.year + 543}.xlsx`, content: Buffer.from(masterPlan(h.code, a.year, equip.filter((e) => (e.pm_months ?? []).length))), contentType: type }];

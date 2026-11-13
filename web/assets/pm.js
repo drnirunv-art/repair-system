@@ -5,13 +5,13 @@
   const MANAGER = ["owner", "admin", "chief_engineer", "supervisor"];
   const HEAD = ["owner", "admin", "chief_engineer", "supervisor", "senior_technician"];
   const ENG = ["owner", "admin", "chief_engineer"];
-  const TABS = ["work", "sign", "result", "follow", "reg", "qr", "tpl"];
+  const TABS = ["work", "sign", "result", "plan", "follow", "reg", "qr", "tpl"];
   const ST = { todo: "ยังไม่ตรวจ", submitted: "ช่างส่งแล้ว รอหัวหน้า 2/3", head_signed: "รอวิศวกร 3/3", approved: "อนุมัติครบ 3/3", returned: "ถูกส่งกลับ ให้แก้" };
   const STC = { todo: "register", submitted: "assign", head_signed: "work_on", approved: "close", returned: "on_hold" };
   const LV = { ok: "ปกติ", wear: "เริ่มเสื่อม", bad: "ผิดปกติ" };
   const FREQ = { M: "รายเดือน", Q: "ราย 3 เดือน", H: "ราย 6 เดือน", Y: "รายปี" };
   const TH_M = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-  let me = null, H = null, staff = [], equip = [], tpls = [], tasks = [], channel = null, week = 0, stat = "open", cur = null, scannedTag = null, editId = null, regLimit = 200;
+  let me = null, H = null, staff = [], equipAll = [], equip = [], tpls = [], tasks = [], channel = null, week = 0, stat = "open", cur = null, scannedTag = null, editId = null, regLimit = 200;
   const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
   const role = () => me && me.role;
   const isMgr = () => MANAGER.includes(role()), isHead = () => HEAD.includes(role()), isEng = () => ENG.includes(role());
@@ -41,6 +41,11 @@
 
   /* ---------- boot ---------- */
   const q0 = new URLSearchParams(location.search);
+  // scope of the page: PM Inhouse = machines maintained by TW, PM MA = machines maintained by a contractor ("TW/MA" in the template shows in both)
+  const SC = (q0.get("by") || "").toUpperCase() === "MA" ? "MA" : "TW", SCN = SC === "MA" ? "PM MA" : "PM Inhouse";
+  const inScope = e => SC === "MA" ? (e.pm_by === "MA" || /MA/i.test(e.pm_by_raw || "")) : e.pm_by !== "MA";
+  $("#scTag").textContent = SCN; $("#sc" + SC).classList.add("primary"); document.title = SCN + " บำรุงรักษาตามแผน | Repair System";
+  $("#scNote").textContent = SC === "MA" ? "แสดงเฉพาะเครื่องที่ MAINTAIN BY = MA (ผู้รับเหมา)" : "แสดงเฉพาะเครื่องที่ MAINTAIN BY = TW";
   scannedTag = q0.get("tag");
   if (q0.get("h")) $("#gateLink").href = "staff.html?h=" + encodeURIComponent(q0.get("h"));
   sb.auth.onAuthStateChange((_e, session) => setTimeout(() => boot(session), 0));
@@ -51,7 +56,7 @@
     me = data;
     if (!me || !me.hospital_id) { $("#gate").hidden = false; return; }
     H = me.hospitals; $("#gate").hidden = true;
-    $("#title").textContent = "PM Inhouse บำรุงรักษาตามแผน · " + H.name; $("#who").textContent = me.full_name || session.user.email;
+    $("#title").textContent = SCN + " บำรุงรักษาตามแผน · " + H.name; $("#who").textContent = me.full_name || session.user.email;
     await Promise.all([loadStaff(), loadEquip(), loadTpls()]);
     document.querySelectorAll("[data-manager]").forEach(b => b.hidden = !isMgr());
     $("#signTab").hidden = !isHead();
@@ -72,14 +77,14 @@
       if (r.error) { toast(errText(r.error)); break; }
       out.push(...r.data); if (r.data.length < 1000) break;
     }
-    equip = out;
+    equipAll = out; equip = out.filter(inScope);
   }
   const loadTpls = async () => { const r = await sb.from("pm_templates").select("*"); tpls = r.data || []; };
   async function loadTasks(v) {
     const [y, m] = ym(v);
     const r = await sb.from("pm_tasks").select("*").eq("hospital_id", H.id).eq("year", y).eq("month", m);
     if (r.error) { toast(errText(r.error)); return []; }
-    return r.data || [];
+    const ok = new Set(equip.map(e => e.id)); return (r.data || []).filter(t => ok.has(t.equipment_id));
   }
   function fillFilters() {
     const uniq = f => [...new Set(equip.map(f).filter(Boolean))].sort((a, b) => a.localeCompare(b, "th"));
@@ -98,7 +103,7 @@
     document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
     [...TABS, "sheet"].forEach(x => $("#tab-" + x).hidden = x !== t);
     store.set("rs-pm-tab", t);
-    ({ work: renderWork, sign: renderSign, result: renderResult, follow: renderFollow, reg: renderReg, qr: renderQr, tpl: renderTpl })[t]();
+    ({ work: renderWork, sign: renderSign, result: renderResult, plan: renderPlan, follow: renderFollow, reg: renderReg, qr: renderQr, tpl: renderTpl })[t]();
   }
   ["#wMonth", "#sMonth", "#rMonth", "#gMonth", "#fMonth"].forEach(s => $(s).value = today().slice(0, 7));
   $("#wMonth").onchange = () => renderWork(); $("#wQ").oninput = () => renderWork(true);
@@ -106,7 +111,8 @@
   async function signCount() {
     if (!isHead()) return;
     const need = isEng() ? ["submitted", "head_signed"] : ["submitted"];
-    const { count } = await sb.from("pm_tasks").select("id", { count: "exact", head: true }).eq("hospital_id", H.id).in("status", need);
+    const { data } = await sb.from("pm_tasks").select("equipment_id").eq("hospital_id", H.id).in("status", need);
+    const ok = new Set(equip.map(e => e.id)), count = (data || []).filter(t => ok.has(t.equipment_id)).length;
     $("#signN").textContent = count ? `(${count})` : "";
   }
 
@@ -381,7 +387,7 @@
   };
   $("#eCsv").onclick = () => csv(`ทะเบียนPM-${H.code}`, ["TAG", "ชื่อเครื่อง", "ชนิด", "อาคาร", "ชั้น", "ที่ตั้ง", "ความถี่", "เดือนที่เริ่ม", "สัปดาห์", "ผู้ทำ", "เดือนในแผน", "รหัสเดิม", "ระบบ"],
     regList().map(e => [e.tag, e.name, e.eq_type, e.building, e.floor, e.place, e.pm_freq, (e.pm_months || [])[0] || "", e.pm_week, e.pm_by, (e.pm_months || []).join(" "), e.code, e.system]));
-  $("#iTpl").onclick = () => csvFile("แบบฟอร์มนำเข้าแผนPM.csv", ["TAG", "ชื่อเครื่อง", "ชนิด", "อาคาร", "ชั้น", "ที่ตั้ง", "ความถี่", "เดือนที่เริ่ม", "สัปดาห์", "ผู้ทำ"], [["A-EEL-1-001", "ไฟฉุกเฉิน ทางออก", "ทั่วไป", "A", "1", "หน้าลิฟต์", "M", 1, 1, "TW"]]);
+  $("#iTpl").onclick = () => Office.xlsx("แบบฟอร์มนำเข้าแผนPM", [{ name: "แผน PM", header: 0, rows: [["TAG", "ชื่อเครื่อง", "ชนิด", "อาคาร", "ชั้น", "ที่ตั้ง", "ความถี่", "เดือนที่เริ่ม", "สัปดาห์", "ผู้ทำ"], ["A-EEL-1-001", "ไฟฉุกเฉิน ทางออก", "ทั่วไป", "A", "1", "หน้าลิฟต์", "M", 1, 1, "TW"]] }]);
 
   // CSV import with preview and warnings; confirmed rows update by TAG or add new equipment
   let imp = [];
@@ -397,7 +403,10 @@
   }
   $("#iFile").onchange = async ev => {
     const f = ev.target.files[0]; if (!f) return;
-    const rows = parseCsv((await f.text()).replace(/^﻿/, ""));
+    let rows;
+    const sig = new Uint8Array(await f.slice(0, 2).arrayBuffer());
+    if (/\.xlsx$/i.test(f.name) || (sig[0] === 0x50 && sig[1] === 0x4b)) { try { rows = Object.values(await Office.readXlsx(f))[0].map(r => [...r].map(c => cellS(c))).filter(r => r.some(x => x.trim())); } catch (err) { $("#iPrev").innerHTML = `<div class="note bad">อ่านไฟล์ Excel ไม่ได้: ${esc(err.message || err)}</div>`; return; } }
+    else rows = parseCsv((await f.text()).replace(/^﻿/, ""));
     if (rows.length && /tag/i.test(rows[0][0])) rows.shift();
     const seen = {};
     imp = rows.map((r, n) => {
@@ -407,7 +416,7 @@
       if (tag && seen[tag.toUpperCase()]) w.push("TAG ซ้ำในไฟล์"); seen[(tag || "").toUpperCase()] = 1;
       const s = +start || 1; if (start && !(s >= 1 && s <= 12)) w.push("เดือนเริ่มไม่ถูก");
       const type0 = type || ""; if (type0 && !tpls.some(t => t.eq_type === type0)) w.push("ชนิดนี้ยังไม่มี check sheet (ใช้แบบทั่วไป)");
-      const ex = equip.find(e => tag && (e.tag || "").toUpperCase() === tag.toUpperCase());
+      const ex = equipAll.find(e => tag && (e.tag || "").toUpperCase() === tag.toUpperCase());
       return { n: n + 1, ex, w, ok: tag && name && !w.some(x => /ไม่มี|ซ้ำ|อ่านไม่ได้|ไม่ถูก/.test(x)),
         row: { tag, name, eq_type: type0 || null, building: b || null, floor: fl || null, place: place || null, pm_freq: FREQ[F] ? F : null, pm_months: FREQ[F] ? monthsFor(F, s) : [], pm_week: Math.min(4, Math.max(1, +wk || 1)), pm_by: (by || "TW").toUpperCase() === "MA" ? "MA" : "TW" } };
     });
@@ -440,7 +449,7 @@
   const fTable = (head, rows, bold) => `<tr>${head.map((h, i) => `<th${i ? ' class="num"' : ""}>${h}</th>`).join("")}</tr>` + rows.map(r => `<tr${bold(r) ? ' style="font-weight:700"' : ""}>${r.map((v, i) => `<td${i ? ' class="num"' : ""}>${esc(v ?? "")}</td>`).join("")}</tr>`).join("");
   async function renderFollow() {
     const [y, m] = ym($("#fMonth").value); note("#fMsg");
-    const [a, ex] = await Promise.all([sb.rpc("pm_followup", { p_year: y, p_month: m }), sb.rpc("am_exec")]);
+    const [a, ex] = await Promise.all([sb.rpc("pm_followup_by", { p_year: y, p_month: m, p_by: SC }), sb.rpc("am_exec")]);
     if (a.error) return note("#fMsg", a.error);
     fRows = a.data || []; fExec = ex.data === true;
     const tot = fRows.find(r => r.grp === "รวม") || { planned: 0, done: 0, waiting_sign: 0, not_done: 0, abnormal: 0 };
@@ -451,7 +460,7 @@
       : `<b>บทสรุปผู้บริหาร:</b> แผนเดือนนี้ ${tot.planned} เครื่อง ทำเสร็จและอนุมัติแล้ว ${tot.done} เครื่อง (${tot.pct}%) รอเซ็น ${tot.waiting_sign} ยังไม่ทำ ${tot.not_done}${late.length ? ` · ระบบที่ค้างมากที่สุด: ${late.slice(0, 3).map(r => `${esc(r.grp)} ${r.not_done}`).join(", ")}` : " · ไม่มีระบบที่ค้าง"}${tot.abnormal ? ` · พบผิดปกติ ${tot.abnormal} ใบ ควรเปิดใบแจ้งซ่อมตาม` : ""}`;
     $("#fTable").innerHTML = fTable(fHead, fRows.map(r => [r.grp, ...fLine(r)]), r => r[0] === "รวม");
     $("#fAllBox").hidden = !fExec;
-    if (fExec) { const b = await sb.rpc("pm_followup_all", { p_year: y, p_month: m }); fAll = b.data || [];
+    if (fExec) { const b = await sb.rpc("pm_followup_all_by", { p_year: y, p_month: m, p_by: SC }); fAll = b.data || [];
       $("#fAll").innerHTML = b.error ? "" : fTable(["โรงพยาบาล", "เครื่องในแผน PM", ...fHead.slice(1)], fAll.map(r => [`${r.code} ${r.name}`, r.machines, ...fLine({ ...r, planned: r.planned ?? 0, done: r.done ?? 0, waiting_sign: r.waiting_sign ?? 0, not_done: r.not_done ?? 0, abnormal: r.abnormal ?? 0, ytd_planned: r.ytd_planned ?? 0, ytd_done: r.ytd_done ?? 0 })]), () => false); }
     if (fExec && !fHosp.length) { fHosp = (await sb.from("hospitals").select("id,code,name").order("code")).data || []; $("#fHosp").innerHTML = fHosp.map(x => `<option value="${x.id}"${x.id === H.id ? " selected" : ""}>${esc(x.code)} ${esc(x.name)}</option>`).join(""); }
     $("#fHospL").hidden = !fExec; if (fExec) $("#fRcpBox").hidden = false;
@@ -514,7 +523,7 @@
       if (be) $("#xYear").value = be; else { const ce = +(/(20\d\d)/.exec(proj) || [])[1]; if (ce) $("#xYear").value = ce + 543; }
       const fh = code && xHosp.find(h => h.code.toUpperCase() === code.toUpperCase()); if (fh) $("#xHosp").value = fh.id;
       xRows = parsePlan(sheet);
-      const other = xH().id !== H.id, have = new Set(equip.map(e => (e.tag || "").toUpperCase())), marks = {}, cnt = t => xRows.filter(x => x.w.some(y => y.startsWith(t))).length;
+      const other = xH().id !== H.id, have = new Set(equipAll.map(e => (e.tag || "").toUpperCase())), marks = {}, cnt = t => xRows.filter(x => x.w.some(y => y.startsWith(t))).length;
       xRows.forEach(x => Object.values(x.row.grid).forEach(v => marks[v] = (marks[v] || 0) + 1));
       const up = xRows.filter(x => have.has(x.row.tag.toUpperCase())).length, wrong = code && code.toUpperCase() !== xH().code.toUpperCase();
       $("#xPrev").innerHTML = `${wrong ? `<div class="note bad">ไฟล์นี้เป็นของ ${esc(code)} แต่กำลังจะนำเข้าให้ ${esc(xH().code)} ตรวจให้แน่ใจก่อนนำเข้า</div>` : ""}${other ? `<div class="note">นำเข้าให้ ${esc(xH().code)} ${esc(xH().name)} (ปี พ.ศ. ${ceYear($("#xYear").value) + 543})</div>` : ""}<div class="kpis" style="margin-top:12px">${kpis([["เครื่องในไฟล์", xRows.length], ["ปรับแผนเครื่องเดิม", other ? "-" : up], ["เพิ่มเครื่องใหม่", other ? "-" : xRows.length - up], ["ไม่มีแผนในปีนี้", cnt("ไม่มีแผน")], ["TAG ซ้ำในไฟล์", cnt("TAG ซ้ำ")], ["ไม่มี TAG", cnt("ไม่มี TAG")]])}</div>
@@ -541,17 +550,48 @@
     } catch (err) { note("#xMsg", err); e.target.disabled = false; e.target.textContent = "ลองนำเข้าอีกครั้ง"; }
     await loadEquip(); fillFilters(); renderReg();
   });
-  // the current register in the same template, ready to edit for next year and upload again
-  $("#xTpl").onclick = () => {
-    const y = ceYear($("#xYear").value) || new Date().getFullYear(), wk = [...Array(48)].map((_, i) => (i % 4) + 1), mh = MONTHS.flatMap(m => [m, "", "", ""]);
-    const list = equip.filter(e => e.tag).sort((a, b) => (a.system || "").localeCompare(b.system || "") || (a.pm_group || "").localeCompare(b.pm_group || "") || a.tag.localeCompare(b.tag));
-    const rows = [["MASTER PLAN PREVENTIVE MAINTENANCE"], [`PROJECT :  ${H.code}    ปี ${y + 543}`], ["NO.", "MACHINE NAME", "MACHINE TAG", "LOCATION", "BUILDING", "FLOOR", "PERIODES", ...mh, "SYSTEM", "MAINTAIN BY (TW/MA)", "CONTRACTOR / VENDOR"], ["", "", "", "", "", "", "", ...wk]];
+  // master plan rows in the template layout (also the file to edit for next year and upload again)
+  const gridOf = e => e.pm_grid && Object.keys(e.pm_grid).length ? e.pm_grid : Object.fromEntries((e.pm_months || []).map(m => [(m - 1) * 4 + (e.pm_week || 1), e.pm_freq || "M"]));
+  const grpOf = e => e.pm_group || e.system || e.eq_type || "อื่น ๆ";
+  const planSort = l => [...l].sort((a, b) => (a.system || "").localeCompare(b.system || "") || grpOf(a).localeCompare(grpOf(b)) || String(a.tag).localeCompare(String(b.tag)));
+  function planRows(list, y, label) {
+    const wk = [...Array(48)].map((_, i) => (i % 4) + 1), mh = MONTHS.flatMap(m => [m, "", "", ""]);
+    const rows = [["MASTER PLAN PREVENTIVE MAINTENANCE" + (label ? " : " + label : "")], [`PROJECT :  ${H.code}    ปี ${y + 543}`], ["NO.", "MACHINE NAME", "MACHINE TAG", "LOCATION", "BUILDING", "FLOOR", "PERIODES", ...mh, "SYSTEM", "MAINTAIN BY (TW/MA)", "CONTRACTOR / VENDOR"], ["", "", "", "", "", "", "", ...wk]];
     let g = null, n = 0;
-    list.forEach(e => { const grp = e.pm_group || e.system || e.eq_type || "อื่น ๆ"; if (grp !== g) { rows.push([grp]); g = grp; }
-      const grid = e.pm_grid && Object.keys(e.pm_grid).length ? e.pm_grid : Object.fromEntries((e.pm_months || []).map(m => [(m - 1) * 4 + (e.pm_week || 1), e.pm_freq || "M"]));
-      rows.push([++n, e.name, e.tag, e.place || "", e.building || "", e.floor || "", [...new Set(Object.values(grid))].join("/"), ...wk.map((_, i) => grid[i + 1] || ""), e.system || "", e.pm_by || "TW", e.pm_vendor || ""]); });
-    Office.xlsx(`PM_${H.code}_${y + 543}`, [{ name: "PM_Plan", rows, styles: { 0: 2, 1: 3, 2: 1, 3: 1 } }, { name: "วิธีใช้", rows: [["วิธีใช้ Template นี้"], ["1. แก้ไขได้เฉพาะแผ่นงาน PM_Plan ห้ามลบหรือย้ายคอลัมน์ และคงหัวตารางแถวที่ 3 ไว้"], ["2. หนึ่งแถวคือหนึ่งเครื่อง MACHINE TAG ต้องไม่ซ้ำกัน เครื่องใหม่ให้เพิ่มแถวและตั้ง TAG ใหม่"], ["3. ใส่ตัวอักษรแผนในช่องสัปดาห์ที่ต้องทำ: M รายเดือน, Q ราย 3 เดือน, S ราย 6 เดือน, Y รายปี (ใช้ตัวอื่นเช่น W, 2M ได้)"], ["4. MAINTAIN BY ใส่ TW หรือ MA"], ["5. บันทึกเป็น .xlsx แล้วอัปโหลดที่หน้า PM Inhouse > ทะเบียนเครื่อง > นำเข้าแผน PM ทั้งปีจากไฟล์ Excel"], ["6. เครื่องที่ไม่อยู่ในไฟล์จะไม่ถูกลบออกจากระบบ"]], styles: { 0: 2 } }]);
-  };
+    planSort(list).forEach(e => { if (grpOf(e) !== g) { g = grpOf(e); rows.push([g]); } const grid = gridOf(e);
+      rows.push([++n, e.name, e.tag, e.place || "", e.building || "", e.floor || "", [...new Set(Object.values(grid))].join("/"), ...wk.map((_, i) => grid[i + 1] || ""), e.system || "", e.pm_by_raw || e.pm_by || "TW", e.pm_vendor || ""]); });
+    return rows;
+  }
+  const HOWTO = { name: "วิธีใช้", rows: [["วิธีใช้ Template นี้"], ["1. แก้ไขได้เฉพาะแผ่นงาน PM_Plan ห้ามลบหรือย้ายคอลัมน์ และคงหัวตารางแถวที่ 3 ไว้"], ["2. หนึ่งแถวคือหนึ่งเครื่อง MACHINE TAG ต้องไม่ซ้ำกัน เครื่องใหม่ให้เพิ่มแถวและตั้ง TAG ใหม่"], ["3. ใส่ตัวอักษรแผนในช่องสัปดาห์ที่ต้องทำ: M รายเดือน, Q ราย 3 เดือน, S ราย 6 เดือน, Y รายปี (ใช้ตัวอื่นเช่น W, 2M ได้)"], ["4. MAINTAIN BY ใส่ TW หรือ MA"], ["5. บันทึกเป็น .xlsx แล้วอัปโหลดที่หน้า PM Inhouse > ทะเบียนเครื่อง > นำเข้าแผน PM ทั้งปีจากไฟล์ Excel"], ["6. เครื่องที่ไม่อยู่ในไฟล์จะไม่ถูกลบออกจากระบบ"]], styles: { 0: 2 } };
+  $("#xTpl").onclick = () => { const y = ceYear($("#xYear").value) || new Date().getFullYear();
+    Office.xlsx(`PM_${H.code}_${y + 543}`, [{ name: "PM_Plan", rows: planRows(equipAll.filter(e => e.tag), y), styles: { 0: 2, 1: 3, 2: 1, 3: 1 } }, HOWTO]); };
+
+  /* ---------- Master Plan view: the year's plan of this scope (PM Inhouse = TW, PM MA = contractor) ---------- */
+  let mpLimit = 150;
+  const mpYearCE = () => ceYear($("#mpYear").value) || new Date().getFullYear();
+  const mpList = () => { const q = $("#mpQ").value.trim().toLowerCase(), sy = $("#mpSys").value, b = $("#mpB").value;
+    return planSort(equip.filter(e => (e.pm_months || []).length && (!q || [e.tag, e.name, where(e)].join(" ").toLowerCase().includes(q)) && (!sy || grpOf(e) === sy) && (!b || e.building === b))); };
+  function renderPlan() {
+    if (!$("#mpYear").value) { const py = (equip.find(e => e.pm_year) || {}).pm_year; $("#mpYear").value = (py || new Date().getFullYear()) + 543; }
+    const planned = equip.filter(e => (e.pm_months || []).length), opt = (id, all, vals) => { const cur = $(id).value; $(id).innerHTML = `<option value="">${all}</option>` + vals.map(v => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`).join(""); };
+    opt("#mpSys", "ทุกระบบ / กลุ่ม", [...new Set(planned.map(grpOf))].sort((a, b) => a.localeCompare(b, "th"))); opt("#mpB", "ทุกอาคาร", [...new Set(planned.map(e => e.building).filter(Boolean))].sort());
+    const l = mpList(), y = mpYearCE(), visits = l.reduce((s, e) => s + Object.keys(gridOf(e)).length, 0), other = equipAll.filter(e => (SC === "MA" ? e.pm_by !== "MA" : (e.pm_by === "MA" || /MA/i.test(e.pm_by_raw || ""))) && (e.pm_months || []).length).length;
+    $("#mpTitle").textContent = `PM Master Plan ${SCN} ปี ${y + 543} · ${H.name}`;
+    $("#mpSub").textContent = SC === "MA" ? "แผน PM ทั้งปีของเครื่องที่ผู้รับเหมา (MA) เป็นผู้ทำ ตามคอลัมน์ MAINTAIN BY ใน Master Plan" : "แผน PM ทั้งปีของเครื่องที่ทีม TW ทำเอง ตามคอลัมน์ MAINTAIN BY ใน Master Plan";
+    $("#mpKpi").innerHTML = kpis([["เครื่องในแผน " + SCN, l.length.toLocaleString()], ["จำนวนครั้งตามแผนทั้งปี", visits.toLocaleString()], ["เครื่องที่ยังไม่มีแผน", (equip.length - planned.length).toLocaleString()], [SC === "MA" ? "เครื่องในแผน PM Inhouse (ดูอีกเมนู)" : "เครื่องในแผน PM MA (ดูอีกเมนู)", other.toLocaleString()]]);
+    const th = TH_M.map(m => `<th colspan="4" style="text-align:center">${m}</th>`).join("");
+    let g = null;
+    $("#mpTable").innerHTML = l.length ? `<table class="mp"><tr><th rowspan="2">TAG</th><th rowspan="2">ชื่อเครื่อง</th><th rowspan="2">ที่ตั้ง</th>${th}<th rowspan="2">ผู้ทำ</th><th rowspan="2">ผู้รับเหมา</th></tr><tr>${[...Array(48)].map((_, i) => `<th style="padding:2px 3px;font-weight:400">${(i % 4) + 1}</th>`).join("")}</tr>` +
+      l.slice(0, mpLimit).map(e => { const grid = gridOf(e), head = grpOf(e) !== g ? `<tr><td colspan="53" style="background:#eef3f8;font-weight:600">${esc(g = grpOf(e))}</td></tr>` : "";
+        return head + `<tr><td class="mono">${esc(e.tag || "-")}</td><td>${esc(e.name)}</td><td>${esc(where(e))}</td>${[...Array(48)].map((_, i) => `<td style="padding:2px 3px;text-align:center${grid[i + 1] ? ";background:#dcebdc;font-weight:600" : ""}">${esc(grid[i + 1] || "")}</td>`).join("")}<td>${esc(e.pm_by_raw || e.pm_by || "TW")}</td><td>${esc(e.pm_vendor || "")}</td></tr>`; }).join("") + "</table>"
+      : `<div class="empty">ยังไม่มีแผน ${SCN} ของปีนี้ นำเข้าไฟล์ Master Plan ได้ที่แท็บ “ทะเบียน & แผนปี”</div>`;
+    $("#mpMore").innerHTML = l.length > mpLimit ? `<div class="row noprint" style="margin-top:10px"><span class="meta">แสดง ${mpLimit} จาก ${l.length.toLocaleString()} เครื่อง (ไฟล์ Excel มีครบทุกเครื่อง)</span><button class="btn small" type="button" id="mpAll">แสดงเพิ่ม 500 เครื่อง</button></div>` : "";
+  }
+  $("#mpQ").oninput = $("#mpSys").onchange = $("#mpB").onchange = $("#mpYear").onchange = () => { mpLimit = 150; renderPlan(); };
+  document.addEventListener("click", e => { if (e.target.id === "mpAll") { mpLimit += 500; renderPlan(); } });
+  $("#mpPrint").onclick = () => window.print();
+  $("#mpXlsx").onclick = () => { const y = mpYearCE(), l = mpList();
+    Office.xlsx(`PM_${H.code}_${y + 543}_${SC === "MA" ? "PM-MA" : "PM-Inhouse"}`, [{ name: "PM_Plan", rows: planRows(l, y, SCN), styles: { 0: 2, 1: 3, 2: 1, 3: 1 } }]); };
 
   /* ---------- QR stickers ---------- */
   const tagUrl = e => { const u = new URL("pm.html", location.href); u.search = ""; u.searchParams.set("h", H.code); u.searchParams.set("tag", e.tag); return u.toString(); };
@@ -564,7 +604,7 @@
     $("#qGrid").classList.toggle("pick", qSel.size > 0);
     $("#qInfo").textContent = `${qSel.size ? "เลือกไว้ " + qSel.size + " ดวง · " : ""}${l.length} ดวง${l.length > 300 ? " (แสดง 300 ดวงแรก กรองเพิ่มเพื่อพิมพ์ทีละชุด)" : ""}${noTag ? ` · มี ${noTag} เครื่องที่ยังไม่มี TAG จึงยังพิมพ์ไม่ได้` : ""}`;
     $("#qGrid").innerHTML = l.slice(0, 300).map(e => { const q = qrcode(0, "M"); q.addData(tagUrl(e)); q.make();
-      return `<div data-q="${e.id}" class="${qSel.has(e.id) ? "sel" : ""}"><small>${esc(H.name)} · PM Inhouse</small><img src="${q.createDataURL(4, 2)}" alt="QR ${esc(e.tag)}"><b>${esc(e.tag)}</b><small>${esc(e.name)}</small><small>${esc(where(e))}</small></div>`; }).join("") || '<div class="empty">ไม่มีเครื่องที่มี TAG ตามตัวกรอง</div>';
+      return `<div data-q="${e.id}" class="${qSel.has(e.id) ? "sel" : ""}"><small>${esc(H.name)} · ${SCN}</small><img src="${q.createDataURL(4, 2)}" alt="QR ${esc(e.tag)}"><b>${esc(e.tag)}</b><small>${esc(e.name)}</small><small>${esc(where(e))}</small></div>`; }).join("") || '<div class="empty">ไม่มีเครื่องที่มี TAG ตามตัวกรอง</div>';
   }
   ["#qB", "#qF", "#qT"].forEach(s => $(s).onchange = renderQr);
   $("#qQ").oninput = renderQr;

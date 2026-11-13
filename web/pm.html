@@ -27,12 +27,14 @@
 </head>
 <body>
 <header><div class="wrap">
-  <div class="top"><span class="tag">PM Inhouse</span><h1 id="title">บำรุงรักษาตามแผน (PM Inhouse)</h1>
+  <div class="top"><span class="tag" id="scTag">PM Inhouse</span><h1 id="title">บำรุงรักษาตามแผน (PM Inhouse)</h1>
     <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าใบงาน</a></div></div>
+  <div class="row noprint" id="scBar" style="margin:0 0 10px;gap:8px"><a class="btn small" id="scTW" href="pm.html">PM Inhouse (ทีม TW ทำเอง)</a><a class="btn small" id="scMA" href="pm.html?by=MA">PM MA (ผู้รับเหมา)</a><span class="meta" id="scNote" style="align-self:center"></span></div>
   <nav role="tablist" id="tabs" hidden>
     <button role="tab" data-tab="work" aria-selected="true">งานเดือนนี้</button>
     <button role="tab" data-tab="sign" aria-selected="false" id="signTab">รอเซ็น <b id="signN"></b></button>
     <button role="tab" data-tab="result" aria-selected="false">ตรวจผล &amp; สรุป</button>
+    <button role="tab" data-tab="plan" aria-selected="false">Master Plan</button>
     <button role="tab" data-tab="follow" aria-selected="false">ติดตามแผน</button>
     <button role="tab" data-tab="reg" aria-selected="false">ทะเบียน &amp; แผนปี</button>
     <button role="tab" data-tab="qr" aria-selected="false">สติกเกอร์ QR</button>
@@ -80,6 +82,13 @@
     <div class="scroll"><table id="rTable"></table></div>
   </section>
 
+  <section id="tab-plan" hidden>
+    <h2 id="mpTitle" style="margin:0 0 4px">PM Master Plan</h2>
+    <p class="sub noprint" id="mpSub"></p>
+    <div class="filters noprint"><label>ปี (พ.ศ.)<input id="mpYear" type="number" min="2567" max="2643" style="width:100px"></label><input id="mpQ" placeholder="ค้นหา TAG ชื่อ ที่ตั้ง"><select id="mpSys"></select><select id="mpB"></select><button class="btn" type="button" id="mpXlsx">ดาวน์โหลด Excel (รูปแบบ Template)</button><button class="btn" type="button" id="mpPrint">พิมพ์ / PDF</button></div>
+    <div class="kpis" id="mpKpi"></div>
+    <div class="scroll" id="mpTable" style="margin-top:12px"></div><div id="mpMore"></div>
+  </section>
   <section id="tab-follow" hidden>
     <h2 class="noprint">ตารางติดตามแผน PM</h2>
     <p class="sub noprint">เทียบแผน PM ของเดือนกับงานที่ทำเสร็จ แยกตามระบบ ระบบส่งผลงาน PM รายเดือนทาง email (แนบไฟล์ Excel) ให้ผู้รับของโรงพยาบาลอัตโนมัติทุกวันที่ 20 เวลา 08:00 น. และวันที่ 20 ธันวาคมของทุกปี ส่ง Master Plan PM ทั้งปี (ไฟล์ Excel รูปแบบ Template) เพิ่มอีก 1 ฉบับ</p>
@@ -109,9 +118,9 @@
       <p class="meta" style="margin-top:10px">ใช้ไฟล์ Excel รูปแบบ Master Plan (แผ่นงาน PM_Plan: NO. · MACHINE NAME · MACHINE TAG · LOCATION · BUILDING · FLOOR · PERIODES · 12 เดือน เดือนละ 4 สัปดาห์ · SYSTEM · MAINTAIN BY · CONTRACTOR) ใส่ตัวอักษรแผน เช่น M Q S Y ในช่องสัปดาห์ที่ต้องทำ · เครื่องที่ TAG ตรงกับทะเบียนจะถูกปรับแผน เครื่องใหม่จะถูกเพิ่ม เครื่องเดิมที่ไม่อยู่ในไฟล์ไม่ถูกลบ</p>
       <div class="row"><label id="xHospL" hidden>นำเข้าให้โรงพยาบาล<select id="xHosp"></select></label><label>แผนของปี (พ.ศ.)<input id="xYear" type="number" min="2567" max="2643" style="width:110px"></label><input id="xFile" type="file" accept=".xlsx" style="align-self:end"><button class="btn small" type="button" id="xTpl" style="align-self:end">ดาวน์โหลดแผนปัจจุบันเป็น Template</button></div>
       <div id="xPrev"></div><div id="xMsg"></div></details>
-    <details class="panel noprint" data-manager hidden style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">นำเข้าแบบย่อจากไฟล์ CSV (เครื่องละ 1 ความถี่)</summary>
-      <p class="meta" style="margin-top:10px">บันทึกไฟล์ Excel เป็น CSV (UTF-8) คอลัมน์ตามลำดับ: TAG, ชื่อเครื่อง, ชนิด, อาคาร, ชั้น, ที่ตั้ง, ความถี่ (M/Q/H/Y), เดือนที่เริ่ม (1–12), สัปดาห์ (1–4), ผู้ทำ (TW/MA) · แถวที่ TAG ตรงกับทะเบียนจะอัปเดต แถวใหม่จะเพิ่มเครื่อง</p>
-      <div class="row"><button class="btn small" type="button" id="iTpl">ดาวน์โหลดแบบฟอร์ม CSV</button><input id="iFile" type="file" accept=".csv,text/csv"></div>
+    <details class="panel noprint" data-manager hidden style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">นำเข้าแบบย่อจากไฟล์ Excel (เครื่องละ 1 ความถี่)</summary>
+      <p class="meta" style="margin-top:10px">ใช้ไฟล์ Excel (.xlsx) ตามแบบฟอร์ม แผ่นงานแรก แถวแรกเป็นหัวตาราง คอลัมน์ตามลำดับ: TAG, ชื่อเครื่อง, ชนิด, อาคาร, ชั้น, ที่ตั้ง, ความถี่ (M/Q/H/Y), เดือนที่เริ่ม (1–12), สัปดาห์ (1–4), ผู้ทำ (TW/MA) · แถวที่ TAG ตรงกับทะเบียนจะอัปเดต แถวใหม่จะเพิ่มเครื่อง</p>
+      <div class="row"><button class="btn small" type="button" id="iTpl">ดาวน์โหลดแบบฟอร์ม Excel</button><input id="iFile" type="file" accept=".xlsx,.csv"></div>
       <div id="iPrev"></div></details>
     <div class="filters noprint"><input id="eQ" placeholder="ค้นหา TAG ชื่อ ที่ตั้ง"><select id="eT"></select><select id="eB"></select><select id="eP"><option value="">ทุกเครื่อง</option><option value="plan">อยู่ในแผน PM</option><option value="noplan">ยังไม่มีแผน</option><option value="notag">ยังไม่มี TAG</option></select><button class="btn" type="button" id="eCsv">ดาวน์โหลดทะเบียน (Excel)</button></div>
     <div id="eEdit"></div>
