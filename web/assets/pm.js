@@ -176,16 +176,29 @@
   $("#wScanFile").onchange = async ev => {
     const f = ev.target.files[0]; ev.target.value = ""; if (!f) return;
     try {
-      const bmp = await createImageBitmap(f), sc = Math.min(1, 1200 / Math.max(bmp.width, bmp.height));
-      const c = Object.assign(document.createElement("canvas"), { width: Math.round(bmp.width * sc), height: Math.round(bmp.height * sc) });
-      const ctx = c.getContext("2d"); ctx.drawImage(bmp, 0, 0, c.width, c.height);
-      const img = ctx.getImageData(0, 0, c.width, c.height), code = window.jsQR && jsQR(img.data, c.width, c.height);
-      if (!code) return toast("อ่าน QR ไม่ได้ ถ่ายใหม่ให้ QR อยู่กลางภาพและชัด");
+      const code = await readQR(await createImageBitmap(f));
+      if (!code) return toast("อ่าน QR ไม่ได้ ถ่ายใหม่ให้ QR อยู่กลางภาพ เต็มกรอบประมาณครึ่งจอ และไม่เบลอ หรือพิมพ์ TAG ในช่องค้นหาแทน");
       let tag = code.data;
       try { tag = new URL(code.data).searchParams.get("tag") || tag; } catch {}
       openByTag(tag, true);
     } catch (err) { toast(errText(err)); }
   };
+  // read a QR from a photo: the phone's own reader first (Android Chrome), then jsQR at several sizes and centre crops
+  async function readQR(bmp) {
+    if ("BarcodeDetector" in window) {
+      try { const r = await new BarcodeDetector({ formats: ["qr_code"] }).detect(bmp); if (r && r[0]) return { data: r[0].rawValue }; } catch {}
+    }
+    if (!window.jsQR) return null;
+    const W = bmp.width, H0 = bmp.height;
+    for (const [crop, max] of [[1, 1000], [0.6, 1000], [1, 1600], [0.5, 2000], [1, 700], [0.3, 1300]]) {
+      const cw = W * crop, ch = H0 * crop, sx = (W - cw) / 2, sy = (H0 - ch) / 2, sc = Math.min(1, max / Math.max(cw, ch));
+      const c = Object.assign(document.createElement("canvas"), { width: Math.round(cw * sc), height: Math.round(ch * sc) });
+      const ctx = c.getContext("2d", { willReadFrequently: true }); ctx.drawImage(bmp, sx, sy, cw, ch, 0, 0, c.width, c.height);
+      const code = jsQR(ctx.getImageData(0, 0, c.width, c.height).data, c.width, c.height, { inversionAttempts: "attemptBoth" });
+      if (code && code.data) return code;
+    }
+    return null;
+  }
   async function openByTag(tag, scanned) {
     const e = equip.find(x => (x.tag || "").toUpperCase() === String(tag).toUpperCase());
     if (!e) { show("work"); return toast(`ไม่พบเครื่อง TAG ${tag} ในทะเบียนของ ${H.name}`); }
