@@ -96,7 +96,7 @@ window.Office = (() => {
   let lib;
   const loadPptx = () => lib || (lib = new Promise((ok, bad) => { if (window.PptxGenJS) return ok();
     const s = document.createElement("script"); s.src = "assets/vendor/pptxgen.bundle.js"; s.onload = ok; s.onerror = () => { lib = null; bad(new Error("โหลดตัวสร้าง PowerPoint ไม่สำเร็จ ลองใหม่อีกครั้ง")); }; document.head.appendChild(s); }));
-  // deck: { title, org, period, findings: [], notes: [], kpis: [[label, value]], sections: [{ title, head, rows, chart: true|false, note }] }
+  // deck: { title, org, period, findings: [], analysis: [], notes: [], kpis: [[label, value]], sections: [{ title, head, rows, chart: true|false, note }] }
   async function pptx(name, d) {
     await loadPptx();
     const p = new window.PptxGenJS(); p.layout = "LAYOUT_WIDE"; const F = "Tahoma", INK = "1F2A37", ACC = "0B5CAD", MUT = "5B6776";
@@ -113,6 +113,7 @@ window.Office = (() => {
         s.addShape(p.ShapeType.roundRect, { x: cx, y: cy, w: 2.9, h: 1.55, fill: { color: "F4F7FB" }, line: { color: "D5DEE9" }, rectRadius: 0.08 });
         s.addText(String(v), { x: cx + 0.15, y: cy + 0.15, w: 2.6, h: 0.75, fontFace: F, fontSize: 26, bold: true, color: ACC });
         s.addText(String(k), { x: cx + 0.15, y: cy + 0.9, w: 2.6, h: 0.5, fontFace: F, fontSize: 12, color: MUT }); }); foot(s, ++n); }
+    if ((d.analysis || []).length) { s = p.addSlide(); head(s, "บทวิเคราะห์"); bullets(s, d.analysis.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
     (d.sections || []).filter(x => x.rows && x.rows.length).forEach(sec => { s = p.addSlide(); head(s, sec.title);
       const rows = sec.rows.slice(0, 12), withChart = sec.chart !== false && rows.length > 1 && rows.every(r => isNum(r[1]));
       const tw = withChart ? 6.2 : 12.3, cw = sec.head.map((_, i) => i ? (tw * 0.5) / Math.max(1, sec.head.length - 1) : tw * 0.5);

@@ -525,13 +525,28 @@
     if (ytdBack && tot.ytd_pct != null && tot.ytd_pct < TARGET) notes.push(`งานสะสมทั้งปียังต่ำกว่าเป้า KPI ${TARGET}% (${tot.ytd_pct}%) ควรวางแผนทำงานค้าง ${N(ytdBack)} ครั้งเพิ่มในเดือนถัดไป`);
     if (allMode) { const none = rows.filter(r => !+r.planned); if (none.length) notes.push(`${none.map(r => r.code || r.grp).join(", ")} ยังไม่มีงานตามแผนเดือนนี้ ควรตรวจว่านำเข้าแผน PM ครบแล้วหรือไม่`); }
     if (!notes.length) notes.push("ผลงานเป็นไปตามแผน ไม่มีรายการที่ต้องติดตามเป็นพิเศษ");
+    // analysis: gap to the TOR KPI target, where the backlog comes from, concentration, month vs year trend, quality, KPI score risk
+    const ana = [], need = r => Math.max(0, Math.ceil(+r.planned * TARGET / 100) - (+r.done || 0)), gap = [...live].filter(r => need(r) > 0).sort((a, b) => need(b) - need(a));
+    if (tot.planned) {
+      const tp = tot.pct ?? pc(tot.done, tot.planned), nt = need(tot);
+      ana.push(nt ? `ช่องว่างถึงเป้า KPI: ต้องทำเสร็จและอนุมัติเพิ่มอีก ${N(nt)} เครื่อง ภาพรวมจึงจะถึง ${TARGET}% (ตอนนี้ ${tp}%)` : `ภาพรวมผ่านเป้า KPI ${TARGET}% แล้ว (${tp}%) เหลือรักษาระดับให้ถึงสิ้นเดือน`);
+      if (back) { const ws = Math.round((+tot.waiting_sign || 0) * 100 / back), nd = 100 - ws;
+        ana.push(`สาเหตุของงานค้าง: ${ws}% เป็นงานที่ทำแล้วแต่รอเซ็น และ ${nd}% ยังไม่ได้ลงมือทำ ${ws >= 50 ? "คอขวดหลักจึงอยู่ที่ขั้นตอนเอกสารและการอนุมัติ แก้ได้เร็วโดยเร่งการเซ็น" : "คอขวดหลักจึงอยู่ที่หน้างาน (กำลังคน เวลาเข้าพื้นที่ หรือผู้รับเหมา) ไม่ใช่เอกสาร"}`); }
+      if (gap.length) ana.push(`${unit}ที่ต้องเร่งเพื่อให้ถึงเป้ามากที่สุด: ${gap.slice(0, 3).map(r => `${r.grp} ต้องเพิ่ม ${N(need(r))} เครื่อง`).join(", ")}`);
+      if (lag.length > 3 && +tot.not_done) { const k = 3, top = lag.slice(0, k).reduce((a, r) => a + (+r.not_done || 0), 0);
+        ana.push(`งานที่ยังไม่ทำกระจุกตัว: ${k} ${unit}แรกรวมกัน ${Math.round(top * 100 / tot.not_done)}% ของงานที่ยังไม่ทำทั้งหมด ${top * 100 / tot.not_done >= 60 ? "แก้ที่จุดเหล่านี้จะได้ผลมากที่สุด" : "ปัญหากระจายหลายจุด ควรดูการวางแผนงานภาพรวม"}`); }
+      if (tot.ytd_pct != null) { const d = tp - tot.ytd_pct; ana.push(`แนวโน้ม: เดือนนี้ ${tp}% เทียบสะสมทั้งปี ${tot.ytd_pct}% ${d > 2 ? `ดีขึ้นกว่าค่าเฉลี่ยทั้งปี ${d} จุด` : d < -2 ? `ต่ำกว่าค่าเฉลี่ยทั้งปี ${-d} จุด ผลงานกำลังลดลง` : "ใกล้เคียงค่าเฉลี่ยทั้งปี"}`); }
+      if (+tot.done) ana.push(`คุณภาพ: พบผิดปกติ ${N(tot.abnormal)} ใบ จากงานที่เสร็จ ${N(tot.done)} เครื่อง (${Math.round((+tot.abnormal || 0) * 1000 / tot.done) / 10}%) ${+tot.abnormal ? "ทุกใบต้องมีใบแจ้งซ่อมติดตามจนปิดงาน" : "ไม่มีเครื่องที่ต้องตามซ่อม"}`);
+      ana.push(`ผลต่อ KPI ตาม TOR: ถ้า PM ไม่ถึง ${TARGET}% จะเสียคะแนนข้อ PM ซึ่งรวมกับข้ออื่นเป็นคะแนน KPI รายเดือน คะแนนรวม 90 ขึ้นไปไม่หักค่าบริการ 80–89 หัก 3% 70–79 หัก 5% 60–69 หัก 7% ต่ำกว่า 60 หัก 10%`);
+    }
     const name = r => r.grp, sections = [
       { title: `อัตราทำเสร็จเดือน${ml} แยกราย${unit}`, head: [allMode ? "โรงพยาบาล" : "ระบบ", "% เสร็จ", "แผน (เครื่อง)", "เสร็จและอนุมัติ"], rows: [...live].sort((a, b) => pc(b.done, b.planned) - pc(a.done, a.planned)).map(r => [name(r), pc(r.done, r.planned), N(r.planned), N(r.done)]),
         note: live.length > 12 ? `แสดง 12 จาก ${live.length} ${unit} ดูครบในไฟล์ Excel` : `เป้า KPI ตาม TOR: PM ทำได้ ≥${TARGET}% ของแผน` },
       { title: `งานค้างเดือน${ml} แยกราย${unit}`, head: [allMode ? "โรงพยาบาล" : "ระบบ", "ยังไม่ทำ", "รอเซ็น", "พบผิดปกติ (ใบ)"], rows: lag.map(r => [name(r), +r.not_done, N(r.waiting_sign), N(r.abnormal)]), note: lag.length ? "" : "ไม่มีงานค้าง" },
+      { title: `ช่องว่างถึงเป้า KPI ${TARGET}% แยกราย${unit}`, head: [allMode ? "โรงพยาบาล" : "ระบบ", "ต้องทำเพิ่ม (เครื่อง)", "% ตอนนี้", "แผน (เครื่อง)"], rows: gap.map(r => [name(r), need(r), pc(r.done, r.planned) + "%", N(r.planned)]), note: gap.length ? "จำนวนเครื่องที่ต้องทำเสร็จและอนุมัติเพิ่ม เพื่อให้แต่ละรายการถึงเป้า" : "" },
       { title: "ผลงานสะสมตั้งแต่ต้นปี", head: [allMode ? "โรงพยาบาล" : "ระบบ", "% สะสม", "แผนสะสม (ครั้ง)", "ทำแล้วสะสม"], rows: rows.filter(r => +r.ytd_planned > 0).sort((a, b) => pc(b.ytd_done, b.ytd_planned) - pc(a.ytd_done, a.ytd_planned)).map(r => [name(r), pc(r.ytd_done, r.ytd_planned), N(r.ytd_planned), N(r.ytd_done)]) }];
     return { title: `บทสรุปผู้บริหาร ติดตามแผน ${SCN}`, org: HN(), period: `เดือน${ml}`, file: `บทสรุปผู้บริหาร_ติดตามแผน_${SC === "MA" ? "PM-MA" : "PM-Inhouse"}_${allMode ? "12โรง" : H.code}_${$("#fMonth").value}`,
-      findings: find, notes, sections, kpis: [["แผนเดือนนี้ (เครื่อง)", N(tot.planned)], ["เสร็จและอนุมัติ", N(tot.done)], ["% เสร็จ", tot.pct == null ? "-" : tot.pct + "%"], ["งานค้างเดือนนี้", N(back)], ["รอเซ็น", N(tot.waiting_sign)], ["ยังไม่ทำ", N(tot.not_done)], ["พบผิดปกติ (ใบ)", N(tot.abnormal)], ["% สะสมทั้งปี", tot.ytd_pct == null ? "-" : tot.ytd_pct + "%"], ["เป้า KPI ตาม TOR", "≥" + TARGET + "%"]] };
+      findings: find, analysis: ana, notes, sections, kpis: [["แผนเดือนนี้ (เครื่อง)", N(tot.planned)], ["เสร็จและอนุมัติ", N(tot.done)], ["% เสร็จ", tot.pct == null ? "-" : tot.pct + "%"], ["งานค้างเดือนนี้", N(back)], ["รอเซ็น", N(tot.waiting_sign)], ["ยังไม่ทำ", N(tot.not_done)], ["พบผิดปกติ (ใบ)", N(tot.abnormal)], ["% สะสมทั้งปี", tot.ytd_pct == null ? "-" : tot.ytd_pct + "%"], ["เป้า KPI ตาม TOR", "≥" + TARGET + "%"]] };
   }
   $("#fPpt").onclick = async ev => { const b = ev.currentTarget, t = b.textContent, rep = fReport(); b.disabled = true; b.textContent = "กำลังสร้างไฟล์…";
     try { await Office.pptx(rep.file, rep); } catch (e) { toast(e.message || String(e)); } b.disabled = false; b.textContent = t; };
