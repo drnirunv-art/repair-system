@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>PM MA 12 โรงพยาบาล | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .st{display:inline-block;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700;white-space:nowrap;color:#111}
+  .st.ok{background:#9be3b0}.st.soon{background:#ffd98a}.st.exp{background:#ffb3ad}.st.nod{background:#dfe3e8}.st.can{background:#cfcfcf;text-decoration:line-through}.st.od{background:#ffc38a}
+  td.r,th.r{text-align:right}td.c,th.c{text-align:center}
+  tr.click{cursor:pointer}tr.click:hover td{background:#f3f7fb}
+  td.zero{background:#ffe9e7;color:#a11;font-weight:700}td.has{background:#e7f7ec;font-weight:700}
+  .steps span{display:inline-block;margin-right:8px;white-space:nowrap}.steps .y{color:#0a7a35;font-weight:700}.steps .n{color:#8a94a0}
+  dialog.form{border:0;border-radius:14px;padding:0;width:min(720px,94vw);max-height:92vh;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  dialog.form::backdrop{background:rgba(10,20,30,.45)}
+  dialog.form .in{padding:18px 20px}
+  dialog.form h3{margin:0 0 4px}
+  .fg{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin:12px 0}
+  .fg label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+  .fg label.w{grid-column:1/-1}
+  .fg input,.fg select,.fg textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:inherit;background:#fff}
+  .dl{display:grid;grid-template-columns:150px 1fr;gap:4px 12px;margin:10px 0;font-size:14px}.dl dt{color:var(--muted)}.dl dd{margin:0}
+  .hsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+  .hsel select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:240px}
+  h3.sec{margin:22px 0 6px}
+  @media (max-width:640px){.fg{grid-template-columns:1fr}.dl{grid-template-columns:1fr}.dl dt{margin-top:6px}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">MA</span><h1 id="title">PM MA 12 โรงพยาบาล</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="pm.html?by=MA">Master Plan PM MA</a><a class="btn small" href="staff.html">← กลับหน้าเจ้าหน้าที่</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="sum" aria-selected="true">ภาพรวม</button>
+    <button role="tab" data-tab="reg" aria-selected="false">ทะเบียนสัญญา</button>
+    <button role="tab" data-tab="renew" aria-selected="false">ต่อสัญญา <b id="renewN"></b></button>
+    <button role="tab" data-tab="visit" aria-selected="false">การเข้า PM <b id="odN"></b></button>
+    <button role="tab" data-tab="bylaw" aria-selected="false">By-law</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <div id="body" hidden>
+    <p class="sub">ติดตามสัญญาจ้างบำรุงรักษา (MA) การต่อสัญญา และการเข้า PM ของผู้รับเหมา</p>
+    <div class="hsel"><label for="hSel">โรงพยาบาล</label><select id="hSel"></select><span class="meta" id="asOf"></span></div>
+
+    <section id="tab-sum" hidden>
+      <div class="kpis" id="sK"></div>
+      <div id="sExec"></div>
+      <div class="filters"><button class="btn" type="button" id="sX">Excel</button><button class="btn" type="button" id="sP">บทสรุปผู้บริหาร (PPT)</button></div>
+      <h3 class="sec">สถานะสัญญา MA รายโรงพยาบาล</h3>
+      <p class="meta">แตะแถวเพื่อเปิดทะเบียนสัญญาของโรงนั้น</p>
+      <div class="scroll"><table id="sT"></table></div>
+      <h3 class="sec">จำนวนสัญญาแยกตามกลุ่มงาน</h3>
+      <div class="scroll"><table id="sG"></table></div>
+    </section>
+
+    <section id="tab-reg" hidden>
+      <div class="kpis" id="rK"></div>
+      <div class="filters"><input id="rQ" placeholder="ค้นหา ระบบ ขอบเขตงาน ผู้รับเหมา"><select id="rG"></select><select id="rS"><option value="">ทุกสถานะ</option><option>ยังมีผล</option><option>ใกล้หมด</option><option>หมดอายุแล้ว</option><option>ยังไม่มีวันที่</option><option>ยกเลิก</option></select>
+        <button class="btn primary" type="button" id="rAdd" hidden>+ เพิ่มสัญญา</button><button class="btn" type="button" id="rImp" hidden>นำเข้าจาก Excel</button><button class="btn" type="button" id="rTpl">แบบฟอร์ม Excel</button><button class="btn" type="button" id="rX">Excel</button><input type="file" id="rFile" accept=".xlsx" hidden></div>
+      <div id="rMsg"></div>
+      <div id="rN" class="meta"></div>
+      <div class="scroll"><table id="rT"></table></div>
+    </section>
+
+    <section id="tab-renew" hidden>
+      <div class="kpis" id="nK"></div>
+      <p class="meta">ขั้นตอนต่อสัญญา: 1) ออก PR 2) ขอใบเสนอราคา 3 เจ้า 3) สรุปเปรียบเทียบเลือกผู้รับเหมา 4) ออก PO · ระบบเริ่มเตือนเมื่อสัญญาเหลือไม่เกิน 90 วัน และหยุดเตือนเมื่อบันทึก PO แล้ว</p>
+      <div class="filters"><button class="btn" type="button" id="nX">Excel</button></div>
+      <div class="scroll"><table id="nT"></table></div>
+    </section>
+
+    <section id="tab-visit" hidden>
+      <div class="kpis" id="vK"></div>
+      <div class="filters"><button class="btn" type="button" id="vX">Excel</button></div>
+      <h3 class="sec">ผู้รับเหมาที่ขาดรอบ PM ตามสัญญา</h3>
+      <div class="scroll"><table id="vO"></table></div>
+      <h3 class="sec">ถึงกำหนดเข้า PM ใน 14 วันข้างหน้า ที่ผู้รับเหมายังไม่ยืนยัน</h3>
+      <div class="scroll"><table id="vU"></table></div>
+      <h3 class="sec">บันทึกการเข้า PM ล่าสุด</h3>
+      <div class="scroll"><table id="vL"></table></div>
+    </section>
+
+    <section id="tab-bylaw" hidden>
+      <p class="sub">กลุ่ม 1 By-law ตามกฎหมาย: จำนวนสัญญาต่อรายการของแต่ละโรง ช่องสีแดง (0) คือยังไม่พบสัญญาในทะเบียน ต้องตรวจสอบ</p>
+      <div class="filters"><button class="btn" type="button" id="bX">Excel</button></div>
+      <div class="scroll"><table id="bT"></table></div>
+    </section>
+  </div>
+</main>
+<dialog id="dlg" class="form"><div class="in" id="dlgIn"></div></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+<script src="assets/ma.js"></script>
+</body>
+</html>
