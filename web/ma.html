@@ -39,6 +39,7 @@
     <button role="tab" data-tab="renew" aria-selected="false">ต่อสัญญา <b id="renewN"></b></button>
     <button role="tab" data-tab="visit" aria-selected="false">การเข้า PM <b id="odN"></b></button>
     <button role="tab" data-tab="bylaw" aria-selected="false">By-law</button>
+    <button role="tab" data-tab="mail" aria-selected="false" id="mailTab" hidden>ผู้รับอีเมล</button>
   </nav>
 </div></header>
 <main class="wrap">
@@ -89,6 +90,17 @@
       <p class="sub">กลุ่ม 1 By-law ตามกฎหมาย: จำนวนสัญญาต่อรายการของแต่ละโรง ช่องสีแดง (0) คือยังไม่พบสัญญาในทะเบียน ต้องตรวจสอบ</p>
       <div class="filters"><button class="btn" type="button" id="bX">Excel</button></div>
       <div class="scroll"><table id="bT"></table></div>
+    </section>
+
+    <section id="tab-mail" hidden>
+      <p class="sub">รายชื่อผู้รับอีเมลอัตโนมัติของ PM MA ตั้งแยกรายโรง และตั้ง "ภาพรวม 12 โรง" สำหรับผู้บริหาร ติ๊กเลือกได้ว่าแต่ละคนรับอีเมลแบบไหน</p>
+      <div class="scroll"><table id="mInfo"><tr><th>อีเมล</th><th>ส่งเมื่อ</th><th>เนื้อหา</th></tr>
+        <tr><td>แจ้งเตือนต่อสัญญา</td><td>ทุกวันจันทร์ 08:00</td><td>สัญญาที่เหลือไม่เกิน 90 วันหรือหมดอายุแล้ว พร้อมขั้น PR → ใบเสนอราคา 3 เจ้า → สรุปเลือก → PO ที่ทำแล้ว (ส่งเฉพาะเมื่อมีรายการ)</td></tr>
+        <tr><td>รายงานประจำสัปดาห์</td><td>ทุกวันศุกร์ 16:00</td><td>การเข้า PM ของผู้รับเหมาในสัปดาห์นี้ ผู้รับเหมาที่ขาดรอบ และนัดหมายที่ยังไม่ยืนยันใน 14 วันข้างหน้า</td></tr>
+        <tr><td>รายงานประจำเดือน</td><td>ทุกวันที่ 23 เวลา 08:00</td><td>สรุปสัญญาและการเข้า PM ของเดือน พร้อมไฟล์ Excel (บทสรุปผู้บริหาร + รายละเอียดสัญญา)</td></tr></table></div>
+      <div class="filters"><button class="btn primary" type="button" id="mAdd">+ เพิ่มผู้รับอีเมล</button><button class="btn" type="button" id="mTest">ส่งอีเมลทดสอบถึงตัวเอง</button><button class="btn" type="button" id="mX">Excel</button></div>
+      <div id="mMsg"></div>
+      <div class="scroll"><table id="mT"></table></div>
     </section>
   </div>
 </main>

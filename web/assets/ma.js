@@ -10,7 +10,7 @@
   const FREQ = { W: 7, "2W": 14, M: 31, "2M": 62, Q: 92, "4M": 123, S: 183, Y: 366 }, FREQ_TH = { W: "ทุกสัปดาห์", "2W": "ทุก 2 สัปดาห์", M: "ทุกเดือน", "2M": "ทุก 2 เดือน", Q: "ทุก 3 เดือน", "4M": "ทุก 4 เดือน", S: "ทุก 6 เดือน", Y: "ปีละครั้ง" };
   const ALERT = 90, DAY = 86400000, MGR = ["owner", "admin", "chief_engineer", "supervisor"];
   const TODAY = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
-  let me = null, exec = false, hospitals = [], contracts = [], visits = [], appts = [], procs = [], plan = null, cur = "sum";
+  let me = null, exec = false, hospitals = [], contracts = [], visits = [], appts = [], procs = [], recips = [], recipErr = "", plan = null, cur = "sum";
 
   // ---------- dates (CE inside, พ.ศ. on screen) ----------
   const t = s => { const [y, m, d] = s.split("-"); return Date.UTC(+y, m - 1, +d); };
@@ -80,6 +80,7 @@
     $("#hSel").innerHTML = (exec ? `<option value="">ทุกโรงพยาบาล (${hospitals.length} โรง)</option>` : "") + hospitals.map(h => `<option value="${h.id}">${esc(h.code)} · ${esc(h.name)}</option>`).join("");
     const p = (new URLSearchParams(location.search).get("p") || "").toUpperCase(), hit = hospitals.find(h => h.code === p); if (hit) $("#hSel").value = hit.id;
     $("#asOf").textContent = "ข้อมูล ณ วันที่ " + th(TODAY);
+    $("#mailTab").hidden = !(exec || MGR.includes(me.role));
     await load(); $("#body").hidden = false; $("#tabs").hidden = false;
     show(new URLSearchParams(location.search).get("tab") || (hit ? "reg" : "sum"));
   }
@@ -88,18 +89,20 @@
     try { [contracts, visits, appts, procs] = await Promise.all(["ma_contracts", "ma_visits", "ma_appts", "ma_proc"].map(all)); }
     catch (e) { contracts = []; $("#rMsg").innerHTML = `<div class="note bad">${esc(errText(e))}</div>`; toast(errText(e)); }
     contracts.sort((a, b) => hCode(a.hospital_id).localeCompare(hCode(b.hospital_id)) || a.grp.localeCompare(b.grp) || a.sort - b.sort);
+    if (exec || MGR.includes(me.role)) { const r = await sb.from("ma_recipients").select("*").order("created_at"); recips = r.error ? [] : r.data; recipErr = r.error ? errText(r.error) : ""; }
     if (exec && !plan) { const [y, m] = TODAY.split("-"), r = await sb.rpc("pm_followup_all_by", { p_year: +y, p_month: +m, p_by: "MA" }); plan = r.error ? {} : Object.fromEntries((r.data || []).map(x => [x.code, x])); }
     compute();
   }
   document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => show(b.dataset.tab));
   $("#hSel").onchange = () => show(cur);
   function show(tab) {
-    cur = ["sum", "reg", "renew", "visit", "bylaw"].includes(tab) ? tab : "sum";
+    const tabs = ["sum", "reg", "renew", "visit", "bylaw"].concat($("#mailTab").hidden ? [] : ["mail"]);
+    cur = tabs.includes(tab) ? tab : "sum";
     document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === cur));
-    ["sum", "reg", "renew", "visit", "bylaw"].forEach(x => $("#tab-" + x).hidden = x !== cur);
+    ["sum", "reg", "renew", "visit", "bylaw", "mail"].forEach(x => $("#tab-" + x).hidden = x !== cur);
     const k = count(list()); $("#renewN").textContent = k.renew ? `(${k.renew})` : ""; $("#odN").textContent = k.od ? `(${k.od})` : "";
     $("#title").textContent = sel() ? "PM MA · " + hName(sel()) : "PM MA 12 โรงพยาบาล";
-    ({ sum: drawSum, reg: drawReg, renew: drawRenew, visit: drawVisit, bylaw: drawBylaw })[cur]();
+    ({ sum: drawSum, reg: drawReg, renew: drawRenew, visit: drawVisit, bylaw: drawBylaw, mail: drawMail })[cur]();
   }
   const kpis = (el, a) => $(el).innerHTML = a.map(([l, v, s]) => `<div class="kpi"><div class="num"${s ? ` style="color:${s}"` : ""}>${v}</div><div class="meta">${l}</div></div>`).join("");
   const shown = () => sel() ? hospitals.filter(h => h.id === sel()) : hospitals;
@@ -293,4 +296,50 @@
     $("#bT").innerHTML = `<tr><th>รหัส</th><th>โรงพยาบาล</th>${BYLAW.map(b => `<th class="c">${esc(b)}</th>`).join("")}</tr>` + d.map(r => `<tr><td><b>${esc(r[0])}</b></td><td>${esc(r[1])}</td>${r.slice(2).map(v => `<td class="c ${v ? "has" : "zero"}">${v}</td>`).join("")}</tr>`).join(""); }
   $("#bX").onclick = () => { const d = bylawData(), zero = d.reduce((s, r) => s + r.slice(2).filter(v => !v).length, 0);
     Office.table(`By-law_MA_${fileTag()}`, ["รหัสโรง", "โรงพยาบาล", ...BYLAW], d, { title: "กลุ่ม 1 By-law ตามกฎหมาย: จำนวนสัญญาต่อรายการ", org: scopeName(), period: "ข้อมูล ณ " + th(TODAY), findings: [`มี ${n(zero)} ช่อง (โรง × รายการ) ที่ยังไม่พบสัญญาในทะเบียน จากทั้งหมด ${n(d.length * BYLAW.length)} ช่อง`], notes: ["ช่องที่เป็น 0 อาจหมายถึงยังไม่ได้กรอกทะเบียน หรือยังไม่มีสัญญาจริง ควรตรวจกับแต่ละโรง"] }); };
+
+  // ---------- e-mail recipients (Monday renewal alert, Friday weekly report, monthly report on the 23rd) ----------
+  const KINDS = [["renew", "ต่อสัญญา"], ["weekly", "รายสัปดาห์"], ["monthly", "รายเดือน"]];
+  const canMail = hid => hid ? canEdit(hid) : exec;
+  const rName = hid => hid ? `${hCode(hid)} · ${hName(hid)}` : "ภาพรวม 12 โรง (ผู้บริหาร)";
+  const mailRows = () => recips.filter(r => !sel() || r.hospital_id === sel() || (!r.hospital_id && exec))
+    .sort((a, b) => (a.hospital_id ? hCode(a.hospital_id) : "") .localeCompare(b.hospital_id ? hCode(b.hospital_id) : "") || a.email.localeCompare(b.email));
+  function drawMail() {
+    $("#mMsg").innerHTML = recipErr ? `<div class="note bad">ยังเปิดรายชื่อผู้รับอีเมลไม่ได้: ${esc(recipErr)}</div>` : "";
+    const l = mailRows(), yes = v => v ? `<span class="st ok">รับ</span>` : `<span class="st nod">ไม่รับ</span>`;
+    $("#mT").innerHTML = `<tr><th>ส่งของ</th><th>ชื่อ</th><th>ตำแหน่ง</th><th>อีเมล</th>${KINDS.map(k => `<th class="c">${k[1]}</th>`).join("")}<th class="c">สถานะ</th><th>หมายเหตุ</th></tr>` +
+      (l.length ? l.map(r => `<tr class="click" data-id="${r.id}"><td>${esc(rName(r.hospital_id))}</td><td>${esc(r.name)}</td><td>${esc(r.position)}</td><td>${esc(r.email)}</td>${KINDS.map(k => `<td class="c">${yes(r[k[0]])}</td>`).join("")}<td class="c">${r.active ? '<span class="st ok">ใช้งาน</span>' : '<span class="st can">หยุดส่ง</span>'}</td><td>${esc(r.note)}</td></tr>`).join("")
+        : none(9, "ยังไม่มีผู้รับอีเมล กด + เพิ่มผู้รับอีเมล"));
+    document.querySelectorAll("#mT tr.click").forEach(tr => tr.onclick = () => fRecip(recips.find(x => x.id === tr.dataset.id)));
+  }
+  function fRecip(r) {
+    const isNew = !r.id, opts = (exec ? [null] : []).concat(hospitals.filter(h => canEdit(h.id)).map(h => h.id));
+    const ok = canMail(r.hospital_id);
+    form(`<h3>${isNew ? "เพิ่มผู้รับอีเมล" : "ผู้รับอีเมล"}</h3><div class="fg">
+      <label class="w">ส่งรายงานของ<select name="h"${isNew ? "" : " disabled"}>${opts.map(id => `<option value="${id || ""}"${(id || "") === (r.hospital_id || "") ? " selected" : ""}>${esc(rName(id))}</option>`).join("")}</select></label>
+      ${inp("ชื่อ", "name", r.name)}${inp("ตำแหน่ง", "pos", r.position)}${inp("อีเมล", "em", r.email, 'w type="email" required')}
+      ${KINDS.map(k => `<label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="${k[0]}" value="1"${r[k[0]] !== false ? " checked" : ""}> รับอีเมล${k[1]}</label>`).join("")}
+      <label>สถานะ<select name="act"><option value="1">ใช้งาน</option><option value=""${r.active === false ? " selected" : ""}>หยุดส่ง</option></select></label>
+      ${inp("หมายเหตุ", "note", r.note, "w")}</div>
+      ${!isNew && ok ? `<p><button class="btn" type="button" id="mDel" style="color:#a11">ลบผู้รับรายนี้</button></p>` : ""}`, ok ? "บันทึก" : "", async v => {
+      const em = (v.em || "").trim().toLowerCase(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) throw new Error("รูปแบบอีเมลไม่ถูกต้อง");
+      const hid = isNew ? (v.h || null) : r.hospital_id;
+      if (recips.some(x => x.id !== r.id && (x.hospital_id || "") === (hid || "") && x.email.toLowerCase() === em)) throw new Error("อีเมลนี้มีอยู่แล้วในรายชื่อของ " + rName(hid));
+      const row = { hospital_id: hid, name: v.name.trim(), position: v.pos.trim(), email: em, renew: !!v.renew, weekly: !!v.weekly, monthly: !!v.monthly, active: !!v.act, note: v.note.trim() };
+      const q = isNew ? await sb.from("ma_recipients").insert(row) : await sb.from("ma_recipients").update(row).eq("id", r.id); if (q.error) throw q.error; });
+    const d = $("#mDel"); if (d) d.onclick = async () => { if (!d.dataset.sure) { d.dataset.sure = 1; d.textContent = "กดอีกครั้งเพื่อยืนยันการลบ"; return; }
+      const q = await sb.from("ma_recipients").delete().eq("id", r.id); if (q.error) { $("#dlgE").innerHTML = `<div class="note bad">${esc(errText(q.error))}</div>`; return; }
+      $("#dlg").close(); await load(); show(cur); toast("ลบแล้ว"); };
+  }
+  $("#mAdd").onclick = () => fRecip({ hospital_id: sel() || (exec ? null : me.hospital_id), name: "", position: "", email: "", note: "" });
+  $("#mTest").onclick = () => { const hid = sel() || (exec ? null : me.hospital_id);
+    form(`<h3>ส่งอีเมลทดสอบถึงตัวเอง</h3><p class="sub">ระบบจะส่งอีเมลตัวอย่างของ ${esc(rName(hid))} ไปที่อีเมลของบัญชีที่เข้าสู่ระบบอยู่เท่านั้น ไม่ส่งถึงผู้รับในรายชื่อ</p>
+      <div class="fg"><label class="w">แบบอีเมล<select name="k">${KINDS.map(k => `<option value="${k[0]}">${k[0] === "renew" ? "แจ้งเตือนต่อสัญญา" : "รายงาน" + (k[0] === "weekly" ? "ประจำสัปดาห์" : "ประจำเดือน")}</option>`).join("")}</select></label></div>`, "ส่งทดสอบ", async v => {
+      const q = await sb.rpc("ma_mail_test", { p_kind: v.k, p_hospital: hid }); if (q.error) throw q.error;
+      if (!q.data) throw new Error("ไม่มีรายการที่ต้องแจ้งในอีเมลแบบนี้ตอนนี้ ระบบจึงไม่ได้ส่ง"); }); };
+  $("#mX").onclick = () => { const l = mailRows();
+    Office.table(`ผู้รับอีเมล_MA_${fileTag()}`, ["ส่งของ", "ชื่อ", "ตำแหน่ง", "อีเมล", ...KINDS.map(k => "รับ" + k[1]), "สถานะ", "หมายเหตุ"],
+      l.map(r => [rName(r.hospital_id), r.name, r.position, r.email, ...KINDS.map(k => r[k[0]] ? "รับ" : "ไม่รับ"), r.active ? "ใช้งาน" : "หยุดส่ง", r.note]),
+      { title: "รายชื่อผู้รับอีเมลอัตโนมัติ PM MA", org: scopeName(), period: "ข้อมูล ณ " + th(TODAY),
+        findings: [`ผู้รับอีเมลทั้งหมด ${n(l.length)} รายชื่อ ใช้งานอยู่ ${n(l.filter(r => r.active).length)} รายชื่อ`, ...KINDS.map(k => `รับอีเมล${k[1]} ${n(l.filter(r => r.active && r[k[0]]).length)} รายชื่อ`)],
+        notes: ["แจ้งเตือนต่อสัญญาส่งทุกวันจันทร์ 08:00 รายงานประจำสัปดาห์ส่งทุกวันศุกร์ 16:00 รายงานประจำเดือนส่งทุกวันที่ 23 เวลา 08:00"] }); };
 })();

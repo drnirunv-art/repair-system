@@ -77,3 +77,23 @@ export function monthResult(hname, code, year, month, follow, equip, tasks) {
       return [e.system || grpOf(e), e.tag || "", e.name, e.building || "", e.floor || "", e.place || "", e.pm_by || "TW", t.week ?? e.pm_week ?? "", ST[t.status] || "ยังไม่ทำ", t.score ?? "", t.abnormal || "", d(t.submitted_at), d(t.eng_at)]; })];
   return xlsx([{ name: "สรุปผลงาน PM", rows: s1, bold: [0, 3, 7], widths: [34, 18, 16, 10, 10, 16, 10, 20, 14, 10] }, { name: "รายเครื่อง", rows: s2, bold: [0], widths: [18, 22, 36, 10, 8, 26, 8, 14, 24, 8, 12, 14, 14] }]);
 }
+
+// PM MA monthly result (the 23rd): executive summary, per-hospital table (12-hospital mail) and every contract with its state
+const thd = (s) => { if (!s) return ""; const [y, m, d] = String(s).slice(0, 10).split("-"); return `${+d}/${+m}/${+y + 543}`; };
+export function maMonth(title, scope, year, month, rows) {
+  const live = rows.filter((r) => r.status !== "ยกเลิก"), c = (f) => live.filter(f).length;
+  const k = { all: live.length, ok: c((r) => r.status === "ยังมีผล"), soon: c((r) => r.status === "ใกล้หมด"), exp: c((r) => r.status === "หมดอายุแล้ว"), nod: c((r) => r.status === "ยังไม่มีวันที่"),
+    rn: c((r) => r.renew), ex: c((r) => r.renew && (r.end_date == null || r.days_left < 0)), od: c((r) => r.overdue), vm: live.reduce((s, r) => s + (r.visits_month || 0), 0) };
+  const s1 = [[title], [`${scope} · เดือน ${TH_M[month - 1]} ${year + 543}`], [], ["บทสรุปผู้บริหาร"],
+    [`สัญญา MA ในทะเบียน ${k.all} สัญญา ยังมีผล ${k.ok} ใกล้หมดภายใน 90 วัน ${k.soon} หมดอายุแล้ว ${k.exp} ยังไม่มีวันสิ้นสุด ${k.nod}`],
+    [`ต้องต่อสัญญาและยังไม่ออก PO ${k.rn} สัญญา (หมดแล้ว ${k.ex}) · ผู้รับเหมาขาดรอบ PM ${k.od} สัญญา · บันทึกการเข้า PM เดือนนี้ ${k.vm} ครั้ง`],
+    [k.nod ? `ข้อเสนอแนะ: กรอกวันเริ่มและวันสิ้นสุดให้ครบ ${k.nod} สัญญา เพื่อให้ระบบเตือนต่อสัญญาและตรวจการขาดรอบได้` : "ข้อเสนอแนะ: ทะเบียนมีวันที่ครบทุกสัญญา"],
+    k.ex ? [`ข้อเสนอแนะ: เร่งออก PO ${k.ex} สัญญาที่หมดแล้ว เพราะเครื่องจักรไม่มีผู้รับเหมาดูแลตามสัญญา`] : [], [],
+    ["รหัสโรง", "โรงพยาบาล", "สัญญาทั้งหมด", "ยังมีผล", "ใกล้หมด", "หมดอายุแล้ว", "ยังไม่มีวันที่", "รอต่อสัญญา", "ขาดรอบ PM", "เข้า PM เดือนนี้ (ครั้ง)"]];
+  const codes = [...new Set(live.map((r) => r.code))].sort();
+  codes.forEach((cd) => { const l = live.filter((r) => r.code === cd), n = (f) => l.filter(f).length;
+    s1.push([cd, l[0].hname, l.length, n((r) => r.status === "ยังมีผล"), n((r) => r.status === "ใกล้หมด"), n((r) => r.status === "หมดอายุแล้ว"), n((r) => r.status === "ยังไม่มีวันที่"), n((r) => r.renew), n((r) => r.overdue), l.reduce((s, r) => s + (r.visits_month || 0), 0)]); });
+  const s2 = [["รหัสโรง", "กลุ่มงาน", "ระบบ", "ขอบเขตสัญญา", "ผู้รับเหมา", "รอบ PM", "วันเริ่ม (พ.ศ.)", "วันสิ้นสุด (พ.ศ.)", "เหลือ (วัน)", "สถานะ", "เข้า PM ล่าสุด", "ขาดรอบ", "เข้า PM เดือนนี้", "ขั้นต่อสัญญา", "ความคืบหน้าจัดซื้อ"],
+    ...rows.map((r) => [r.code, r.grp, r.sys, r.scope, r.vendor, r.pm_cycle, thd(r.start_date), thd(r.end_date), r.days_left ?? "", r.status, thd(r.last_visit), r.overdue ? "ขาดรอบ" : "", r.visits_month || 0, r.stage, r.steps])];
+  return xlsx([{ name: "บทสรุปผู้บริหาร", rows: s1, bold: [0, 3, 9], widths: [12, 30, 14, 10, 10, 12, 14, 12, 12, 18] }, { name: "รายละเอียดสัญญา", rows: s2, bold: [0], widths: [8, 26, 12, 44, 28, 10, 14, 14, 10, 14, 14, 8, 10, 30, 50] }]);
+}

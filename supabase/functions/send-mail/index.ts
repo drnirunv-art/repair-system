@@ -1,10 +1,10 @@
 // Sends queued e-mails (public.email_outbox) through Gmail SMTP.
 // Secrets: GMAIL_USER, GMAIL_APP_PASSWORD. Called by the database (pg_net) and pg_cron; takes no input.
-// A row with "attach" gets an Excel file built here from live data (PM month results or the yearly master plan).
+// A row with "attach" gets an Excel file built here from live data (PM month results, the yearly master plan, or the PM MA monthly result).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import nodemailer from "npm:nodemailer@6.9.16";
 import { Buffer } from "node:buffer";
-import { masterPlan, monthResult } from "./xlsx.ts";
+import { maMonth, masterPlan, monthResult } from "./xlsx.ts";
 
 const user = Deno.env.get("GMAIL_USER") ?? "";
 const pass = (Deno.env.get("GMAIL_APP_PASSWORD") ?? "").replace(/\s+/g, "");
@@ -19,6 +19,11 @@ async function all(q: (from: number) => any) {
 // deno-lint-ignore no-explicit-any
 async function attachment(r: any) {
   const a = r.attach; if (!a?.kind) return [];
+  if (a.kind === "ma_month") {   // PM MA monthly result: one hospital, or all 12 when hospital is null
+    const s = await db.rpc("ma_state", { p_hospital: a.hospital ?? null }); if (s.error) throw new Error(s.error.message);
+    const rows = s.data ?? [], code = a.hospital ? (rows[0]?.code ?? "MA") : "12โรง", scope = a.hospital ? (rows[0]?.hname ?? "") : "โรงพยาบาลในสัญญา 12 โรง";
+    return [{ filename: `PM-MA-${code}-${a.year + 543}-${String(a.month).padStart(2, "0")}.xlsx`, content: Buffer.from(maMonth("สรุปผล PM MA: สัญญาและการเข้า PM ของผู้รับเหมา", scope, a.year, a.month, rows)), contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }];
+  }
   const { data: h, error } = await db.from("hospitals").select("code,name").eq("id", r.hospital_id).single();
   if (error) throw new Error(error.message);
   const equip = await all((f) => db.from("equipment").select("id,name,tag,place,building,floor,system,eq_type,pm_group,pm_by,pm_by_raw,pm_vendor,pm_grid,pm_months,pm_week,pm_freq")
