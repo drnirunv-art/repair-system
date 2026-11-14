@@ -30,9 +30,21 @@
       <div style="display:flex;flex-direction:column;gap:12px">
         <label>อีเมล<input id="lEmail" type="email" required autocomplete="username"></label>
         <label>รหัสผ่าน<input id="lPass" type="password" required minlength="8" autocomplete="current-password"></label>
-        <div class="row"><button class="btn primary">เข้าสู่ระบบ</button><button class="btn" type="button" id="lSignup">สมัครบัญชี</button></div>
+        <div class="row"><button class="btn primary">เข้าสู่ระบบ</button><button class="btn" type="button" id="lSignup">สมัครบัญชี</button><button class="btn" type="button" id="lForgot" style="border:0;background:none;text-decoration:underline">ลืมรหัสผ่าน</button></div>
       </div>
       <div id="lMsg"></div>
+    </form>
+  </section>
+  <section id="reset" class="login" hidden>
+    <form id="fReset" class="panel">
+      <h2>ตั้งรหัสผ่านใหม่</h2>
+      <p class="sub" id="rWho">พิมพ์รหัสผ่านใหม่ 2 ครั้ง แล้วกดบันทึก</p>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <label>รหัสผ่านใหม่ (อย่างน้อย 8 ตัว)<input id="rPass" type="password" required minlength="8" autocomplete="new-password"></label>
+        <label>พิมพ์รหัสผ่านใหม่อีกครั้ง<input id="rPass2" type="password" required minlength="8" autocomplete="new-password"></label>
+        <div class="row"><button class="btn primary">บันทึกรหัสผ่านใหม่</button></div>
+      </div>
+      <div id="rMsg"></div>
     </form>
   </section>
   <section id="pending" hidden><div class="panel"><h2>บัญชียังไม่มีสิทธิ์</h2><p class="sub">ลงชื่อเข้าใช้แล้ว แต่ยังไม่ได้ผูกกับโรงพยาบาล แจ้งหัวหน้าให้เพิ่มอีเมลนี้ในหน้า ตั้งค่า &gt; เจ้าหน้าที่</p></div></section>

@@ -52,6 +52,7 @@
     <div id="dList" class="jobs"><div class="empty">กำลังโหลด…</div></div>
   </section>
 </main>
+<script>/* a sign-up or password-reset link that lands on this page belongs to the staff page */ if (/type=(recovery|signup|invite|magiclink)|error_code=/.test(location.hash)) location.replace("staff.html" + location.hash);</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script src="assets/config.js"></script>

@@ -59,14 +59,35 @@
     $("#lMsg").innerHTML = error ? `<div class="note bad">${esc(errText(error))}</div>`
       : `<div class="note ok">สมัครแล้ว ถ้ามีอีเมลยืนยันให้กดลิงก์ในอีเมลก่อน จากนั้นแจ้งหัวหน้าให้เพิ่มสิทธิ์</div>`;
   };
+  // forgotten password: e-mail a reset link that comes back to this page, then set a new password here
+  let recovering = /type=recovery/.test(location.hash);
+  const mailErr = e => /rate limit/i.test(e.message || "") ? "ระบบส่งอีเมลได้จำนวนจำกัดต่อชั่วโมง กรุณารอประมาณ 1 ชั่วโมงแล้วลองใหม่ หรือแจ้งหัวหน้าให้ช่วย" : errText(e);
+  $("#lForgot").onclick = async () => {
+    const em = $("#lEmail").value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { $("#lMsg").innerHTML = '<div class="note bad">พิมพ์อีเมลของบัญชีในช่อง อีเมล ก่อน แล้วกด ลืมรหัสผ่าน อีกครั้ง</div>'; return $("#lEmail").focus(); }
+    const b = $("#lForgot"); b.disabled = true;
+    const { error } = await sb.auth.resetPasswordForEmail(em, { redirectTo: location.origin + location.pathname });
+    b.disabled = false;
+    $("#lMsg").innerHTML = error ? `<div class="note bad">${esc(mailErr(error))}</div>`
+      : `<div class="note ok">ถ้าอีเมลนี้มีบัญชีอยู่ ระบบส่งลิงก์ตั้งรหัสผ่านใหม่ไปที่ ${esc(em)} แล้ว เปิดอีเมลชื่อ “Reset Your Password” (ดูในจดหมายขยะด้วย) แล้วกดลิงก์ในอีเมล</div>`;
+  };
+  $("#fReset").onsubmit = async e => {
+    e.preventDefault();
+    if ($("#rPass").value !== $("#rPass2").value) { $("#rMsg").innerHTML = '<div class="note bad">รหัสผ่าน 2 ช่องไม่ตรงกัน</div>'; return; }
+    const { error } = await sb.auth.updateUser({ password: $("#rPass").value });
+    if (error) { $("#rMsg").innerHTML = `<div class="note bad">${esc(errText(error))}</div>`; return; }
+    recovering = false; $("#rPass").value = $("#rPass2").value = ""; history.replaceState(null, "", location.pathname + location.search);
+    toast("ตั้งรหัสผ่านใหม่แล้ว ครั้งต่อไปเข้าสู่ระบบด้วยรหัสใหม่"); const { data } = await sb.auth.getSession(); boot(data.session);
+  };
   $("#logout").onclick = () => sb.auth.signOut();
-  sb.auth.onAuthStateChange((_e, session) => { setTimeout(() => boot(session), 0); });
+  sb.auth.onAuthStateChange((ev, session) => { if (ev === "PASSWORD_RECOVERY") recovering = true; setTimeout(() => boot(session), 0); });
 
   async function boot(session) {
-    ["#login", "#pending", ...TABS.map(x => "#tab-" + x)].forEach(s => $(s).hidden = true);
+    ["#login", "#reset", "#pending", ...TABS.map(x => "#tab-" + x)].forEach(s => $(s).hidden = true);
     $("#tabs").hidden = true; $("#logout").hidden = !session; $("#bell").hidden = !session; $("#who").textContent = "";
     if (channel) { sb.removeChannel(channel); channel = null; }
     if (!session) { $("#login").hidden = false; return; }
+    if (recovering) { $("#reset").hidden = false; $("#rWho").textContent = `บัญชี ${session.user.email} · พิมพ์รหัสผ่านใหม่ 2 ครั้ง แล้วกดบันทึก`; return; }
     const { data } = await sb.from("profiles").select("id,full_name,role,hospital_id,hospitals(id,code,name)").eq("id", session.user.id).maybeSingle();
     me = data;
     if (!me || !me.hospital_id) { $("#pending").hidden = false; $("#who").textContent = session.user.email; return; }
