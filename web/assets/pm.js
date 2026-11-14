@@ -25,6 +25,10 @@
   const where = e => [e.building, e.floor, e.place].filter(Boolean).join(" · ");
   const tplFor = type => tpls.find(t => t.eq_type === type && t.hospital_id) || tpls.find(t => t.eq_type === type && !t.hospital_id) || tpls.find(t => t.eq_type === "ทั่วไป" && !t.hospital_id) || { items: [] };
   const hasOwnTpl = type => tpls.some(t => t.eq_type === type);
+  // check-sheet rounds: an item may carry f: ["M","Q","S","Y"] = the rounds it is checked in (none = every round)
+  const ROUNDS = ["M", "Q", "S", "Y"], rnd = x => { x = String(x || "").toUpperCase().trim(); return x === "H" ? "S" : x; };
+  const inRound = (it, r) => !(it.f || []).length || !ROUNDS.includes(rnd(r)) || it.f.includes(rnd(r));
+  const roundOf = (e, t) => rnd(((e.pm_grid && Object.keys(e.pm_grid).length) ? e.pm_grid[(t.month - 1) * 4 + t.week] : "") || e.pm_freq || "");
   const kpis = arr => arr.map(([a, b, red]) => `<div class="kpi"><b style="${red && +b > 0 ? "color:var(--bad)" : ""}">${b}</b><span>${a}</span></div>`).join("");
   const bars = pairs => { const max = Math.max(1, ...pairs.map(p => p[1])); return pairs.length ? pairs.map(([k, v]) => `<div class="bar"><span>${esc(k)}</span><i style="width:${v / max * 100}%"></i><em>${v}</em></div>`).join("") : `<div class="empty">ไม่มี</div>`; };
   function toast(m) { $("#toast").textContent = m; $("#toast").hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => $("#toast").hidden = true, 6000); }
@@ -188,12 +192,12 @@
     const t = row || (await sb.from("pm_tasks").select("*").eq("id", id).single()).data;
     if (!t) return toast("ไม่พบใบตรวจ");
     const e = eqOf(t.equipment_id), editing = ["todo", "returned"].includes(t.status) && can();
-    const items = editing ? tplFor(e.eq_type).items : t.items;
+    const items = editing ? tplFor(e.eq_type).items.filter(it => inRound(it, roundOf(e, t))) : t.items;
     cur = { t, e, items, scanned: !!scanned, answers: editing ? (t.status === "returned" ? JSON.parse(JSON.stringify(t.answers || [])) : items.map(() => ({ v: "", n: "", ph: [] }))) : t.answers };
     [...TABS].forEach(x => $("#tab-" + x).hidden = true); $("#tab-sheet").hidden = false; window.scrollTo(0, 0);
     const urls = editing ? {} : await signed((t.answers || []).flatMap(a => a.ph || []));
     const head = `<div class="panel"><div class="row" style="justify-content:space-between"><div><h2 style="margin:0"><span style="font-family:'IBM Plex Mono',monospace">${esc(e.tag || "")}</span> · ${esc(e.name)}</h2>
-      <div class="meta">${esc(e.eq_type || "ไม่ระบุชนิด")}${hasOwnTpl(e.eq_type) ? "" : " (ใช้ check sheet ทั่วไป)"} · ${esc(where(e) || "-")} · แผน ${monthLabel(`${t.year}-${String(t.month).padStart(2, "0")}`)} W${t.week} · ${esc(e.pm_by || "TW")}</div></div>${RS.pill(STC[t.status], ST[t.status])}</div>
+      <div class="meta">${esc(e.eq_type || "ไม่ระบุชนิด")}${hasOwnTpl(e.eq_type) ? "" : " (ใช้ check sheet ทั่วไป)"} · ${esc(where(e) || "-")} · แผน ${monthLabel(`${t.year}-${String(t.month).padStart(2, "0")}`)} W${t.week}${roundOf(e, t) ? " · รอบ " + esc(roundOf(e, t)) : ""} · ${esc(e.pm_by || "TW")}</div></div>${RS.pill(STC[t.status], ST[t.status])}</div>
       ${t.status === "returned" ? `<div class="note bad" style="margin-top:10px">หัวหน้าส่งกลับให้แก้: ${esc(t.return_reason || "")}</div>` : ""}
       ${editing && !cur.scanned ? `<div class="note" style="margin-top:10px">เปิดจากรายการ ไม่ได้สแกน QR ที่ตัวเครื่อง ระบบจะติดป้าย “ไม่ได้สแกน QR” ในผลตรวจ</div>` : ""}</div>`;
     if (editing) {
@@ -767,13 +771,16 @@
   let tEdit = null;
   function renderTpl() {
     const type = $("#tSel").value || "ทั่วไป", own = tpls.find(t => t.eq_type === type && t.hospital_id), std = tpls.find(t => t.eq_type === type && !t.hospital_id), t = own || std || tplFor(type);
-    const n = equip.filter(e => (e.eq_type || "") === type).length;
+    const n = equip.filter(e => (e.eq_type || "") === type).length, tr = $("#tRound").value, shown = t.items.map((it, i) => [it, i]).filter(([it]) => !tr || inRound(it, tr));
     $("#tBody").innerHTML = `<div class="panel"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(type)} <span class="meta">${own ? "ฉบับของโรงนี้" : std ? "มาตรฐานกลาง" : "ยังไม่มี ใช้แบบทั่วไป"} · ใช้กับ ${n} เครื่อง</span></h3>
-      ${isMgr() ? `<button class="btn small" type="button" id="tEditBtn">${own ? "แก้ฉบับของโรง" : "ปรับเป็นฉบับของโรง"}</button>` : ""}</div>
-      <div class="scroll"><table><tr><th>#</th><th>รายการตรวจ</th><th>แบบคำตอบ</th><th>เกณฑ์</th><th>ต้องถ่ายรูป</th></tr>${t.items.map((it, i) => `<tr><td>${i + 1}</td><td>${esc(it.t)}</td><td>${it.k === "value" ? "กรอกค่า" : "ปกติ / เริ่มเสื่อม / ผิดปกติ"}</td><td>${crit(it)}</td><td>${it.ph ? "ต้องถ่าย" : ""}</td></tr>`).join("")}</table></div></div><div id="tForm"></div>`;
+      <div class="row">${n ? `<button class="btn small" type="button" id="tQr">สร้าง QR ของเครื่องชนิดนี้ (${n} เครื่อง)</button>` : ""}${isMgr() ? `<button class="btn small" type="button" id="tEditBtn">${own ? "แก้ฉบับของโรง" : "ปรับเป็นฉบับของโรง"}</button>` : ""}</div></div>
+      ${n ? `<p class="meta">สแกน QR ที่ติดเครื่องแล้วจะเปิดใบตรวจของเดือนนั้นพร้อม check sheet นี้ (เฉพาะข้อของรอบนั้น) ให้ทันที</p>` : ""}
+      <div class="scroll"><table><tr><th>#</th><th>รายการตรวจ</th><th>แบบคำตอบ</th><th>เกณฑ์</th><th>ต้องถ่ายรูป</th><th>รอบที่ตรวจ</th></tr>${shown.map(([it, i]) => `<tr><td>${i + 1}</td><td>${esc(it.t)}</td><td>${it.k === "value" ? "กรอกค่า" : "ปกติ / เริ่มเสื่อม / ผิดปกติ"}</td><td>${crit(it)}</td><td>${it.ph ? "ต้องถ่าย" : ""}</td><td>${(it.f || []).length ? it.f.join(" ") : "ทุกรอบ"}</td></tr>`).join("")}</table></div>
+      ${tr ? `<p class="meta">รอบ ${tr}: ${shown.length} จาก ${t.items.length} ข้อ</p>` : ""}</div><div id="tForm"></div>`;
   }
-  $("#tSel").onchange = renderTpl;
+  $("#tSel").onchange = renderTpl; $("#tRound").onchange = renderTpl;
   document.addEventListener("click", async e => {
+    if (e.target.id === "tQr") { const type = $("#tSel").value; $("#qQ").value = ""; $("#qB").value = ""; $("#qF").value = ""; $("#qT").value = type; qSel.clear(); show("qr"); return renderQr(); }
     if (e.target.id === "tEditBtn") {
       const type = $("#tSel").value; tEdit = JSON.parse(JSON.stringify(tplFor(type).items));
       return drawTplForm();
@@ -794,11 +801,64 @@
     $("#tForm").innerHTML = `<div class="panel" style="margin-top:12px"><h3>แก้ check sheet (ใบที่ตรวจไปแล้วไม่เปลี่ยน)</h3>${tEdit.map((it, i) => `<div class="grid" style="grid-template-columns:minmax(0,3fr) minmax(0,1.3fr) repeat(3,minmax(0,.8fr)) auto auto;gap:6px;margin-bottom:6px">
       <input data-tt="${i}" value="${esc(it.t)}" placeholder="รายการตรวจ"><select data-tk="${i}"><option value="level"${it.k !== "value" ? " selected" : ""}>ปกติ/เสื่อม/ผิดปกติ</option><option value="value"${it.k === "value" ? " selected" : ""}>กรอกค่า</option></select>
       <input data-tu="${i}" value="${esc(it.u || "")}" placeholder="หน่วย"><input data-tl="${i}" type="number" step="any" value="${it.lo ?? ""}" placeholder="ต่ำสุด"><input data-th="${i}" type="number" step="any" value="${it.hi ?? ""}" placeholder="สูงสุด">
-      <label class="check" style="flex-direction:row;gap:4px"><input type="checkbox" data-tp="${i}"${it.ph ? " checked" : ""}>รูป</label><button class="btn small" type="button" data-tdel="${i}">×</button></div>`).join("")}
+      <label class="check" style="flex-direction:row;gap:4px"><input type="checkbox" data-tp="${i}"${it.ph ? " checked" : ""}>รูป</label><button class="btn small" type="button" data-tdel="${i}">×</button>
+      <div class="row meta" style="grid-column:1/-1;gap:10px;margin-top:-2px">รอบที่ตรวจ (ไม่เลือก = ทุกรอบ):${ROUNDS.map(r => `<label class="check" style="flex-direction:row;gap:4px"><input type="checkbox" data-tf${r}="${i}"${(it.f || []).includes(r) ? " checked" : ""}>${r}</label>`).join("")}</div></div>`).join("")}
       <div class="row"><button class="btn" type="button" id="tAdd">+ เพิ่มข้อ</button><button class="btn primary" type="button" id="tSave">บันทึก</button></div><div id="tMsg"></div></div>`;
   }
   function readTplForm() {
     tEdit = tEdit.map((_, i) => { const g = a => document.querySelector(`[data-${a}="${i}"]`), it = { t: g("tt").value.trim(), k: g("tk").value };
-      if (g("tu").value.trim()) it.u = g("tu").value.trim(); if (g("tl").value !== "") it.lo = +g("tl").value; if (g("th").value !== "") it.hi = +g("th").value; if (g("tp").checked) it.ph = true; return it; });
+      if (g("tu").value.trim()) it.u = g("tu").value.trim(); if (g("tl").value !== "") it.lo = +g("tl").value; if (g("th").value !== "") it.hi = +g("th").value; if (g("tp").checked) it.ph = true; const f = ROUNDS.filter(r => g("tf" + r)?.checked); if (f.length && f.length < 4) it.f = f; return it; });
   }
+
+  /* ---------- check sheets from Excel: one sheet per equipment type, rounds M/Q/S/Y ---------- */
+  const CHEAD = ["ลำดับ", "รายการตรวจ", "แบบคำตอบ (ระดับ / ค่า)", "หน่วย", "ต่ำสุด", "สูงสุด", "ถ่ายรูป", "M", "Q", "S", "Y"];
+  let cImp = [];
+  $("#cTpl").onclick = () => {
+    const types = [...$("#tSel").options].map(o => o.value).filter(Boolean);
+    const sheets = types.map(type => { const t = tplFor(type);
+      return { name: type, header: 1, styles: { 0: 3 }, rows: [["TYPE: " + type], CHEAD, ...t.items.map((it, i) => [i + 1, it.t, it.k === "value" ? "ค่า" : "ระดับ", it.u || "", it.lo ?? "", it.hi ?? "", it.ph ? "✓" : "", ...ROUNDS.map(r => !(it.f || []).length || it.f.includes(r) ? "✓" : "")])] }; });
+    const sum = Office.summarySheet({ title: "แบบฟอร์ม Check sheet ตามชนิดเครื่อง", org: H.name, findings: [`มี ${types.length} ชนิดเครื่อง รวม ${types.reduce((a, x) => a + tplFor(x).items.length, 0)} รายการตรวจ`, "แผ่นงานละ 1 ชนิดเครื่อง แก้รายการแล้วนำเข้าที่หน้า PM > Check sheet > นำเข้า Check sheet จากไฟล์ Excel", "ช่อง M / Q / S / Y: ใส่ ✓ ในรอบที่ต้องตรวจข้อนั้น ไม่ใส่เลย = ตรวจทุกรอบ"],
+      figures: types.map(x => [x, tplFor(x).items.length]) });
+    const how = { name: "วิธีใช้", styles: { 0: 2 }, rows: [["วิธีใช้แบบฟอร์ม Check sheet"], ["1. หนึ่งแผ่นงาน = หนึ่งชนิดเครื่อง (เช่น AHU, FCU) เซลล์ A1 ต้องเป็น TYPE: ตามด้วยชื่อชนิด ให้ตรงกับคอลัมน์ ชนิด ในทะเบียนเครื่อง"], ["2. เพิ่มชนิดใหม่: คัดลอกแผ่นงานแล้วแก้ A1"], ["3. แบบคำตอบ: ระดับ = ปกติ / เริ่มเสื่อม / ผิดปกติ, ค่า = กรอกตัวเลข (ใส่หน่วย ต่ำสุด สูงสุด ได้)"], ["4. ถ่ายรูป: ใส่ ✓ ถ้าข้อนั้นต้องแนบรูป"], ["5. M Q S Y: ใส่ ✓ ในรอบที่ต้องตรวจ ระบบจะแสดงเฉพาะข้อของรอบนั้นในใบตรวจ (รอบดูจากตัวอักษรในแผน PM ของเดือนนั้น) ไม่ใส่เลย = ตรวจทุกรอบ"], ["6. บันทึกเป็น .xlsx แล้วนำเข้า ระบบบันทึกเป็นฉบับของโรงนี้ ใบที่ตรวจไปแล้วไม่เปลี่ยน"]] };
+    Office.xlsx(`CheckSheet_${H.code}`, [sum, how, ...sheets]);
+  };
+  const yes = v => /^(✓|✔|\/|x|y|yes|1|true|ใช่|มี)$/i.test(cellS(v));
+  $("#cFile").onchange = async ev => {
+    const f = ev.target.files[0]; cImp = []; $("#cPrev").innerHTML = ""; $("#cMsg").innerHTML = ""; if (!f) return;
+    let wb; try { wb = await Office.readXlsx(f); } catch (err) { return note("#cMsg", new Error("อ่านไฟล์ Excel ไม่ได้: " + (err.message || err))); }
+    for (const [sn, rows0] of Object.entries(wb)) {
+      const rows = rows0.map(r => [...r]);
+      const hi = rows.findIndex(r => r.some(c => /^รายการตรวจ$|^item$/i.test(cellS(c)))); if (hi < 0) continue;
+      const h = rows[hi].map(c => cellS(c).toUpperCase()), ix = re => h.findIndex(c => re.test(c));
+      const a1 = rows.slice(0, hi).flat().map(cellS).find(c => /^TYPE\s*[:：]/i.test(c)), type = a1 ? a1.replace(/^TYPE\s*[:：]\s*/i, "").trim() : sn.trim();
+      const cT = ix(/^รายการตรวจ$|^ITEM$/), cK = ix(/^แบบคำตอบ/), cU = ix(/^หน่วย|^UNIT/), cLo = ix(/^ต่ำสุด|^MIN/), cHi = ix(/^สูงสุด|^MAX/), cP = ix(/^ถ่ายรูป|^PHOTO/), cR = ROUNDS.map(r => h.findIndex(c => c === r || (r === "S" && c === "H")));
+      const items = [], warn = [];
+      rows.slice(hi + 1).forEach((r, k) => { const t = cellS(r[cT]); if (!t) return;
+        const kv = /ค่า|VALUE|NUM/i.test(cellS(r[cK])) ? "value" : "level", it = { t, k: kv };
+        if (cU >= 0 && cellS(r[cU])) it.u = cellS(r[cU]);
+        [["lo", cLo], ["hi", cHi]].forEach(([key, c]) => { const v = cellS(r[c]); if (c >= 0 && v !== "") { if (isNaN(+v)) warn.push(`แถว ${hi + k + 2}: ${key === "lo" ? "ต่ำสุด" : "สูงสุด"} ไม่ใช่ตัวเลข`); else it[key] = +v; } });
+        if (cP >= 0 && yes(r[cP])) it.ph = true;
+        const fr = ROUNDS.filter((_, j) => cR[j] >= 0 && yes(r[cR[j]])); if (fr.length && fr.length < 4) it.f = fr;
+        items.push(it); });
+      if (!type) continue;
+      cImp.push({ type, items, warn, own: tpls.some(x => x.eq_type === type && x.hospital_id), known: equip.some(e => (e.eq_type || "") === type) });
+    }
+    if (!cImp.length) return note("#cMsg", new Error("ไม่พบแผ่นงานที่มีหัวตาราง “รายการตรวจ” ใช้แบบฟอร์มจากปุ่มดาวน์โหลดแบบฟอร์ม"));
+    const cnt = (x, r) => x.items.filter(it => inRound(it, r)).length;
+    $("#cPrev").innerHTML = `<div class="scroll" style="margin-top:10px"><table><tr><th>ชนิดเครื่อง</th><th>รายการตรวจ</th><th>รอบ M</th><th>รอบ Q</th><th>รอบ S</th><th>รอบ Y</th><th>ผล</th></tr>${cImp.map(x => `<tr${x.items.length ? "" : ' style="color:var(--bad)"'}><td>${esc(x.type)}</td><td>${x.items.length}</td>${ROUNDS.map(r => `<td>${cnt(x, r)}</td>`).join("")}<td>${!x.items.length ? "ไม่มีรายการ ข้าม" : x.own ? "แทนฉบับของโรงเดิม" : "สร้างฉบับของโรง"}${x.known ? "" : " · ยังไม่มีเครื่องชนิดนี้ในทะเบียน"}${x.warn.length ? " · " + esc(x.warn.slice(0, 3).join(", ")) : ""}</td></tr>`).join("")}</table></div>
+      <div class="row" style="margin-top:8px"><button class="btn primary" type="button" id="cSave">บันทึก ${cImp.filter(x => x.items.length).length} ชนิด</button></div>`;
+  };
+  document.addEventListener("click", async ev => {
+    if (ev.target.id !== "cSave") return; const b = ev.target; b.disabled = true; b.textContent = "กำลังบันทึก…"; let ok = 0;
+    try {
+      for (const x of cImp.filter(x => x.items.length)) {
+        const own = tpls.find(t => t.eq_type === x.type && t.hospital_id);
+        const r = own ? await sb.from("pm_templates").update({ items: x.items, updated_by: me.id, updated_at: new Date().toISOString() }).eq("id", own.id)
+          : await sb.from("pm_templates").insert({ hospital_id: H.id, eq_type: x.type, items: x.items, updated_by: me.id });
+        if (r.error) throw new Error(`${x.type}: ${r.error.message}`); ok++;
+      }
+      cImp = []; $("#cPrev").innerHTML = ""; $("#cFile").value = ""; note("#cMsg", null, `บันทึก check sheet ${ok} ชนิดแล้ว ใช้กับใบตรวจที่เปิดใหม่`);
+    } catch (err) { note("#cMsg", new Error((ok ? `บันทึกแล้ว ${ok} ชนิด แต่ ` : "") + (err.message || err))); b.disabled = false; b.textContent = "ลองบันทึกอีกครั้ง"; }
+    const keep = $("#tSel").value; await loadTpls(); fillFilters(); $("#tSel").value = keep; renderTpl();
+  });
 })();

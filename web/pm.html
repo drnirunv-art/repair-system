@@ -145,7 +145,12 @@
   <section id="tab-tpl" hidden>
     <h2>Check sheet ตามชนิดเครื่อง</h2>
     <p class="sub">มาตรฐานกลางใช้ทุกโรงพยาบาล หัวหน้า / Admin ปรับเป็นฉบับของโรงได้ ชนิดที่ยังไม่มี check sheet ระบบใช้แบบ “ทั่วไป” ไปก่อน</p>
-    <div class="filters noprint"><select id="tSel"></select></div>
+    <div class="filters noprint"><select id="tSel"></select><label>ดูรายการของรอบ<select id="tRound"><option value="">ทุกรอบ</option><option value="M">M รายเดือน</option><option value="Q">Q ราย 3 เดือน</option><option value="S">S ราย 6 เดือน</option><option value="Y">Y รายปี</option></select></label></div>
+    <details class="panel noprint" data-manager hidden style="margin-bottom:14px"><summary style="cursor:pointer;font-weight:600">นำเข้า Check sheet จากไฟล์ Excel (แยกตามชนิดเครื่อง เช่น AHU, FCU และเลือกรอบ M / Q / S / Y)</summary>
+      <p class="meta" style="margin-top:10px">ไฟล์ .xlsx หนึ่งแผ่นงานต่อหนึ่งชนิดเครื่อง เซลล์ A1 เขียน “TYPE: ชื่อชนิด” (ถ้าไม่มี ใช้ชื่อแผ่นงาน) แถวหัวตาราง: ลำดับ, รายการตรวจ, แบบคำตอบ (ระดับ / ค่า), หน่วย, ต่ำสุด, สูงสุด, ถ่ายรูป, M, Q, S, Y · ใส่ ✓ ในช่องรอบที่ต้องตรวจข้อนั้น ถ้าไม่ใส่เลยทั้ง 4 ช่อง = ตรวจทุกรอบ · บันทึกเป็นฉบับของโรงนี้ ใบที่ตรวจไปแล้วไม่เปลี่ยน</p>
+      <div class="row"><button class="btn small" type="button" id="cTpl">ดาวน์โหลดแบบฟอร์ม Check sheet (Excel)</button><input id="cFile" type="file" accept=".xlsx"></div>
+      <div id="cPrev"></div><div id="cMsg"></div>
+    </details>
     <div id="tBody"></div>
   </section>
 </main>
