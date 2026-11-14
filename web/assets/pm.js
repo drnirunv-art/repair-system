@@ -11,8 +11,9 @@
   const LV = { ok: "ปกติ", wear: "เริ่มเสื่อม", bad: "ผิดปกติ" };
   const FREQ = { M: "รายเดือน", Q: "ราย 3 เดือน", H: "ราย 6 เดือน", Y: "รายปี" };
   const TH_M = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-  let me = null, H = null, viewOnly = false, hPick = [], staff = [], equipAll = [], equip = [], tpls = [], tasks = [], channel = null, week = 0, stat = "open", cur = null, scannedTag = null, editId = null, regLimit = 200;
+  let me = null, H = null, viewOnly = false, allMode = false, hPick = [], staff = [], equipAll = [], equip = [], tpls = [], tasks = [], channel = null, week = 0, stat = "open", cur = null, scannedTag = null, editId = null, regLimit = 200;
   const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+  const HN = () => allMode ? `ทุกโรงพยาบาล (${hPick.length} โรง)` : H.name;
   const role = () => me && (viewOnly ? "observer" : me.role);   // another hospital picked by a 12-hospital viewer: read only
   const isMgr = () => MANAGER.includes(role()), isHead = () => HEAD.includes(role()), isEng = () => ENG.includes(role());
   const can = () => me && role() !== "observer";
@@ -60,14 +61,17 @@
     if ((await sb.rpc("am_exec")).data === true) {
       if (!hPick.length) hPick = (await sb.from("hospitals").select("id,code,name").eq("active", true).order("code")).data || [];
       const want = (q0.get("p") || store.get("rs-pm-h", "")).toUpperCase(), hit = hPick.find(h => h.code.toUpperCase() === want); if (hit) H = hit;
+      allMode = want === "ALL";   // the 12-hospital overview: only the follow-up table, one row per hospital
       $("#hPickL").hidden = !hPick.length;
-      $("#hPick").innerHTML = hPick.map(h => `<option value="${esc(h.code)}"${h.id === H.id ? " selected" : ""}>${esc(h.code)} · ${esc(h.name)}</option>`).join("");
+      $("#hPick").innerHTML = `<option value="ALL"${allMode ? " selected" : ""}>ทุกโรงพยาบาล (${hPick.length} โรง)</option>` + hPick.map(h => `<option value="${esc(h.code)}"${!allMode && h.id === H.id ? " selected" : ""}>${esc(h.code)} · ${esc(h.name)}</option>`).join("");
       $("#hPick").onchange = () => { store.set("rs-pm-h", $("#hPick").value); const u = new URLSearchParams(location.search); u.set("p", $("#hPick").value); u.delete("tag"); location.search = u.toString(); };
-      ["#scTW", "#scMA"].forEach(id => { const a = $(id), u = new URL(a.href, location.href); u.searchParams.set("p", H.code); a.href = u.pathname.split("/").pop() + u.search; });
+      ["#scTW", "#scMA"].forEach(id => { const a = $(id), u = new URL(a.href, location.href); u.searchParams.set("p", allMode ? "ALL" : H.code); a.href = u.pathname.split("/").pop() + u.search; });
     }
-    viewOnly = H.id !== me.hospital_id;
+    viewOnly = allMode || H.id !== me.hospital_id;
     $("#viewOnly").hidden = !viewOnly;
-    $("#title").textContent = SCN + " บำรุงรักษาตามแผน · " + H.name; $("#who").textContent = me.full_name || session.user.email;
+    if (allMode) { $("#viewOnly").textContent = "กำลังดูภาพรวมทุกโรงพยาบาล แสดงตารางติดตามแผนแยกรายโรง ถ้าจะดูงาน ทะเบียน หรือ Master Plan ของโรงใด ให้เลือกโรงนั้นในช่อง โรงพยาบาล มุมขวาบน";
+      document.querySelectorAll("#tabs button").forEach(b => b.hidden = b.dataset.tab !== "follow"); }
+    $("#title").textContent = SCN + " บำรุงรักษาตามแผน · " + HN(); $("#who").textContent = me.full_name || session.user.email;
     await Promise.all([loadStaff(), loadEquip(), loadTpls()]);
     document.querySelectorAll("[data-manager]").forEach(b => b.hidden = !isMgr());
     $("#signTab").hidden = !isHead();
@@ -78,7 +82,7 @@
     }).subscribe();
     signCount();
     if (scannedTag) { const t = scannedTag; scannedTag = null; history.replaceState(null, "", location.pathname + (q0.get("h") ? "?h=" + q0.get("h") : "")); return openByTag(t, true); }
-    show(q0.get("tab") || store.get("rs-pm-tab", "work"));
+    show(allMode ? "follow" : q0.get("tab") || store.get("rs-pm-tab", "work"));
   }
   const loadStaff = async () => { const r = await sb.from("profiles").select("id,full_name,role").eq("hospital_id", H.id); staff = r.data || []; };
   async function loadEquip() {
@@ -458,26 +462,34 @@
   const fHead = ["ระบบ", "แผนเดือนนี้ (เครื่อง)", "เสร็จและอนุมัติ", "รอเซ็น", "ยังไม่ทำ", "พบผิดปกติ (ใบ)", "% เสร็จ", "แผนสะสมทั้งปี (ครั้ง)", "ทำแล้วสะสม", "% สะสม", "งานค้างเดือนนี้", "งานค้างสะสม"];
   const fLine = r => [r.planned, r.done, r.waiting_sign, r.not_done, r.abnormal, r.pct == null ? "-" : r.pct + "%", r.ytd_planned, r.ytd_done, r.ytd_pct == null ? "-" : r.ytd_pct + "%", Math.max(0, (r.planned || 0) - (r.done || 0)), Math.max(0, (r.ytd_planned || 0) - (r.ytd_done || 0))];
   const fTable = (head, rows, bold) => `<tr>${head.map((h, i) => `<th${i ? ' class="num"' : ""}>${h}</th>`).join("")}</tr>` + rows.map(r => `<tr${bold(r) ? ' style="font-weight:700"' : ""}>${r.map((v, i) => `<td${i ? ' class="num"' : ""}>${esc(v ?? "")}</td>`).join("")}</tr>`).join("");
+  // 12-hospital overview: one follow-up row per hospital and a total row, in the same shape as the per-system rows
+  async function fAllRows(fRpc) {
+    const b = await fRpc("pm_followup_all_by", "pm_followup_all"); if (b.error) return b;
+    const rows = (b.data || []).map(r => ({ ...r, grp: `${r.code} ${r.name}` })), sum = k => rows.reduce((t, r) => t + (+r[k] || 0), 0);
+    const T = { grp: "รวม", machines: sum("machines") }; ["planned", "done", "waiting_sign", "not_done", "abnormal", "ytd_planned", "ytd_done"].forEach(k => T[k] = sum(k));
+    T.pct = T.planned ? Math.round(T.done * 100 / T.planned) : null; T.ytd_pct = T.ytd_planned ? Math.round(T.ytd_done * 100 / T.ytd_planned) : null;
+    return { data: [...rows.map(r => ({ ...r, planned: r.planned ?? 0, done: r.done ?? 0, waiting_sign: r.waiting_sign ?? 0, not_done: r.not_done ?? 0, abnormal: r.abnormal ?? 0, ytd_planned: r.ytd_planned ?? 0, ytd_done: r.ytd_done ?? 0 })), T], error: null };
+  }
   async function renderFollow() {
     const [y, m] = ym($("#fMonth").value); note("#fMsg");
     // until migration 0030 is on the database the per-part functions do not exist: fall back to the whole-hospital ones
     const fRpc = async (fn, old) => { const r = viewOnly && fn === "pm_followup_by" ? await sb.rpc("pm_followup_for", { p_hospital: H.id, p_year: y, p_month: m, p_by: SC }) : await sb.rpc(fn, { p_year: y, p_month: m, p_by: SC }); return r.error && /PGRST202|42883|not find|does not exist/i.test((r.error.code || "") + " " + (r.error.message || "")) ? sb.rpc(old, { p_year: y, p_month: m }) : r; };
-    const [a, ex] = await Promise.all([fRpc("pm_followup_by", "pm_followup"), sb.rpc("am_exec")]);
+    const [a, ex] = allMode ? [await fAllRows(fRpc), { data: true }] : await Promise.all([fRpc("pm_followup_by", "pm_followup"), sb.rpc("am_exec")]);
     if (a.error) return note("#fMsg", a.error);
     fRows = a.data || []; fExec = ex.data === true;
     const tot = fRows.find(r => r.grp === "รวม") || { planned: 0, done: 0, waiting_sign: 0, not_done: 0, abnormal: 0 };
-    $("#fTitle").textContent = `ตารางติดตามแผน PM ${H.name} ${monthLabel($("#fMonth").value)}`;
-    const nMach = equip.length, nPlan = equip.filter(e => (e.pm_months || []).length).length;
+    $("#fTitle").textContent = `ตารางติดตามแผน PM ${HN()} ${monthLabel($("#fMonth").value)}`;
+    const nPlan = allMode ? fRows.filter(r => r.grp !== "รวม").reduce((t, r) => t + (+r.machines || 0), 0) : equip.filter(e => (e.pm_months || []).length).length, nMach = allMode ? nPlan : equip.length;
     $("#fDashT").textContent = `ภาพรวม ${SCN} ${monthLabel($("#fMonth").value)}`;
     $("#fDash").innerHTML = kpis([["จำนวนเครื่องจักรและอุปกรณ์", nMach.toLocaleString()], ["วางแผน (เดือนนี้)", tot.planned], ["เสร็จจริง", tot.done], ["งานค้างรายเดือน", Math.max(0, (tot.planned || 0) - (tot.done || 0)), 1], ["งานค้างสะสม (ตั้งแต่ต้นปี)", Math.max(0, (tot.ytd_planned || 0) - (tot.ytd_done || 0)), 1], ["อุปกรณ์ที่ไม่พร้อมใช้", tot.abnormal, 1]]);
     $("#fDashN").textContent = `เครื่องทั้งหมดในส่วน ${SCN} ${nMach.toLocaleString()} เครื่อง มีแผน PM ${nPlan.toLocaleString()} เครื่อง · งานค้าง = แผน ลบ งานที่เสร็จและอนุมัติครบ · อุปกรณ์ที่ไม่พร้อมใช้ = เครื่องที่ผลตรวจ PM เดือนนี้พบผิดปกติ`;
     $("#fKpi").innerHTML = kpis([["แผนเดือนนี้ (เครื่อง)", tot.planned], ["เสร็จและอนุมัติ", tot.done], ["รอเซ็น", tot.waiting_sign], ["ยังไม่ทำ", tot.not_done, 1], ["พบผิดปกติ (ใบ)", tot.abnormal, 1], ["% เสร็จ", tot.pct == null ? "-" : tot.pct + "%"], ["% สะสมทั้งปี", tot.ytd_pct == null ? "-" : tot.ytd_pct + "%"]]);
     const late = fRows.filter(r => r.grp !== "รวม" && r.not_done > 0).sort((x, z) => z.not_done - x.not_done);
     $("#fSum").innerHTML = !tot.planned ? '<div class="empty">เดือนนี้ยังไม่มีเครื่องในแผน PM นำเข้าแผนได้ที่แท็บ “ทะเบียน &amp; แผนปี”</div>'
-      : `<b>บทสรุปผู้บริหาร:</b> แผนเดือนนี้ ${tot.planned} เครื่อง ทำเสร็จและอนุมัติแล้ว ${tot.done} เครื่อง (${tot.pct}%) รอเซ็น ${tot.waiting_sign} ยังไม่ทำ ${tot.not_done}${late.length ? ` · ระบบที่ค้างมากที่สุด: ${late.slice(0, 3).map(r => `${esc(r.grp)} ${r.not_done}`).join(", ")}` : " · ไม่มีระบบที่ค้าง"}${tot.abnormal ? ` · พบผิดปกติ ${tot.abnormal} ใบ ควรเปิดใบแจ้งซ่อมตาม` : ""}`;
-    $("#fTable").innerHTML = fTable(fHead, fRows.map(r => [r.grp, ...fLine(r)]), r => r[0] === "รวม");
-    $("#fAllBox").hidden = !fExec;
-    if (fExec) { const b = await fRpc("pm_followup_all_by", "pm_followup_all"); fAll = b.data || [];
+      : `<b>บทสรุปผู้บริหาร:</b> แผนเดือนนี้ ${tot.planned} เครื่อง ทำเสร็จและอนุมัติแล้ว ${tot.done} เครื่อง (${tot.pct}%) รอเซ็น ${tot.waiting_sign} ยังไม่ทำ ${tot.not_done}${late.length ? ` · ${allMode ? "โรงที่ค้างมากที่สุด" : "ระบบที่ค้างมากที่สุด"}: ${late.slice(0, 3).map(r => `${esc(r.grp)} ${r.not_done}`).join(", ")}` : " · ไม่มีระบบที่ค้าง"}${tot.abnormal ? ` · พบผิดปกติ ${tot.abnormal} ใบ ควรเปิดใบแจ้งซ่อมตาม` : ""}`;
+    $("#fTable").innerHTML = fTable(allMode ? ["โรงพยาบาล", ...fHead.slice(1)] : fHead, fRows.map(r => [r.grp, ...fLine(r)]), r => r[0] === "รวม");
+    $("#fAllBox").hidden = !fExec || allMode;
+    if (fExec && !allMode) { const b = await fRpc("pm_followup_all_by", "pm_followup_all"); fAll = b.data || [];
       $("#fAll").innerHTML = b.error ? "" : fTable(["โรงพยาบาล", "เครื่องในแผน PM", ...fHead.slice(1)], fAll.map(r => [`${r.code} ${r.name}`, r.machines, ...fLine({ ...r, planned: r.planned ?? 0, done: r.done ?? 0, waiting_sign: r.waiting_sign ?? 0, not_done: r.not_done ?? 0, abnormal: r.abnormal ?? 0, ytd_planned: r.ytd_planned ?? 0, ytd_done: r.ytd_done ?? 0 })]), () => false); }
     if (fExec && !fHosp.length) { fHosp = (await sb.from("hospitals").select("id,code,name").order("code")).data || []; $("#fHosp").innerHTML = fHosp.map(x => `<option value="${x.id}"${x.id === H.id ? " selected" : ""}>${esc(x.code)} ${esc(x.name)}</option>`).join(""); }
     $("#fHospL").hidden = !fExec; if (fExec) $("#fRcpBox").hidden = false;
@@ -488,9 +500,9 @@
   $("#fMonth").onchange = renderFollow; $("#fHosp").onchange = renderFollow;
   $("#fPrint").onclick = () => window.print();
   $("#fCsv").onclick = () => { const tot = fRows.find(r => r.grp === "รวม");
-    const sheets = [Office.summarySheet({ title: $("#fTitle").textContent, org: H.name, findings: [$("#fSum").textContent.replace(/^บทสรุปผู้บริหาร:\s*/, "")], figures: tot ? fHead.slice(1).map((h, i) => [h, fLine(tot)[i]]) : [] }), { name: "ติดตามรายระบบ", header: 0, rows: [fHead, ...fRows.map(r => [r.grp, ...fLine(r)])] }];
+    const sheets = [Office.summarySheet({ title: $("#fTitle").textContent, org: HN(), findings: [$("#fSum").textContent.replace(/^บทสรุปผู้บริหาร:\s*/, "")], figures: tot ? fHead.slice(1).map((h, i) => [h, fLine(tot)[i]]) : [] }), { name: "ติดตามรายระบบ", header: 0, rows: [fHead, ...fRows.map(r => [r.grp, ...fLine(r)])] }];
     if (fExec && fAll.length) sheets.push({ name: "12 โรงพยาบาล", header: 0, rows: [["รหัส", "โรงพยาบาล", "เครื่องในแผน PM", ...fHead.slice(1)], ...fAll.map(r => [r.code, r.name, r.machines, ...fLine(r)])] });
-    Office.xlsx(`ติดตามแผนPM-${H.code}-${$("#fMonth").value}`, sheets); };
+    Office.xlsx(`ติดตามแผนPM-${allMode ? "12โรง" : H.code}-${$("#fMonth").value}`, sheets); };
   $("#fAdd").onclick = async () => { const em = $("#fEmail").value.trim().toLowerCase(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return note("#fMsg", new Error("รูปแบบ email ไม่ถูกต้อง"));
     const { error } = await sb.from("report_recipients").insert({ hospital_id: fHid(), kind: "pm_followup", email: em, created_by: me.id });
     if (error) return note("#fMsg", /duplicate|report_recipients_uq/.test(error.message || "") ? new Error("email นี้มีอยู่แล้ว") : error); $("#fEmail").value = ""; note("#fMsg", null, "เพิ่มผู้รับแล้ว"); renderFollow(); };
