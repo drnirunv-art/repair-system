@@ -78,6 +78,9 @@
     $("#title").textContent = SCN + " บำรุงรักษาตามแผน · " + HN(); $("#who").textContent = me.full_name || session.user.email;
     await Promise.all([loadStaff(), loadEquip(), loadTpls()]);
     document.querySelectorAll("[data-manager]").forEach(b => b.hidden = !isMgr());
+    // say why the upload boxes are missing on the check-sheet tab
+    $("#tNoUp").hidden = isMgr(); $("#tNoUp").textContent = viewOnly ? `ตอนนี้กำลังดู ${H.code} แบบอ่านอย่างเดียว ช่องอัปโหลด Check sheet จะแสดงเมื่อเลือกโรงพยาบาลของตัวเอง (${(hPick.find(h => h.id === me.hospital_id) || {}).code || ""}) ในช่อง โรงพยาบาล มุมขวาบน`
+      : "ช่องอัปโหลด Check sheet ใช้ได้เฉพาะ Owner, Admin, หัวหน้าวิศวกร และหัวหน้างาน";
     $("#signTab").hidden = !isHead();
     $("#tabs").hidden = false;
     fillFilters();
@@ -770,6 +773,7 @@
   /* ---------- check-sheet templates ---------- */
   let tEdit = null;
   function renderTpl() {
+    if (!$("#uType").options.length || $("#uType").options.length !== $("#tSel").options.length + 1) fillUType();
     const type = $("#tSel").value || "ทั่วไป", own = tpls.find(t => t.eq_type === type && t.hospital_id), std = tpls.find(t => t.eq_type === type && !t.hospital_id), t = own || std || tplFor(type);
     const n = equip.filter(e => (e.eq_type || "") === type).length, tr = $("#tRound").value, shown = t.items.map((it, i) => [it, i]).filter(([it]) => !tr || inRound(it, tr));
     $("#tBody").innerHTML = `<div class="panel"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(type)} <span class="meta">${own ? "ฉบับของโรงนี้" : std ? "มาตรฐานกลาง" : "ยังไม่มี ใช้แบบทั่วไป"} · ใช้กับ ${n} เครื่อง</span></h3>

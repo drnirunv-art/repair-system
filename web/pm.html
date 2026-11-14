@@ -146,7 +146,8 @@
     <h2>Check sheet ตามชนิดเครื่อง</h2>
     <p class="sub">มาตรฐานกลางใช้ทุกโรงพยาบาล หัวหน้า / Admin ปรับเป็นฉบับของโรงได้ ชนิดที่ยังไม่มี check sheet ระบบใช้แบบ “ทั่วไป” ไปก่อน</p>
     <div class="filters noprint"><select id="tSel"></select><label>ดูรายการของรอบ<select id="tRound"><option value="">ทุกรอบ</option><option value="M">M รายเดือน</option><option value="Q">Q ราย 3 เดือน</option><option value="S">S ราย 6 เดือน</option><option value="Y">Y รายปี</option></select></label></div>
-    <details class="panel noprint" data-manager hidden style="margin-bottom:14px" id="uBox"><summary style="cursor:pointer;font-weight:600">อัปโหลดไฟล์ Check sheet ของรอบ (เลือกชนิดเครื่องและรอบ แล้วอัปโหลดไฟล์ Excel ของตัวเอง)</summary>
+    <div class="note noprint" id="tNoUp" hidden style="margin-bottom:14px"></div>
+    <details class="panel noprint" data-manager hidden style="margin-bottom:14px" id="uBox" open><summary style="cursor:pointer;font-weight:600">อัปโหลดไฟล์ Check sheet ของรอบ (เลือกชนิดเครื่องและรอบ แล้วอัปโหลดไฟล์ Excel ของตัวเอง)</summary>
       <p class="meta" style="margin-top:10px">ใช้ไฟล์ Check sheet เดิมที่มีอยู่ได้เลย ระบบอ่านรายการตรวจจากคอลัมน์ “รายการ / รายละเอียด / Description / Item” (ถ้าไม่มีหัวตาราง ใช้คอลัมน์ที่มีข้อความยาวที่สุด) แล้วให้ตรวจและแก้ก่อนบันทึก รายการที่บันทึกจะเป็นรายการตรวจของรอบที่เลือกทั้งหมด เมื่อสแกน QR ที่เครื่องในเดือนที่เป็นรอบนี้ ใบตรวจออนไลน์จะแสดงรายการชุดนี้</p>
       <div class="row"><label>ชนิดเครื่อง<select id="uType"></select></label><label id="uNewL" hidden>ชื่อชนิดใหม่<input id="uNew" placeholder="เช่น AHU"></label>
         <label>รอบ<select id="uRound"><option value="M">M รายเดือน</option><option value="Q">Q ราย 3 เดือน</option><option value="S">S ราย 6 เดือน</option><option value="Y">Y รายปี</option></select></label>
