@@ -11,7 +11,7 @@
   const LV = { ok: "ปกติ", wear: "เริ่มเสื่อม", bad: "ผิดปกติ" };
   const FREQ = { M: "รายเดือน", Q: "ราย 3 เดือน", H: "ราย 6 เดือน", Y: "รายปี" };
   const TH_M = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-  let me = null, H = null, viewOnly = false, allMode = false, hPick = [], staff = [], equipAll = [], equip = [], tpls = [], tasks = [], channel = null, week = 0, stat = "open", cur = null, scannedTag = null, editId = null, regLimit = 200;
+  let me = null, H = null, isEx = false, viewOnly = false, allMode = false, hPick = [], staff = [], equipAll = [], equip = [], tpls = [], tasks = [], channel = null, week = 0, stat = "open", cur = null, scannedTag = null, editId = null, regLimit = 200;
   const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
   const HN = () => allMode ? `ทุกโรงพยาบาล (${hPick.length} โรง)` : H.name;
   const role = () => me && (viewOnly ? "observer" : me.role);   // another hospital picked by a 12-hospital viewer: read only
@@ -24,6 +24,9 @@
   const eqOf = id => equip.find(e => e.id === id) || {};
   const where = e => [e.building, e.floor, e.place].filter(Boolean).join(" · ");
   const tplFor = type => tpls.find(t => t.eq_type === type && t.hospital_id) || tpls.find(t => t.eq_type === type && !t.hospital_id) || tpls.find(t => t.eq_type === "ทั่วไป" && !t.hospital_id) || { items: [] };
+  const canTpl = () => isMgr() || (isEx && !allMode);   // 12-hospital viewers may upload check sheets for any hospital
+  const tDest = () => isEx && $("#tDest").value === "__central" ? null : H.id;   // hospital id, or null = central standard
+  const rowFor = (type, dest) => tpls.find(t => t.eq_type === type && (t.hospital_id || null) === dest);
   const hasOwnTpl = type => tpls.some(t => t.eq_type === type);
   // check-sheet rounds: an item may carry f: ["M","Q","S","Y"] = the rounds it is checked in (none = every round)
   const ROUNDS = ["M", "Q", "S", "Y"], rnd = x => { x = String(x || "").toUpperCase().trim(); return x === "H" ? "S" : x; };
@@ -62,7 +65,7 @@
     if (!me || !me.hospital_id) { $("#gate").hidden = false; return; }
     H = me.hospitals; $("#gate").hidden = true;
     // 12-hospital viewers (am_exec) pick the hospital to look at; other hospitals are read only
-    if ((await sb.rpc("am_exec")).data === true) {
+    if ((await sb.rpc("am_exec")).data === true) { isEx = true;
       if (!hPick.length) hPick = (await sb.from("hospitals").select("id,code,name").eq("active", true).order("code")).data || [];
       const want = (q0.get("p") || store.get("rs-pm-h", "")).toUpperCase(), hit = hPick.find(h => h.code.toUpperCase() === want); if (hit) H = hit;
       allMode = want === "ALL";   // the 12-hospital overview: only the follow-up table, one row per hospital
@@ -78,8 +81,10 @@
     $("#title").textContent = SCN + " บำรุงรักษาตามแผน · " + HN(); $("#who").textContent = me.full_name || session.user.email;
     await Promise.all([loadStaff(), loadEquip(), loadTpls()]);
     document.querySelectorAll("[data-manager]").forEach(b => b.hidden = !isMgr());
+    document.querySelectorAll("[data-tplup]").forEach(b => b.hidden = !canTpl());
+    $("#tDestL").hidden = !isEx; if (isEx) opts($("#tDest"), [[H.id, `${H.code} · ${H.name} (ฉบับของโรงนี้)`], ["__central", "มาตรฐานกลาง ใช้ทุกโรง (โรงที่ไม่มีฉบับของตัวเอง)"]]);
     // say why the upload boxes are missing on the check-sheet tab
-    $("#tNoUp").hidden = isMgr(); $("#tNoUp").textContent = viewOnly ? `ตอนนี้กำลังดู ${H.code} แบบอ่านอย่างเดียว ช่องอัปโหลด Check sheet จะแสดงเมื่อเลือกโรงพยาบาลของตัวเอง (${(hPick.find(h => h.id === me.hospital_id) || {}).code || ""}) ในช่อง โรงพยาบาล มุมขวาบน`
+    $("#tNoUp").hidden = canTpl(); $("#tNoUp").textContent = viewOnly ? `ตอนนี้กำลังดู ${H.code} แบบอ่านอย่างเดียว ช่องอัปโหลด Check sheet จะแสดงเมื่อเลือกโรงพยาบาลของตัวเอง (${(hPick.find(h => h.id === me.hospital_id) || {}).code || ""}) ในช่อง โรงพยาบาล มุมขวาบน`
       : "ช่องอัปโหลด Check sheet ใช้ได้เฉพาะ Owner, Admin, หัวหน้าวิศวกร และหัวหน้างาน";
     $("#signTab").hidden = !isHead();
     $("#tabs").hidden = false;
@@ -101,7 +106,7 @@
     }
     equipAll = out; equip = out.filter(inScope);
   }
-  const loadTpls = async () => { const r = await sb.from("pm_templates").select("*"); tpls = r.data || []; };
+  const loadTpls = async () => { const r = await sb.from("pm_templates").select("*"); tpls = (r.data || []).filter(t => !t.hospital_id || t.hospital_id === H.id); };   // 12-hospital viewers can read every hospital: keep central + this one
   async function loadTasks(v) {
     const [y, m] = ym(v);
     const r = await sb.from("pm_tasks").select("*").eq("hospital_id", H.id).eq("year", y).eq("month", m);
@@ -777,7 +782,7 @@
     const type = $("#tSel").value || "ทั่วไป", own = tpls.find(t => t.eq_type === type && t.hospital_id), std = tpls.find(t => t.eq_type === type && !t.hospital_id), t = own || std || tplFor(type);
     const n = equip.filter(e => (e.eq_type || "") === type).length, tr = $("#tRound").value, shown = t.items.map((it, i) => [it, i]).filter(([it]) => !tr || inRound(it, tr));
     $("#tBody").innerHTML = `<div class="panel"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(type)} <span class="meta">${own ? "ฉบับของโรงนี้" : std ? "มาตรฐานกลาง" : "ยังไม่มี ใช้แบบทั่วไป"} · ใช้กับ ${n} เครื่อง</span></h3>
-      <div class="row">${n ? `<button class="btn small" type="button" id="tQr">สร้าง QR ของเครื่องชนิดนี้ (${n} เครื่อง)</button>` : ""}${isMgr() ? `<button class="btn small" type="button" id="tEditBtn">${own ? "แก้ฉบับของโรง" : "ปรับเป็นฉบับของโรง"}</button>` : ""}</div></div>
+      <div class="row">${n ? `<button class="btn small" type="button" id="tQr">สร้าง QR ของเครื่องชนิดนี้ (${n} เครื่อง)</button>` : ""}${canTpl() ? `<button class="btn small" type="button" id="tEditBtn">${own ? "แก้ฉบับของโรง" : "ปรับเป็นฉบับของโรง"}</button>` : ""}</div></div>
       ${n ? `<p class="meta">สแกน QR ที่ติดเครื่องแล้วจะเปิดใบตรวจของเดือนนั้นพร้อม check sheet นี้ (เฉพาะข้อของรอบนั้น) ให้ทันที</p>` : ""}
       <div class="scroll"><table><tr><th>#</th><th>รายการตรวจ</th><th>แบบคำตอบ</th><th>เกณฑ์</th><th>ต้องถ่ายรูป</th><th>รอบที่ตรวจ</th></tr>${shown.map(([it, i]) => `<tr><td>${i + 1}</td><td>${esc(it.t)}</td><td>${it.k === "value" ? "กรอกค่า" : "ปกติ / เริ่มเสื่อม / ผิดปกติ"}</td><td>${crit(it)}</td><td>${it.ph ? "ต้องถ่าย" : ""}</td><td>${(it.f || []).length ? it.f.join(" ") : "ทุกรอบ"}</td></tr>`).join("")}</table></div>
       ${tr ? `<p class="meta">รอบ ${tr}: ${shown.length} จาก ${t.items.length} ข้อ</p>` : ""}</div><div id="tForm"></div>`;
@@ -845,20 +850,20 @@
         const fr = ROUNDS.filter((_, j) => cR[j] >= 0 && yes(r[cR[j]])); if (fr.length && fr.length < 4) it.f = fr;
         items.push(it); });
       if (!type) continue;
-      cImp.push({ type, items, warn, own: tpls.some(x => x.eq_type === type && x.hospital_id), known: equip.some(e => (e.eq_type || "") === type) });
+      cImp.push({ type, items, warn, own: !!rowFor(type, tDest()), known: equip.some(e => (e.eq_type || "") === type) });
     }
     if (!cImp.length) return note("#cMsg", new Error("ไม่พบแผ่นงานที่มีหัวตาราง “รายการตรวจ” ใช้แบบฟอร์มจากปุ่มดาวน์โหลดแบบฟอร์ม"));
     const cnt = (x, r) => x.items.filter(it => inRound(it, r)).length;
-    $("#cPrev").innerHTML = `<div class="scroll" style="margin-top:10px"><table><tr><th>ชนิดเครื่อง</th><th>รายการตรวจ</th><th>รอบ M</th><th>รอบ Q</th><th>รอบ S</th><th>รอบ Y</th><th>ผล</th></tr>${cImp.map(x => `<tr${x.items.length ? "" : ' style="color:var(--bad)"'}><td>${esc(x.type)}</td><td>${x.items.length}</td>${ROUNDS.map(r => `<td>${cnt(x, r)}</td>`).join("")}<td>${!x.items.length ? "ไม่มีรายการ ข้าม" : x.own ? "แทนฉบับของโรงเดิม" : "สร้างฉบับของโรง"}${x.known ? "" : " · ยังไม่มีเครื่องชนิดนี้ในทะเบียน"}${x.warn.length ? " · " + esc(x.warn.slice(0, 3).join(", ")) : ""}</td></tr>`).join("")}</table></div>
+    $("#cPrev").innerHTML = `<div class="scroll" style="margin-top:10px"><table><tr><th>ชนิดเครื่อง</th><th>รายการตรวจ</th><th>รอบ M</th><th>รอบ Q</th><th>รอบ S</th><th>รอบ Y</th><th>ผล</th></tr>${cImp.map(x => `<tr${x.items.length ? "" : ' style="color:var(--bad)"'}><td>${esc(x.type)}</td><td>${x.items.length}</td>${ROUNDS.map(r => `<td>${cnt(x, r)}</td>`).join("")}<td>${!x.items.length ? "ไม่มีรายการ ข้าม" : (x.own ? "แทน" : "สร้าง") + (tDest() ? "ฉบับของโรง " + H.code : "มาตรฐานกลาง (ทุกโรง)")}${x.known ? "" : " · ยังไม่มีเครื่องชนิดนี้ในทะเบียน"}${x.warn.length ? " · " + esc(x.warn.slice(0, 3).join(", ")) : ""}</td></tr>`).join("")}</table></div>
       <div class="row" style="margin-top:8px"><button class="btn primary" type="button" id="cSave">บันทึก ${cImp.filter(x => x.items.length).length} ชนิด</button></div>`;
   };
   document.addEventListener("click", async ev => {
     if (ev.target.id !== "cSave") return; const b = ev.target; b.disabled = true; b.textContent = "กำลังบันทึก…"; let ok = 0;
     try {
       for (const x of cImp.filter(x => x.items.length)) {
-        const own = tpls.find(t => t.eq_type === x.type && t.hospital_id);
+        const dest = tDest(), own = rowFor(x.type, dest);
         const r = own ? await sb.from("pm_templates").update({ items: x.items, updated_by: me.id, updated_at: new Date().toISOString() }).eq("id", own.id)
-          : await sb.from("pm_templates").insert({ hospital_id: H.id, eq_type: x.type, items: x.items, updated_by: me.id });
+          : await sb.from("pm_templates").insert({ hospital_id: dest, eq_type: x.type, items: x.items, updated_by: me.id });
         if (r.error) throw new Error(`${x.type}: ${r.error.message}`); ok++;
       }
       cImp = []; $("#cPrev").innerHTML = ""; $("#cFile").value = ""; note("#cMsg", null, `บันทึก check sheet ${ok} ชนิดแล้ว ใช้กับใบตรวจที่เปิดใหม่`);
@@ -906,23 +911,24 @@
     const tn = uTypeName().toLowerCase(), pick = names.find(n => tn && n.toLowerCase().includes(tn)) || names.find(n => uParse(uWb[n]).length) || names[0]; $("#uSheet").value = pick; uLoad();
   };
   $("#uSheet").onchange = () => uLoad();
+  $("#tDest").onchange = () => { uDraw(); if (cImp.length) $("#cFile").dispatchEvent(new Event("change")); };
   function uLoad() { uItems = uWb ? uParse(uWb[$("#uSheet").value] || []) : []; uDraw(); }
   function uRead() { document.querySelectorAll("[data-ui]").forEach(el => { const it = uItems[+el.dataset.ui], k = el.dataset.uk;
     if (k === "on") it.on = el.checked; else if (k === "ph") { if (el.checked) it.ph = true; else delete it.ph; } else if (k === "lo" || k === "hi") { if (el.value === "") delete it[k]; else it[k] = +el.value; } else if (k === "u") { if (el.value.trim()) it.u = el.value.trim(); else delete it.u; } else it[k] = k === "t" ? el.value.trim() : el.value; }); }
   function uDraw() {
-    if (!uWb) return; const type = uTypeName(), r = $("#uRound").value, cur = type ? tplFor(type) : { items: [] }, has = hasOwnTpl(type);
+    if (!uWb) return; const type = uTypeName(), r = $("#uRound").value, dest = tDest(), has = dest ? hasOwnTpl(type) : !!rowFor(type, null), cur = !type ? { items: [] } : dest ? tplFor(type) : (rowFor(type, null) || { items: [] });
     const before = has ? cur.items.filter(it => inRound(it, r)).length : 0;
     $("#uPrev").innerHTML = !uItems.length ? '<div class="note bad" style="margin-top:10px">ไม่พบรายการตรวจในแผ่นงานนี้ ลองเลือกแผ่นงานอื่น</div>' : `<p class="meta" style="margin-top:10px">พบ ${uItems.length} รายการ · ชนิด <b>${esc(type || "-")}</b> รอบ <b>${r}</b>${has ? ` · รอบนี้เดิมมี ${before} ข้อ จะถูกแทนด้วยรายการที่ติ๊กด้านล่าง ข้อของรอบอื่นคงเดิม` : " · ยังไม่มี check sheet ของชนิดนี้ จะสร้างใหม่"} · เอาติ๊กออกในแถวที่ไม่ใช่รายการตรวจ (เช่น หัวข้อหมวด)</p>
       <div class="scroll"><table><tr><th>ใช้</th><th>#</th><th>รายการตรวจ</th><th>แบบคำตอบ</th><th>หน่วย</th><th>ต่ำสุด</th><th>สูงสุด</th><th>รูป</th></tr>${uItems.map((it, i) => `<tr><td><input type="checkbox" data-ui="${i}" data-uk="on"${it.on ? " checked" : ""}></td><td>${i + 1}</td><td style="min-width:260px"><input data-ui="${i}" data-uk="t" value="${esc(it.t)}" style="width:100%"></td>
         <td><select data-ui="${i}" data-uk="k"><option value="level"${it.k !== "value" ? " selected" : ""}>ปกติ/เสื่อม/ผิดปกติ</option><option value="value"${it.k === "value" ? " selected" : ""}>กรอกค่า</option></select></td>
         <td><input data-ui="${i}" data-uk="u" value="${esc(it.u || "")}" style="width:70px"></td><td><input type="number" step="any" data-ui="${i}" data-uk="lo" value="${it.lo ?? ""}" style="width:80px"></td><td><input type="number" step="any" data-ui="${i}" data-uk="hi" value="${it.hi ?? ""}" style="width:80px"></td><td><input type="checkbox" data-ui="${i}" data-uk="ph"${it.ph ? " checked" : ""}></td></tr>`).join("")}</table></div>
-      <div class="row" style="margin-top:8px"><button class="btn primary" type="button" id="uSave">บันทึกเป็น check sheet รอบ ${r} ของ ${esc(type || "-")}</button></div>`;
+      <div class="row" style="margin-top:8px"><button class="btn primary" type="button" id="uSave">บันทึกเป็น check sheet รอบ ${r} ของ ${esc(type || "-")} ${dest ? "· ฉบับของ " + esc(H.code) : "· มาตรฐานกลาง ทุกโรง"}</button></div>`;
   }
   document.addEventListener("click", async ev => {
     if (ev.target.id !== "uSave") return; uRead();
     const type = uTypeName(), r = $("#uRound").value, pick = uItems.filter(it => it.on && it.t).map(({ on, ...it }) => it);
     if (!type) return note("#uMsg", new Error("กรุณาเลือกหรือพิมพ์ชื่อชนิดเครื่อง")); if (!pick.length) return note("#uMsg", new Error("ยังไม่ได้เลือกรายการตรวจ"));
-    const own = tpls.find(t => t.eq_type === type && t.hospital_id), base = JSON.parse(JSON.stringify(hasOwnTpl(type) ? tplFor(type).items : []));
+    const dest = tDest(), own = rowFor(type, dest), base = JSON.parse(JSON.stringify(dest ? (hasOwnTpl(type) ? tplFor(type).items : []) : (own ? own.items : [])));
     // this round = exactly the picked items; other rounds keep their items
     const out = [];
     base.forEach(it => { const f = (it.f || []).length ? it.f : [...ROUNDS], rest = f.filter(x => x !== r);
@@ -932,10 +938,10 @@
       const it = { ...p }; if (f.length < 4) it.f = ROUNDS.filter(x => f.includes(x)); out.push(it); });
     const b = ev.target; b.disabled = true;
     const res = own ? await sb.from("pm_templates").update({ items: out, updated_by: me.id, updated_at: new Date().toISOString() }).eq("id", own.id)
-      : await sb.from("pm_templates").insert({ hospital_id: H.id, eq_type: type, items: out, updated_by: me.id });
+      : await sb.from("pm_templates").insert({ hospital_id: dest, eq_type: type, items: out, updated_by: me.id });
     b.disabled = false; if (res.error) return note("#uMsg", res.error);
     uWb = null; uItems = []; $("#uPrev").innerHTML = ""; $("#uFile").value = ""; $("#uSheetL").hidden = true;
     await loadTpls(); fillFilters(); fillUType(); $("#tSel").value = type; $("#tRound").value = r; renderTpl();
-    note("#uMsg", null, `บันทึก check sheet รอบ ${r} ของ ${type} แล้ว ${pick.length} ข้อ ใบตรวจที่เปิดใหม่ในรอบ ${r} จะใช้รายการชุดนี้${equip.some(e => e.eq_type === type) ? "" : " (ยังไม่มีเครื่องชนิดนี้ในทะเบียน ให้ตั้งชนิดของเครื่องในแท็บ ทะเบียน & แผนปี ให้ตรงกับชื่อนี้)"}`);
+    note("#uMsg", null, `บันทึก check sheet รอบ ${r} ของ ${type} ${dest ? "(ฉบับของ " + H.code + ")" : "(มาตรฐานกลาง ทุกโรง)"} แล้ว ${pick.length} ข้อ ใบตรวจที่เปิดใหม่ในรอบ ${r} จะใช้รายการชุดนี้${equip.some(e => e.eq_type === type) ? "" : " (ยังไม่มีเครื่องชนิดนี้ในทะเบียน ให้ตั้งชนิดของเครื่องในแท็บ ทะเบียน & แผนปี ให้ตรงกับชื่อนี้)"}`);
   });
 })();
