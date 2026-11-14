@@ -499,6 +499,40 @@
   }
   $("#fMonth").onchange = renderFollow; $("#fHosp").onchange = renderFollow;
   $("#fPrint").onclick = () => window.print();
+  // executive summary deck of the follow-up table, with analysis (per system for one hospital, per hospital for the overview)
+  function fReport() {
+    const tot = fRows.find(r => r.grp === "รวม") || {}, rows = fRows.filter(r => r.grp !== "รวม"), unit = allMode ? "โรง" : "ระบบ", N = v => (+v || 0).toLocaleString("th-TH");
+    const pc = (a, b) => b ? Math.round(a * 100 / b) : null, ml = monthLabel($("#fMonth").value), TARGET = 80;
+    const live = rows.filter(r => +r.planned > 0), byPct = [...live].sort((a, b) => pc(a.done, a.planned) - pc(b.done, b.planned)), lag = [...rows].filter(r => +r.not_done > 0).sort((a, b) => b.not_done - a.not_done);
+    const back = Math.max(0, (tot.planned || 0) - (tot.done || 0)), ytdBack = Math.max(0, (tot.ytd_planned || 0) - (tot.ytd_done || 0));
+    const find = [], notes = [];
+    if (!tot.planned) find.push(`${ml} ยังไม่มีเครื่องในแผน ${SCN} ของ${HN()}`);
+    else {
+      find.push(`แผน ${SCN} เดือน${ml}: ${N(tot.planned)} เครื่อง ทำเสร็จและอนุมัติแล้ว ${N(tot.done)} เครื่อง (${tot.pct ?? pc(tot.done, tot.planned)}%) งานค้างเดือนนี้ ${N(back)} เครื่อง`);
+      find.push(`ในงานค้าง: รอหัวหน้า/วิศวกรเซ็น ${N(tot.waiting_sign)} เครื่อง และยังไม่ได้ทำ ${N(tot.not_done)} เครื่อง`);
+      find.push(`สะสมตั้งแต่ต้นปี ทำแล้ว ${N(tot.ytd_done)} จากแผน ${N(tot.ytd_planned)} ครั้ง (${tot.ytd_pct ?? "-"}%) ค้างสะสม ${N(ytdBack)} ครั้ง`);
+      if (byPct.length > 1) { const best = byPct[byPct.length - 1], worst = byPct[0];
+        find.push(`${unit}ที่ทำได้ดีที่สุด: ${best.grp} ${pc(best.done, best.planned)}% · ${unit}ที่ต่ำที่สุด: ${worst.grp} ${pc(worst.done, worst.planned)}%`); }
+      const under = live.filter(r => pc(r.done, r.planned) < TARGET);
+      find.push(under.length ? `${N(under.length)} จาก ${N(live.length)} ${unit}ยังทำเสร็จไม่ถึง ${TARGET}% ของแผนเดือนนี้` : `ทุก${unit}ที่มีแผนทำเสร็จตั้งแต่ ${TARGET}% ขึ้นไป`);
+      if (+tot.abnormal) find.push(`ผลตรวจพบผิดปกติ ${N(tot.abnormal)} ใบ`);
+    }
+    if (lag.length) notes.push(`เร่ง${unit}ที่งานยังไม่ได้ทำมากที่สุด: ${lag.slice(0, 3).map(r => `${r.grp} (${N(r.not_done)} เครื่อง)`).join(", ")}`);
+    if (+tot.waiting_sign) notes.push(`มีใบตรวจรอเซ็น ${N(tot.waiting_sign)} ใบ ควรให้หัวหน้าและวิศวกรเซ็นให้ครบ เพราะงานจะนับว่าเสร็จเมื่ออนุมัติแล้วเท่านั้น`);
+    if (+tot.abnormal) notes.push(`ควรเปิดใบแจ้งซ่อมให้ครบทุกเครื่องที่ผลตรวจพบผิดปกติ ${N(tot.abnormal)} ใบ และติดตามจนแก้ไขเสร็จ`);
+    if (ytdBack && tot.ytd_pct != null && tot.ytd_pct < TARGET) notes.push(`งานสะสมทั้งปียังต่ำกว่า ${TARGET}% (${tot.ytd_pct}%) ควรวางแผนทำงานค้าง ${N(ytdBack)} ครั้งเพิ่มในเดือนถัดไป`);
+    if (allMode) { const none = rows.filter(r => !+r.planned); if (none.length) notes.push(`${none.map(r => r.code || r.grp).join(", ")} ยังไม่มีงานตามแผนเดือนนี้ ควรตรวจว่านำเข้าแผน PM ครบแล้วหรือไม่`); }
+    if (!notes.length) notes.push("ผลงานเป็นไปตามแผน ไม่มีรายการที่ต้องติดตามเป็นพิเศษ");
+    const name = r => r.grp, sections = [
+      { title: `อัตราทำเสร็จเดือน${ml} แยกราย${unit}`, head: [allMode ? "โรงพยาบาล" : "ระบบ", "% เสร็จ", "แผน (เครื่อง)", "เสร็จและอนุมัติ"], rows: [...live].sort((a, b) => pc(b.done, b.planned) - pc(a.done, a.planned)).map(r => [name(r), pc(r.done, r.planned), N(r.planned), N(r.done)]),
+        note: live.length > 12 ? `แสดง 12 จาก ${live.length} ${unit} ดูครบในไฟล์ Excel` : `เป้าหมายแนะนำ ${TARGET}% ขึ้นไป` },
+      { title: `งานค้างเดือน${ml} แยกราย${unit}`, head: [allMode ? "โรงพยาบาล" : "ระบบ", "ยังไม่ทำ", "รอเซ็น", "พบผิดปกติ (ใบ)"], rows: lag.map(r => [name(r), +r.not_done, N(r.waiting_sign), N(r.abnormal)]), note: lag.length ? "" : "ไม่มีงานค้าง" },
+      { title: "ผลงานสะสมตั้งแต่ต้นปี", head: [allMode ? "โรงพยาบาล" : "ระบบ", "% สะสม", "แผนสะสม (ครั้ง)", "ทำแล้วสะสม"], rows: rows.filter(r => +r.ytd_planned > 0).sort((a, b) => pc(b.ytd_done, b.ytd_planned) - pc(a.ytd_done, a.ytd_planned)).map(r => [name(r), pc(r.ytd_done, r.ytd_planned), N(r.ytd_planned), N(r.ytd_done)]) }];
+    return { title: `บทสรุปผู้บริหาร ติดตามแผน ${SCN}`, org: HN(), period: `เดือน${ml}`, file: `บทสรุปผู้บริหาร_ติดตามแผน_${SC === "MA" ? "PM-MA" : "PM-Inhouse"}_${allMode ? "12โรง" : H.code}_${$("#fMonth").value}`,
+      findings: find, notes, sections, kpis: [["แผนเดือนนี้ (เครื่อง)", N(tot.planned)], ["เสร็จและอนุมัติ", N(tot.done)], ["% เสร็จ", tot.pct == null ? "-" : tot.pct + "%"], ["งานค้างเดือนนี้", N(back)], ["รอเซ็น", N(tot.waiting_sign)], ["ยังไม่ทำ", N(tot.not_done)], ["พบผิดปกติ (ใบ)", N(tot.abnormal)], ["% สะสมทั้งปี", tot.ytd_pct == null ? "-" : tot.ytd_pct + "%"]] };
+  }
+  $("#fPpt").onclick = async ev => { const b = ev.currentTarget, t = b.textContent, rep = fReport(); b.disabled = true; b.textContent = "กำลังสร้างไฟล์…";
+    try { await Office.pptx(rep.file, rep); } catch (e) { toast(e.message || String(e)); } b.disabled = false; b.textContent = t; };
   $("#fCsv").onclick = () => { const tot = fRows.find(r => r.grp === "รวม");
     const sheets = [Office.summarySheet({ title: $("#fTitle").textContent, org: HN(), findings: [$("#fSum").textContent.replace(/^บทสรุปผู้บริหาร:\s*/, "")], figures: tot ? fHead.slice(1).map((h, i) => [h, fLine(tot)[i]]) : [] }), { name: "ติดตามรายระบบ", header: 0, rows: [fHead, ...fRows.map(r => [r.grp, ...fLine(r)])] }];
     if (fExec && fAll.length) sheets.push({ name: "12 โรงพยาบาล", header: 0, rows: [["รหัส", "โรงพยาบาล", "เครื่องในแผน PM", ...fHead.slice(1)], ...fAll.map(r => [r.code, r.name, r.machines, ...fLine(r)])] });
