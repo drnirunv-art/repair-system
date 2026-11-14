@@ -51,7 +51,7 @@
   $("#fLogin").onsubmit = async e => {
     e.preventDefault();
     const { error } = await sb.auth.signInWithPassword({ email: $("#lEmail").value.trim(), password: $("#lPass").value });
-    $("#lMsg").innerHTML = error ? `<div class="note bad">${esc(error.message === "Invalid login credentials" ? "อีเมลหรือรหัสผ่านไม่ถูกต้อง" : errText(error))}</div>` : "";
+    $("#lMsg").innerHTML = error ? `<div class="note bad">${esc(error.message === "Invalid login credentials" ? "อีเมลหรือรหัสผ่านไม่ถูกต้อง ถ้าลืมรหัสผ่าน กดปุ่ม “ลืมรหัสผ่าน” ด้านบน ระบบจะส่งลิงก์ตั้งรหัสใหม่ไปที่อีเมล" : errText(error))}</div>` : "";
   };
   $("#lSignup").onclick = async () => {
     if (!$("#fLogin").reportValidity()) return;
