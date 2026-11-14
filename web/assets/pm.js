@@ -861,4 +861,77 @@
     } catch (err) { note("#cMsg", new Error((ok ? `บันทึกแล้ว ${ok} ชนิด แต่ ` : "") + (err.message || err))); b.disabled = false; b.textContent = "ลองบันทึกอีกครั้ง"; }
     const keep = $("#tSel").value; await loadTpls(); fillFilters(); $("#tSel").value = keep; renderTpl();
   });
+
+  /* ---------- upload the user's own check-sheet file for one type + one round ---------- */
+  let uWb = null, uItems = [];
+  const fillUType = () => { const keep = $("#uType").value; opts($("#uType"), [...[...$("#tSel").options].map(o => [o.value, o.value]), ["__new", "+ ชนิดใหม่…"]]);
+    $("#uType").value = keep && [...$("#uType").options].some(o => o.value === keep) ? keep : $("#tSel").value; $("#uNewL").hidden = $("#uType").value !== "__new"; };
+  $("#uBox").addEventListener("toggle", () => { if ($("#uBox").open) fillUType(); });
+  $("#uType").onchange = () => { $("#uNewL").hidden = $("#uType").value !== "__new"; uDraw(); };
+  $("#uRound").onchange = () => uDraw();
+  const uTypeName = () => $("#uType").value === "__new" ? $("#uNew").value.trim() : $("#uType").value;
+  const STOP = /^(หมายเหตุ|ลงชื่อ|ลายมือ|ผู้ตรวจ|ผู้ปฏิบัติ|ผู้รับรอง|ผู้อนุมัติ|วิศวกร|หัวหน้า|ช่างผู้|signature|sign|remark|note|comment|approved|checked by|inspected by)/i;
+  function uParse(rows) {
+    rows = rows.map(r => [...r].map(c => cellS(c)));
+    const HD = c => c.length < 30 && /^(รายการ|รายละเอียด|หัวข้อ|description|items?$|items?\s|check\s*points?|check\s*list|checking\s*items?|inspection\s*(items?|points?))/i.test(c);
+    const hr = rows.slice(0, 40).findIndex(r => r.filter(Boolean).length >= 2 && r.some(HD));
+    let cT = -1; if (hr >= 0) cT = rows[hr].findIndex(HD);
+    const body = rows.slice(hr >= 0 ? hr + 1 : 0);
+    if (cT < 0) { const score = []; body.forEach(r => r.forEach((c, i) => { if (c.length > 4 && isNaN(+c)) score[i] = (score[i] || 0) + c.length; })); cT = score.reduce((b, v, i) => v > (score[b] || 0) ? i : b, 0); }
+    const h = hr >= 0 ? rows[hr] : [], ix = re => h.findIndex((c, i) => i !== cT && re.test(c));
+    const cU = ix(/หน่วย|unit/i), cLo = ix(/ต่ำสุด|^min/i), cHi = ix(/สูงสุด|^max/i), cS = ix(/มาตรฐาน|standard|เกณฑ์|criteria|spec|ค่าที่ยอมรับ/i);
+    const out = [];
+    for (const r of body) { const t = r[cT] || ""; if (!t || /^[\d.\s-]+$/.test(t)) continue; if (STOP.test(t)) break;
+      const it = { t: t.replace(/^\d+(\.\d+)*[.)]?\s+/, ""), k: "level", on: true, nb: r.slice(0, cT).some(c => /^\d+(\.\d+)*\.?$/.test(c)) };
+      const g = c => c >= 0 ? r[c] || "" : "", u = g(cU), lo = g(cLo), hi = g(cHi), st = g(cS);
+      if (u) it.u = u; if (lo !== "" && !isNaN(+lo)) it.lo = +lo; if (hi !== "" && !isNaN(+hi)) it.hi = +hi;
+      const m = st.match(/(-?\d+(?:\.\d+)?)\s*[-–~]\s*(-?\d+(?:\.\d+)?)/); if (m && it.lo == null && it.hi == null) { it.lo = +m[1]; it.hi = +m[2]; }
+      const mm = st.match(/^\s*(?:[<≤]=?|ไม่เกิน|max\.?)\s*(-?\d+(?:\.\d+)?)/i); if (mm && it.hi == null) it.hi = +mm[1];
+      const mn = st.match(/^\s*(?:[>≥]=?|ไม่น้อยกว่า|min\.?)\s*(-?\d+(?:\.\d+)?)/i); if (mn && it.lo == null) it.lo = +mn[1];
+      if (it.u || it.lo != null || it.hi != null) it.k = "value";
+      if (/ถ่ายรูป|ภาพถ่าย|photo/i.test(t)) it.ph = true;
+      out.push(it); }
+    // numbered list with unnumbered rows in between: those are section headings, untick them
+    if (out.filter(x => x.nb).length >= out.length / 2) out.forEach(x => { if (!x.nb && x.k === "level" && !x.ph) x.on = false; });
+    return out.map(({ nb, ...x }) => x);
+  }
+  $("#uFile").onchange = async ev => {
+    const f = ev.target.files[0]; uWb = null; uItems = []; $("#uPrev").innerHTML = ""; $("#uMsg").innerHTML = ""; $("#uSheetL").hidden = true; if (!f) return;
+    try { uWb = await Office.readXlsx(f); } catch (err) { return note("#uMsg", new Error("อ่านไฟล์ Excel ไม่ได้ (ต้องเป็น .xlsx ถ้าเป็น .xls ให้เปิดใน Excel แล้ว Save As เป็น .xlsx): " + (err.message || err))); }
+    const names = Object.keys(uWb); opts($("#uSheet"), names.map(n => [n, n])); $("#uSheetL").hidden = names.length < 2;
+    const tn = uTypeName().toLowerCase(), pick = names.find(n => tn && n.toLowerCase().includes(tn)) || names.find(n => uParse(uWb[n]).length) || names[0]; $("#uSheet").value = pick; uLoad();
+  };
+  $("#uSheet").onchange = () => uLoad();
+  function uLoad() { uItems = uWb ? uParse(uWb[$("#uSheet").value] || []) : []; uDraw(); }
+  function uRead() { document.querySelectorAll("[data-ui]").forEach(el => { const it = uItems[+el.dataset.ui], k = el.dataset.uk;
+    if (k === "on") it.on = el.checked; else if (k === "ph") { if (el.checked) it.ph = true; else delete it.ph; } else if (k === "lo" || k === "hi") { if (el.value === "") delete it[k]; else it[k] = +el.value; } else if (k === "u") { if (el.value.trim()) it.u = el.value.trim(); else delete it.u; } else it[k] = k === "t" ? el.value.trim() : el.value; }); }
+  function uDraw() {
+    if (!uWb) return; const type = uTypeName(), r = $("#uRound").value, cur = type ? tplFor(type) : { items: [] }, has = hasOwnTpl(type);
+    const before = has ? cur.items.filter(it => inRound(it, r)).length : 0;
+    $("#uPrev").innerHTML = !uItems.length ? '<div class="note bad" style="margin-top:10px">ไม่พบรายการตรวจในแผ่นงานนี้ ลองเลือกแผ่นงานอื่น</div>' : `<p class="meta" style="margin-top:10px">พบ ${uItems.length} รายการ · ชนิด <b>${esc(type || "-")}</b> รอบ <b>${r}</b>${has ? ` · รอบนี้เดิมมี ${before} ข้อ จะถูกแทนด้วยรายการที่ติ๊กด้านล่าง ข้อของรอบอื่นคงเดิม` : " · ยังไม่มี check sheet ของชนิดนี้ จะสร้างใหม่"} · เอาติ๊กออกในแถวที่ไม่ใช่รายการตรวจ (เช่น หัวข้อหมวด)</p>
+      <div class="scroll"><table><tr><th>ใช้</th><th>#</th><th>รายการตรวจ</th><th>แบบคำตอบ</th><th>หน่วย</th><th>ต่ำสุด</th><th>สูงสุด</th><th>รูป</th></tr>${uItems.map((it, i) => `<tr><td><input type="checkbox" data-ui="${i}" data-uk="on"${it.on ? " checked" : ""}></td><td>${i + 1}</td><td style="min-width:260px"><input data-ui="${i}" data-uk="t" value="${esc(it.t)}" style="width:100%"></td>
+        <td><select data-ui="${i}" data-uk="k"><option value="level"${it.k !== "value" ? " selected" : ""}>ปกติ/เสื่อม/ผิดปกติ</option><option value="value"${it.k === "value" ? " selected" : ""}>กรอกค่า</option></select></td>
+        <td><input data-ui="${i}" data-uk="u" value="${esc(it.u || "")}" style="width:70px"></td><td><input type="number" step="any" data-ui="${i}" data-uk="lo" value="${it.lo ?? ""}" style="width:80px"></td><td><input type="number" step="any" data-ui="${i}" data-uk="hi" value="${it.hi ?? ""}" style="width:80px"></td><td><input type="checkbox" data-ui="${i}" data-uk="ph"${it.ph ? " checked" : ""}></td></tr>`).join("")}</table></div>
+      <div class="row" style="margin-top:8px"><button class="btn primary" type="button" id="uSave">บันทึกเป็น check sheet รอบ ${r} ของ ${esc(type || "-")}</button></div>`;
+  }
+  document.addEventListener("click", async ev => {
+    if (ev.target.id !== "uSave") return; uRead();
+    const type = uTypeName(), r = $("#uRound").value, pick = uItems.filter(it => it.on && it.t).map(({ on, ...it }) => it);
+    if (!type) return note("#uMsg", new Error("กรุณาเลือกหรือพิมพ์ชื่อชนิดเครื่อง")); if (!pick.length) return note("#uMsg", new Error("ยังไม่ได้เลือกรายการตรวจ"));
+    const own = tpls.find(t => t.eq_type === type && t.hospital_id), base = JSON.parse(JSON.stringify(hasOwnTpl(type) ? tplFor(type).items : []));
+    // this round = exactly the picked items; other rounds keep their items
+    const out = [];
+    base.forEach(it => { const f = (it.f || []).length ? it.f : [...ROUNDS], rest = f.filter(x => x !== r);
+      const same = pick.find(p => p.t === it.t);
+      if (same) return; if (rest.length) out.push({ ...it, f: rest }); });
+    pick.forEach(p => { const old = base.find(it => it.t === p.t), f = old ? [...new Set([...((old.f || []).length ? old.f : ROUNDS), r])] : [r];
+      const it = { ...p }; if (f.length < 4) it.f = ROUNDS.filter(x => f.includes(x)); out.push(it); });
+    const b = ev.target; b.disabled = true;
+    const res = own ? await sb.from("pm_templates").update({ items: out, updated_by: me.id, updated_at: new Date().toISOString() }).eq("id", own.id)
+      : await sb.from("pm_templates").insert({ hospital_id: H.id, eq_type: type, items: out, updated_by: me.id });
+    b.disabled = false; if (res.error) return note("#uMsg", res.error);
+    uWb = null; uItems = []; $("#uPrev").innerHTML = ""; $("#uFile").value = ""; $("#uSheetL").hidden = true;
+    await loadTpls(); fillFilters(); fillUType(); $("#tSel").value = type; $("#tRound").value = r; renderTpl();
+    note("#uMsg", null, `บันทึก check sheet รอบ ${r} ของ ${type} แล้ว ${pick.length} ข้อ ใบตรวจที่เปิดใหม่ในรอบ ${r} จะใช้รายการชุดนี้${equip.some(e => e.eq_type === type) ? "" : " (ยังไม่มีเครื่องชนิดนี้ในทะเบียน ให้ตั้งชนิดของเครื่องในแท็บ ทะเบียน & แผนปี ให้ตรงกับชื่อนี้)"}`);
+  });
 })();
