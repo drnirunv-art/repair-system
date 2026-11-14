@@ -29,7 +29,8 @@
 <header><div class="wrap">
   <div class="top"><span class="tag" id="scTag">PM Inhouse</span><h1 id="title">บำรุงรักษาตามแผน (PM Inhouse)</h1>
     <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าใบงาน</a></div></div>
-  <div class="row noprint" id="scBar" style="margin:0 0 10px;gap:8px"><a class="btn small" id="scTW" href="pm.html">PM Inhouse (ทีม TW ทำเอง)</a><a class="btn small" id="scMA" href="pm.html?by=MA">PM MA (ผู้รับเหมา)</a><span class="meta" id="scNote" style="align-self:center"></span></div>
+  <div class="row noprint" id="scBar" style="margin:0 0 10px;gap:8px"><a class="btn small" id="scTW" href="pm.html">PM Inhouse (ทีม TW ทำเอง)</a><a class="btn small" id="scMA" href="pm.html?by=MA">PM MA (ผู้รับเหมา)</a><span class="meta" id="scNote" style="align-self:center"></span><label id="hPickL" hidden style="display:flex;gap:6px;align-items:center;margin-left:auto">โรงพยาบาล<select id="hPick"></select></label></div>
+  <div class="note" id="viewOnly" hidden style="margin:0 0 10px">กำลังดูข้อมูลของโรงพยาบาลอื่นแบบดูอย่างเดียว ปุ่มบันทึกหรือแก้ไขจะซ่อนไว้ ถ้าจะทำงาน ให้เลือกโรงพยาบาลของตัวเองกลับ</div>
   <nav role="tablist" id="tabs" hidden>
     <button role="tab" data-tab="work" aria-selected="true">งานเดือนนี้</button>
     <button role="tab" data-tab="sign" aria-selected="false" id="signTab">รอเซ็น <b id="signN"></b></button>

@@ -11,9 +11,9 @@
   const LV = { ok: "ปกติ", wear: "เริ่มเสื่อม", bad: "ผิดปกติ" };
   const FREQ = { M: "รายเดือน", Q: "ราย 3 เดือน", H: "ราย 6 เดือน", Y: "รายปี" };
   const TH_M = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-  let me = null, H = null, staff = [], equipAll = [], equip = [], tpls = [], tasks = [], channel = null, week = 0, stat = "open", cur = null, scannedTag = null, editId = null, regLimit = 200;
+  let me = null, H = null, viewOnly = false, hPick = [], staff = [], equipAll = [], equip = [], tpls = [], tasks = [], channel = null, week = 0, stat = "open", cur = null, scannedTag = null, editId = null, regLimit = 200;
   const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
-  const role = () => me && me.role;
+  const role = () => me && (viewOnly ? "observer" : me.role);   // another hospital picked by a 12-hospital viewer: read only
   const isMgr = () => MANAGER.includes(role()), isHead = () => HEAD.includes(role()), isEng = () => ENG.includes(role());
   const can = () => me && role() !== "observer";
   const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
@@ -56,6 +56,17 @@
     me = data;
     if (!me || !me.hospital_id) { $("#gate").hidden = false; return; }
     H = me.hospitals; $("#gate").hidden = true;
+    // 12-hospital viewers (am_exec) pick the hospital to look at; other hospitals are read only
+    if ((await sb.rpc("am_exec")).data === true) {
+      if (!hPick.length) hPick = (await sb.from("hospitals").select("id,code,name").eq("active", true).order("code")).data || [];
+      const want = (q0.get("p") || store.get("rs-pm-h", "")).toUpperCase(), hit = hPick.find(h => h.code.toUpperCase() === want); if (hit) H = hit;
+      $("#hPickL").hidden = !hPick.length;
+      $("#hPick").innerHTML = hPick.map(h => `<option value="${esc(h.code)}"${h.id === H.id ? " selected" : ""}>${esc(h.code)} · ${esc(h.name)}</option>`).join("");
+      $("#hPick").onchange = () => { store.set("rs-pm-h", $("#hPick").value); const u = new URLSearchParams(location.search); u.set("p", $("#hPick").value); u.delete("tag"); location.search = u.toString(); };
+      ["#scTW", "#scMA"].forEach(id => { const a = $(id), u = new URL(a.href, location.href); u.searchParams.set("p", H.code); a.href = u.pathname.split("/").pop() + u.search; });
+    }
+    viewOnly = H.id !== me.hospital_id;
+    $("#viewOnly").hidden = !viewOnly;
     $("#title").textContent = SCN + " บำรุงรักษาตามแผน · " + H.name; $("#who").textContent = me.full_name || session.user.email;
     await Promise.all([loadStaff(), loadEquip(), loadTpls()]);
     document.querySelectorAll("[data-manager]").forEach(b => b.hidden = !isMgr());
@@ -450,7 +461,7 @@
   async function renderFollow() {
     const [y, m] = ym($("#fMonth").value); note("#fMsg");
     // until migration 0030 is on the database the per-part functions do not exist: fall back to the whole-hospital ones
-    const fRpc = async (fn, old) => { const r = await sb.rpc(fn, { p_year: y, p_month: m, p_by: SC }); return r.error && /PGRST202|42883|not find|does not exist/i.test((r.error.code || "") + " " + (r.error.message || "")) ? sb.rpc(old, { p_year: y, p_month: m }) : r; };
+    const fRpc = async (fn, old) => { const r = viewOnly && fn === "pm_followup_by" ? await sb.rpc("pm_followup_for", { p_hospital: H.id, p_year: y, p_month: m, p_by: SC }) : await sb.rpc(fn, { p_year: y, p_month: m, p_by: SC }); return r.error && /PGRST202|42883|not find|does not exist/i.test((r.error.code || "") + " " + (r.error.message || "")) ? sb.rpc(old, { p_year: y, p_month: m }) : r; };
     const [a, ex] = await Promise.all([fRpc("pm_followup_by", "pm_followup"), sb.rpc("am_exec")]);
     if (a.error) return note("#fMsg", a.error);
     fRows = a.data || []; fExec = ex.data === true;
@@ -548,7 +559,7 @@
     try {
       for (let i = 0; i < xRows.length; i += 400) {
         e.target.textContent = `กำลังนำเข้า ${Math.min(i + 400, xRows.length).toLocaleString()} / ${xRows.length.toLocaleString()}`;
-        const part = xRows.slice(i, i + 400).map(x => x.row), { data, error } = th.id === H.id ? await sb.rpc("pm_import", { p_year: y, p_rows: part }) : await sb.rpc("pm_import_for", { p_hospital: th.id, p_year: y, p_rows: part });
+        const part = xRows.slice(i, i + 400).map(x => x.row), { data, error } = th.id === me.hospital_id ? await sb.rpc("pm_import", { p_year: y, p_rows: part }) : await sb.rpc("pm_import_for", { p_hospital: th.id, p_year: y, p_rows: part });
         if (error) throw new Error(`แถว ${xRows[i].n} เป็นต้นไป: ${errText(error)} (แถวก่อนหน้านี้นำเข้าแล้ว นำเข้าไฟล์เดิมซ้ำได้)`);
         up += data.updated; add += data.added;
       }
