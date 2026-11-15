@@ -9,6 +9,8 @@
 <link rel="stylesheet" href="assets/app.css">
 <style>
   .hsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+  .dpl{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-weight:600;justify-content:flex-start;text-align:left}.dpl[hidden]{display:none}.pick{margin-bottom:4px}
+  @media (max-width:560px){.pick .dpl{width:100%}.pick select{flex:1;min-width:0}}
   .hsel select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:200px}
   .fg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 14px;margin:10px 0}
   .fg label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
@@ -59,8 +61,9 @@
   <section id="gate" hidden><div class="panel"><h2 id="gateH">ต้องเข้าสู่ระบบก่อน</h2><p class="sub" id="gateP">เปิด <a href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
   <div id="body" hidden>
     <p class="sub">คณะกรรมการ FMS ตรวจ 3 แบบ: 1) ตรวจเอกสารตาม ME 2) เดินตรวจหน้างาน 3) เดินตามรอยผู้ตรวจตามกลยุทธ์ ทุกแบบจัดตามหมวด FMS และแยกตาม ME ของ JCI 8th ข้อที่ไม่ผ่านกลายเป็นข้อบกพร่อง ส่งเข้าใบแจ้งซ่อมได้ และปิดด้วยรูปหลังแก้ไข</p>
-    <div class="hsel"><span id="hBox" hidden><select id="hSel"></select></span>
-      <label for="rSel">รอบตรวจ</label><select id="rSel"></select>
+    <div class="hsel pick"><label id="hBox" class="dpl" hidden>โรงพยาบาล <select id="hSel"></select></label>
+      <label id="wDeptL" class="dpl">แผนก <select id="wDept"></select> <span class="meta" id="wDeptN"></span></label></div>
+    <div class="hsel">      <label for="rSel">รอบตรวจ</label><select id="rSel"></select>
       <button class="btn small" type="button" id="rNew" hidden>+ เปิดรอบใหม่</button><button class="btn small" type="button" id="rClose" hidden></button><span class="meta" id="rInfo"></span></div>
     <div class="chips" id="kChips" role="group" aria-label="แบบการตรวจ"><button class="chip" type="button" data-k="doc" aria-pressed="false">1 ตรวจเอกสาร (ตาม ME)</button><button class="chip" type="button" data-k="walk" aria-pressed="true">2 เดินตรวจหน้างาน</button><button class="chip" type="button" data-k="tracer" aria-pressed="false">3 เดินตามรอยผู้ตรวจ (ตามกลยุทธ์)</button></div>
     <p class="meta" id="kHelp" style="margin:-4px 0 12px"></p>
@@ -71,7 +74,6 @@
         <div class="fg">
           <label>ผู้ประเมิน *<input id="wName" maxlength="120"></label>
           <label>เบอร์โทร *<input id="wPhone" maxlength="40" inputmode="tel"></label>
-          <label id="wDeptL">เลือกแผนก <span class="meta" id="wDeptN"></span><select id="wDept"></select></label>
           <label id="wAreaL">พื้นที่ / หน่วยงานที่ตรวจ * <input id="wArea" list="areas" maxlength="200" placeholder="พิมพ์หรือเลือก"></label>
           <label>หมวด *<select id="wCat"></select></label>
         </div>
