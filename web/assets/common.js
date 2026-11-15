@@ -76,3 +76,60 @@ const RS = (() => {
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", add); else add();
 })();
+
+// Walk-round lock: a head locks this phone to one page (FMS Round or the gate desk). Any other page then needs
+// the head's password, so the person walking cannot wander into the main menu.
+(() => {
+  const PAGES = { "fms.html": "FMS Round", "gate.html": "ป้อม รปภ." }, KEY = "rs-lock";
+  const here = (location.pathname.split("/").pop() || "index.html").toLowerCase();
+  const get = () => { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; } };
+  const set = v => { try { v ? localStorage.setItem(KEY, JSON.stringify(v)) : localStorage.removeItem(KEY); } catch (e) {} };
+  const esc = RS.esc;
+  const ask = (title, sub, onOk, extra = "") => {
+    const o = document.createElement("div");
+    o.className = "rsLock"; o.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(10,20,30,.55);display:flex;align-items:center;justify-content:center;padding:16px";
+    o.innerHTML = `<form style="background:var(--surface,#fff);border-radius:14px;padding:18px 20px;width:min(420px,100%);display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <h2 style="margin:0;font-size:18px">${title}</h2><p class="sub" style="margin:0">${sub}</p>
+      <label>รหัสผ่าน<input name="p" type="password" required autocomplete="current-password" style="width:100%"></label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary">ปลดล็อก</button>${extra}</div><div class="meta" role="status"></div></form>`;
+    const f = o.querySelector("form");
+    f.addEventListener("submit", async ev => {
+      ev.preventDefault(); const m = f.querySelector("[role=status]"), b = f.querySelector("button.primary"), L = get();
+      if (!L) { o.remove(); return; }
+      b.disabled = true; m.textContent = "กำลังตรวจรหัส…";
+      const { error } = await RS.sb.auth.signInWithPassword({ email: L.email, password: f.p.value });
+      if (error) { b.disabled = false; f.p.value = ""; m.textContent = "รหัสผ่านไม่ถูกต้อง"; return; }
+      set(null); o.remove(); onOk();
+    });
+    o.addEventListener("click", ev => { if (ev.target.closest("[data-x]")) o.remove(); });
+    document.body.appendChild(o); setTimeout(() => f.p.focus(), 50);
+  };
+  const run = async () => {
+    const L = get();
+    if (L && L.page !== here) {
+      // Another page while locked: cover it until the head's password is given.
+      return ask("เครื่องนี้ล็อกไว้สำหรับเดินตรวจ", `ใช้ได้เฉพาะหน้า ${esc(PAGES[L.page] || L.page)} · ถ้าจะเปิดหน้าอื่น ให้หัวหน้า (${esc(L.name || L.email)}) ใส่รหัสผ่าน`,
+        () => location.reload(), `<a class="btn" href="${esc(L.page)}">กลับไปหน้า ${esc(PAGES[L.page] || L.page)}</a>`);
+    }
+    if (!PAGES[here]) return;
+    const who = document.querySelector(".who"); if (!who) return;
+    if (L) {
+      // Locked page: hide the way back to the main menu, show an unlock button for the head.
+      document.querySelectorAll('a[href^="staff.html"]').forEach(a => a.hidden = true);
+      const b = document.createElement("button"); b.type = "button"; b.className = "btn small"; b.textContent = "🔒 ล็อกอยู่ · ปลดล็อก";
+      b.onclick = () => ask("ปลดล็อกเครื่องนี้", `ใส่รหัสผ่านของ ${esc(L.name || L.email)} เพื่อกลับไปใช้ทุกเมนู`, () => location.reload(), `<button class="btn" type="button" data-x>ยกเลิก</button>`);
+      return who.appendChild(b);
+    }
+    let s = null; try { s = (await RS.sb.auth.getSession()).data.session; } catch (e) {}
+    if (!s || !s.user || !s.user.email) return;
+    const b = document.createElement("button"); b.type = "button"; b.className = "btn small"; b.textContent = "🔒 ล็อกหน้านี้";
+    b.title = "ให้เครื่องนี้ใช้ได้แค่หน้านี้ จะเปิดหน้าอื่นต้องใส่รหัสผ่านของคุณ";
+    b.onclick = () => {
+      if (!confirm(`ล็อกเครื่องนี้ไว้ที่หน้า ${PAGES[here]}?\n\nคนที่ใช้เครื่องนี้จะเปิดเมนูอื่นไม่ได้ จนกว่าจะใส่รหัสผ่านของคุณ (${s.user.email})`)) return;
+      const nm = (document.querySelector("#who") || {}).textContent || "";
+      set({ page: here, email: s.user.email, name: nm.split("·")[0].trim(), at: Date.now() }); location.reload();
+    };
+    who.appendChild(b);
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run); else run();
+})();
