@@ -320,12 +320,36 @@
     const stN = s => byMeR.filter(x => x.st === s).length;
     if (byMeR.length) fl.splice(1, 0, `สถานะ ME (${KIND[K]}): Met ${stN("Met")} · Partially Met ${stN("Partially Met")} · Not Met ${stN("Not Met")} จาก ${byMeR.length} ME ที่ตรวจ`);
     if (weakMe.length) fl.push(`ME ที่คะแนนต่ำกว่า 80 มี ${weakMe.length} ข้อ: ${weakMe.slice(0, 4).map(x => `${x.ref} (${x.score})`).join(", ")}${weakMe.length > 4 ? " …" : ""}`);
-    return { rc, all, byCat, byArea, byMeR, top, redFail, byRound, rf, done, fl, notes };
+    // ME coverage against the whole form (as in the JCI tracking workbook): every ME of the form, inspected or not
+    const meR = new Map(byMeR.map(x => [x.ref, x])), fm = new Map();
+    items.forEach(i => { const r = i.ref || ""; if (r && !fm.has(r)) fm.set(r, { ref: r, cat: i.cat }); });
+    const meAll = [...fm.values()].map(x => { const y = meR.get(x.ref); return { ...x, text: MEs[x.ref] || "", st: y ? y.st : "ยังไม่ตรวจ", score: y ? y.score : null, pass: y ? y.pass : 0, part: y ? y.part : 0, fail: y ? y.fail : 0, na: y ? y.na || 0 : 0 }; });
+    const cnt = (l, s) => l.filter(x => x.st === s).length, std = r => r.replace(/\s*ME\s*\d+.*$/, ""), meNo = r => (/ME\s*\d+/.exec(r) || [r])[0];
+    const sumMe = l => { const met = cnt(l, "Met"), part = cnt(l, "Partially Met"), nm = cnt(l, "Not Met"), na = cnt(l, "ไม่เกี่ยว"), ny = cnt(l, "ยังไม่ตรวจ"), p = l.reduce((s, x) => s + x.pass, 0), pt = l.reduce((s, x) => s + x.part, 0), f = l.reduce((s, x) => s + x.fail, 0);
+      return { me: l.length, met, part, nm, na, ny, metPct: pct(met, l.length - na), pass: p, ipart: pt, fail: f, score: pct(p + pt / 2, p + pt + f) }; };
+    const byCatMe = cats().map(c => ({ cat: c.cat, name: c.name, ...sumMe(meAll.filter(x => x.cat === c.cat)) })).filter(c => c.me);
+    const meTot = sumMe(meAll);
+    const sm = new Map(); meAll.forEach(x => { const k = std(x.ref); (sm.get(k) || sm.set(k, { std: k, cat: x.cat, l: [] }).get(k)).l.push(x); });
+    const byStd = [...sm.values()].map(g => ({ std: g.std, cat: g.cat, text: MEs[g.std] || "", ...sumMe(g.l), notMet: g.l.filter(x => x.st === "Not Met").map(x => meNo(x.ref)).join(", "), partL: g.l.filter(x => x.st === "Partially Met").map(x => meNo(x.ref)).join(", "), nyL: g.l.filter(x => x.st === "ยังไม่ตรวจ").map(x => meNo(x.ref)).join(", ") })).sort((a, b) => { const p = kmeOrder(a.std + " ME 0"), q = kmeOrder(b.std + " ME 0"); for (let i = 0; i < 3; i++) if (p[i] !== q[i]) return p[i] - q[i]; return 0; });
+    // ME → items detail (for the "จัดกลุ่มตาม ME" sheet)
+    const meItems = ref => rc.flatMap(c => c.answers.filter(a => (a.c || "") === ref).map(a => ({ area: c.area, t: a.t, v: a.v, d: a.v === "na" ? a.na : a.n || "", r: a.r })));
+    if (meAll.length) {
+      fl.splice(rc.length ? 2 : 0, 0, `ME ในแบบฟอร์ม ${meTot.me} ข้อ: Met ${meTot.met} (${meTot.metPct ?? 0}% ของ ME ที่เกี่ยวข้อง) · Partially Met ${meTot.part} · Not Met ${meTot.nm} · ยังไม่ตรวจ ${meTot.ny}`);
+      const lowC = byCatMe.filter(c => c.metPct != null && c.me - c.na - c.ny > 0).sort((a, b) => a.metPct - b.metPct).slice(0, 3);
+      if (rc.length && lowC.length) fl.push(`หมวด FMS ที่ ME ผ่าน (Met) น้อยที่สุด: ${lowC.map(c => `${c.name} ${c.met}/${c.me} ME (${c.metPct}%)`).join(" · ")}`);
+      const nmStd = byStd.filter(s => s.notMet); if (nmStd.length) fl.push(`Standard ที่มี ME Not Met ${nmStd.length} ข้อ: ${nmStd.slice(0, 5).map(s => `${s.std} (${s.notMet})`).join(", ")}${nmStd.length > 5 ? " …" : ""}`);
+      notes.push("% ME ผ่าน = ME สถานะ Met ÷ ME ในแบบฟอร์มที่เกี่ยวข้อง (ไม่นับ ME ที่ไม่เกี่ยว) · ME ที่ยังไม่มีผลตรวจในรอบนี้นับเป็น \"ยังไม่ตรวจ\"");
+    }
+    return { rc, all, byCat, byArea, byMeR, top, redFail, byRound, rf, done, fl, notes, meAll, meTot, byCatMe, byStd, meItems };
   }
   function drawRep() {
     const d = report();
     $("#pK").innerHTML = kpis([["จุดที่ตรวจ (พื้นที่ × หมวด)", n(d.all.checks)], ["คะแนนรวม", d.all.score ?? "-"], ["ข้อไม่ผ่าน", n(d.all.fail), true], ["จุดเสี่ยงสูงไม่ผ่าน", n(d.redFail), true], ["ข้อบกพร่องยังไม่ปิด", n(d.rf.length - d.done), true], ["ปิดแล้ว", `${pct(d.done, d.rf.length) ?? 0}%`]]);
     $("#pExec").innerHTML = d.fl.length ? `<div class="panel" style="margin:10px 0"><b>บทสรุปผู้บริหาร</b><ol style="margin:6px 0 0 18px;padding:0">${d.fl.map(x => `<li>${esc(x)}</li>`).join("")}</ol></div>` : `<div class="empty">ยังไม่มีผลตรวจในรอบนี้</div>`;
+    const T = d.meTot, mrow = (a, b, c) => `<td class="r">${c.me}</td><td class="r">${c.met}</td><td class="r">${c.part}</td><td class="r">${c.nm}</td><td class="r">${c.ny}</td><td class="r">${c.na}</td><td class="sc ${cls(c.metPct)}">${c.metPct ?? "-"}${c.metPct != null ? "%" : ""}</td><td class="r">${c.pass}</td>${K === "doc" ? `<td class="r">${c.ipart}</td>` : ""}<td class="r">${c.fail}</td><td class="sc ${cls(c.score)}">${c.score ?? "-"}</td>`;
+    const mhead = `<th class="r">ME</th><th class="r">Met</th><th class="r">Partially</th><th class="r">Not Met</th><th class="r">ยังไม่ตรวจ</th><th class="r">ไม่เกี่ยว</th><th class="r">% ME ผ่าน</th><th class="r">ข้อผ่าน</th>${K === "doc" ? `<th class="r">ข้อไม่ครบ</th>` : ""}<th class="r">ข้อไม่ผ่าน</th><th class="r">คะแนน</th>`;
+    $("#pCatMe").innerHTML = `<tr><th>หมวด</th><th>หัวข้อ</th>${mhead}</tr>` + (d.byCatMe.map(c => `<tr><td style="white-space:nowrap">${esc(c.cat)}</td><td>${esc(c.name)}</td>${mrow(0, 0, c)}</tr>`).join("") + (d.byCatMe.length ? `<tr style="font-weight:700"><td colspan="2">รวม</td>${mrow(0, 0, T)}</tr>` : "") || none(13, "แบบฟอร์มนี้ไม่มี ME อ้างอิง"));
+    $("#pStd").innerHTML = `<tr><th>Standard</th>${mhead}<th>ME ที่ Not Met</th><th>ME ที่ Partially</th></tr>` + (d.byStd.map(s => `<tr><td style="white-space:nowrap">${esc(s.std)}</td>${mrow(0, 0, s)}<td>${esc(s.notMet)}</td><td>${esc(s.partL)}</td></tr>`).join("") || none(15, "แบบฟอร์มนี้ไม่มี ME อ้างอิง"));
     $("#pCat").innerHTML = `<tr><th>หมวด</th><th class="r">จุดที่ตรวจ</th><th class="r">ผ่าน</th>${K === "doc" ? `<th class="r">ไม่ครบ</th>` : ""}<th class="r">ไม่ผ่าน</th><th class="r">ไม่เกี่ยว</th><th class="r">คะแนน</th></tr>` + d.byCat.map(c => `<tr><td>${esc(c.name)}</td><td class="r">${c.checks}</td><td class="r">${c.pass}</td>${K === "doc" ? `<td class="r">${c.part}</td>` : ""}<td class="r">${c.fail}</td><td class="r">${c.na}</td><td class="sc ${cls(c.score)}">${c.score ?? "-"}</td></tr>`).join("");
     const stc = s => s === "Met" ? "g" : s === "Partially Met" ? "o" : s === "Not Met" ? "rd" : "na";
     $("#pMe").innerHTML = `<tr><th>ME</th><th>หัวข้อ</th><th class="r">ผ่าน</th>${K === "doc" ? `<th class="r">ไม่ครบ</th>` : ""}<th class="r">ไม่ผ่าน</th><th class="r">ไม่เกี่ยว</th><th class="r">คะแนน</th><th>สถานะ ME</th></tr>` + (d.byMeR.map(x => `<tr><td style="white-space:nowrap">${esc(x.ref)}</td><td>${esc(x.text)}</td><td class="r">${x.pass}</td>${K === "doc" ? `<td class="r">${x.part}</td>` : ""}<td class="r">${x.fail}</td><td class="r">${x.na || 0}</td><td class="sc ${cls(x.score)}">${x.score ?? "-"}</td><td class="sc ${stc(x.st)}">${x.st}</td></tr>`).join("") || none(8, "ยังไม่มีผลตรวจ"));
@@ -337,7 +361,17 @@
     Office.xlsx(`FMS_Round_${K}_${org}_${R ? R.year_be + "-" + R.no : BE}`, [
       Office.summarySheet({ title: `รายงาน FMS Round · ${KIND[K]} (JCI 8th)`, org, period: roundName(R), findings: d.fl, notes: d.notes,
         figures: [["จุดที่ตรวจ", d.all.checks], ["คะแนนรวม", d.all.score ?? "-"], ["ข้อไม่ผ่าน", d.all.fail], ["จุดเสี่ยงสูงไม่ผ่าน", d.redFail], ["ข้อบกพร่อง", d.rf.length], ["ปิดแล้ว", d.done]],
-        groups: [{ title: "คะแนนรายหมวด", head: ["คะแนน", "ไม่ผ่าน"], rows: d.byCat.map(c => [c.name, c.score ?? "-", c.fail]) }] }),
+        groups: [{ title: "สรุปตามหมวด FMS (สถานะ ME)", head: ["ME", "Met", "Partially", "Not Met", "ยังไม่ตรวจ", "% ME ผ่าน"], rows: [...d.byCatMe.map(c => [c.name, c.me, c.met, c.part, c.nm, c.ny, c.metPct ?? "-"]), ...(d.byCatMe.length ? [["รวม", d.meTot.me, d.meTot.met, d.meTot.part, d.meTot.nm, d.meTot.ny, d.meTot.metPct ?? "-"]] : [])] },
+          { title: "คะแนนรายหมวด", head: ["คะแนน", "ไม่ผ่าน"], rows: d.byCat.map(c => [c.name, c.score ?? "-", c.fail]) }] }),
+      { name: "สรุปตามหมวด FMS", header: 0, rows: [["หมวด", "หัวข้อ", "จำนวน ME", "Met", "Partially Met", "Not Met", "ยังไม่ตรวจ", "ไม่เกี่ยว", "% ME ผ่าน", "ข้อผ่าน", "ข้อไม่ครบ", "ข้อไม่ผ่าน", "คะแนน"],
+        ...d.byCatMe.map(c => [c.cat, c.name, c.me, c.met, c.part, c.nm, c.ny, c.na, c.metPct ?? "", c.pass, c.ipart, c.fail, c.score ?? ""]),
+        ...(d.byCatMe.length ? [["รวม", "", d.meTot.me, d.meTot.met, d.meTot.part, d.meTot.nm, d.meTot.ny, d.meTot.na, d.meTot.metPct ?? "", d.meTot.pass, d.meTot.ipart, d.meTot.fail, d.meTot.score ?? ""]] : [])] },
+      { name: "สรุปราย Standard", header: 0, rows: [["หมวด", "Standard", "จำนวน ME", "Met", "Partially Met", "Not Met", "ยังไม่ตรวจ", "% ME ผ่าน", "ME ที่ Not Met", "ME ที่ Partially Met", "ME ที่ยังไม่ตรวจ", "คะแนน"],
+        ...d.byStd.map(s => [s.cat, s.std, s.me, s.met, s.part, s.nm, s.ny, s.metPct ?? "", s.notMet, s.partL, s.nyL, s.score ?? ""])] },
+      { name: "จัดกลุ่มตาม ME", header: 0, rows: [["หมวด / ME / ข้อตรวจ", "หัวข้อ ME / ข้อตรวจ", "สถานะ ME / ผล", "คะแนน / พื้นที่", "รายละเอียด", "จุดเสี่ยงสูง"],
+        ...d.byCatMe.flatMap(c => [[c.name, `${c.me} ME · Met ${c.met} · Partially ${c.part} · Not Met ${c.nm} · ยังไม่ตรวจ ${c.ny}`, "", "", "", ""],
+          ...d.meAll.filter(x => x.cat === c.cat).flatMap(x => [[x.ref, x.text, x.st, x.score ?? "", "", ""],
+            ...d.meItems(x.ref).map(a => ["  ↳", a.t, { pass: K === "doc" ? "มีครบ" : "ผ่าน", part: "มีไม่ครบ", fail: K === "doc" ? "ไม่มี" : "ไม่ผ่าน", na: "ไม่เกี่ยว" }[a.v] || "", a.area, a.d, a.r ? "ใช่" : ""])])])] },
       { name: "ราย ME", header: 0, rows: [["ME", "หัวข้อ ME", "หมวด", "ผ่าน", "ไม่ครบ", "ไม่ผ่าน", "ไม่เกี่ยว", "คะแนน", "สถานะ ME"], ...d.byMeR.map(x => [x.ref, x.text, x.cat, x.pass, x.part, x.fail, x.na || 0, x.score ?? "", x.st])] },
       { name: "รายพื้นที่", header: 0, rows: [["พื้นที่", "หมวดที่ตรวจ", "ผ่าน", "ไม่ผ่าน", "คะแนน"], ...d.byArea.map(a => [a.area, a.cats, a.pass, a.fail, a.score ?? ""])] },
       { name: "ข้อไม่ผ่านบ่อย", header: 0, rows: [["ข้อตรวจ", "หมวด", "ME", "จุดเสี่ยงสูง", "ไม่ผ่าน (พื้นที่)", "พื้นที่"], ...d.top.map(t => [t.t, t.cat, t.c || "", t.r ? "ใช่" : "", t.n, [...new Set(t.areas)].join(", ")])] },
@@ -348,7 +382,9 @@
   $("#pP").onclick = guard(async () => { const d = report();
     await Office.pptx(`บทสรุปผู้บริหาร_FMS_Round_${codeOf(hid())}`, { title: `บทสรุปผู้บริหาร FMS Round · ${KIND[K]}`, org: codeOf(hid()), period: roundName(R), findings: d.fl, notes: d.notes,
       kpis: [["จุดที่ตรวจ", d.all.checks], ["คะแนนรวม", d.all.score ?? "-"], ["ข้อไม่ผ่าน", d.all.fail], ["จุดเสี่ยงสูงไม่ผ่าน", d.redFail], ["ข้อบกพร่อง", d.rf.length], ["ปิดแล้ว", d.done]],
-      analysis: d.notes, sections: [{ title: "คะแนนรายหมวด", head: ["หมวด", "คะแนน"], rows: d.byCat.filter(c => c.score != null).map(c => [c.name, c.score]) },
+      analysis: d.notes, sections: [{ title: "สรุปตามหมวด FMS (สถานะ ME)", chart: false, head: ["หมวด", "ME", "Met", "Partially", "Not Met", "ยังไม่ตรวจ", "% ME ผ่าน"], rows: [...d.byCatMe.map(c => [c.name, c.me, c.met, c.part, c.nm, c.ny, c.metPct ?? "-"]), ...(d.byCatMe.length ? [["รวม", d.meTot.me, d.meTot.met, d.meTot.part, d.meTot.nm, d.meTot.ny, d.meTot.metPct ?? "-"]] : [])] },
+        { title: "Standard ที่มี ME Not Met", chart: false, head: ["Standard", "ME ที่ Not Met", "Met / ME"], rows: d.byStd.filter(s => s.notMet).slice(0, 12).map(s => [s.std, s.notMet, `${s.met}/${s.me}`]) },
+        { title: "คะแนนรายหมวด", head: ["หมวด", "คะแนน"], rows: d.byCat.filter(c => c.score != null).map(c => [c.name, c.score]) },
         { title: "ME ที่คะแนนต่ำสุด", head: ["ME", "คะแนน"], rows: d.byMeR.filter(x => x.score != null).sort((a, b) => a.score - b.score).slice(0, 10).map(x => [x.ref, x.score]) },
         { title: "พื้นที่คะแนนต่ำสุด", head: ["พื้นที่", "คะแนน"], rows: d.byArea.filter(a => a.score != null).slice(0, 10).map(a => [a.area, a.score]) },
         { title: "ข้อที่ไม่ผ่านบ่อยที่สุด", head: ["ข้อตรวจ", "จำนวนพื้นที่"], rows: d.top.slice(0, 10).map(t => [t.t, t.n]) }] }); });
