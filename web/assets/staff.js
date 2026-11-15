@@ -5,7 +5,7 @@
   const MANAGER = ["owner", "admin", "chief_engineer", "supervisor"];
   const APPROVER = ["owner", "admin", "chief_engineer"];
   const HOLD_STATUS = { pending: "รอ Owner อนุมัติ", ack: "รับทราบแล้ว", ack_memo: "รับทราบ + ขอ Memo", rejected: "ไม่อนุมัติ" };
-  let invites = [], me = null, H = null, staff = [], prios = [], types = [], locs = [], jobs = [], assignees = [], reasons = [];
+  let invites = [], locked = new Set(), me = null, H = null, staff = [], prios = [], types = [], locs = [], jobs = [], assignees = [], reasons = [];
   const grpOf = name => (reasons.find(r => r.name === name) || {}).grp || "";
   function reasonOptions() {
     const act = reasons.filter(r => r.active), groups = [...new Set(act.map(r => r.grp || "อื่น ๆ"))];
@@ -138,7 +138,7 @@
       sb.from("locations").select("*").eq("hospital_id", H.id).order("building").order("floor").order("department"),
       sb.from("hold_reasons").select("*").eq("hospital_id", H.id).order("sort").order("name"),
       sb.from("hospital_settings").select("*").eq("hospital_id", H.id).maybeSingle()]);
-    if (isMgr()) { const iv = await sb.from("staff_invites").select("email,role,full_name").eq("hospital_id", H.id).is("used_at", null).order("created_at"); invites = iv.data || []; }
+    if (isMgr()) { const iv = await sb.from("staff_invites").select("email,role,full_name").eq("hospital_id", H.id).is("used_at", null).order("created_at"); invites = iv.data || []; const lk = await sb.rpc("menu_lock_list"); locked = new Set((lk.data || []).map(x => typeof x === "string" ? x : x.menu_lock_list)); }
     staff = s.data || []; prios = p.data || []; types = t.data || []; locs = l.data || []; reasons = r.data || [];
     if (st.data) S = st.data;
     opts($("#wStatus"), [["open", "งานที่ยังไม่ปิด"], ["", "ทุกสถานะ"], ...Object.entries(STATUS)]);
@@ -539,9 +539,10 @@
   /* ---------- setup ---------- */
   const msg = (el, err, okText) => $(el).innerHTML = err ? `<div class="note bad">${esc(errText(err))}</div>` : `<div class="note ok">${okText}</div>`;
   function renderSetup() {
-    $("#sList").innerHTML = "<tr><th>ชื่อ</th><th>บทบาท</th><th>สถานะ</th><th></th></tr>" + staff.map(s => `<tr><td>${esc(s.full_name)}</td><td>${ROLES[s.role]}</td><td>${s.active ? "ใช้งาน" : "ปิดใช้"}</td>
-      <td>${s.id !== me.id ? `<button class="btn small" type="button" data-staff-toggle="${s.id}">${s.active ? "ปิดใช้" : "เปิดใช้"}</button>` : ""}</td></tr>`).join("")
-      + invites.map(i => `<tr><td>${esc(i.full_name || i.email)}<br><small class="mono">${esc(i.email)}</small></td><td>${ROLES[i.role]}</td><td>รอสมัครบัญชี</td><td></td></tr>`).join("");
+    $("#sList").innerHTML = "<tr><th>ชื่อ</th><th>บทบาท</th><th>สถานะ</th><th></th><th>ล็อกเมนูเจ้าหน้าที่</th></tr>" + staff.map(s => `<tr><td>${esc(s.full_name)}</td><td>${ROLES[s.role]}</td><td>${s.active ? "ใช้งาน" : "ปิดใช้"}</td>
+      <td>${s.id !== me.id ? `<button class="btn small" type="button" data-staff-toggle="${s.id}">${s.active ? "ปิดใช้" : "เปิดใช้"}</button>` : ""}</td>
+      <td>${s.id !== me.id ? `${locked.has(s.id) ? "🔒 ล็อกอยู่ " : ""}<button class="btn small" type="button" data-staff-lock="${s.id}">${locked.has(s.id) ? "เปลี่ยน / ยกเลิกรหัส" : "ตั้งรหัสล็อก"}</button>` : ""}</td></tr>`).join("")
+      + invites.map(i => `<tr><td>${esc(i.full_name || i.email)}<br><small class="mono">${esc(i.email)}</small></td><td>${ROLES[i.role]}</td><td>รอสมัครบัญชี</td><td></td><td></td></tr>`).join("");
     $("#pList").innerHTML = "<tr><th>ชื่อ</th><th>ตอบรับภายใน</th><th>SLA ซ่อมเสร็จ</th><th>ค่าเริ่มต้นของฟอร์ม</th><th></th></tr>" + prios.map(p => `<tr><td>${esc(p.name)}</td><td>${p.respond_minutes ? p.respond_minutes + " นาที" : "-"}</td><td>${dur(p.sla_minutes)}</td>
       <td>${p.is_default ? "✓" : `<button class="btn small" type="button" data-prio-default="${p.id}">ตั้งเป็นค่าเริ่มต้น</button>`}</td><td><button class="btn small" type="button" data-del="priorities:${p.id}">ลบ</button></td></tr>`).join("");
     $("#oList").innerHTML = "<tr><th>อาคาร</th><th>ชั้น</th><th>แผนก</th><th></th></tr>" + locs.map(l => `<tr><td>${esc(l.building)}</td><td>${esc(l.floor)}</td><td>${esc(l.department)}${l.active ? "" : " <small>(ซ่อน)</small>"}</td>
@@ -567,6 +568,14 @@
   $("#fReason").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("hold_reasons").insert({ hospital_id: H.id, name: $("#hName").value.trim(), grp: $("#hGrp").value || null, sort: 900 + reasons.length }); msg("#hMsg", error, "เพิ่มเหตุผลแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
   document.addEventListener("click", async e => {
     const t = e.target.closest("button"); if (!t) return; let r;
+    if (t.dataset.staffLock) {
+      const s = staff.find(x => x.id === t.dataset.staffLock); if (!s) return;
+      const v = window.prompt(`รหัสล็อกเมนูเจ้าหน้าที่ของ ${s.full_name}\n\nคนนี้จะใช้หน้าเดินตรวจและหน้าอื่นได้ แต่จะเข้าเมนูเจ้าหน้าที่ต้องใส่รหัสนี้\nพิมพ์รหัสอย่างน้อย 4 ตัว${locked.has(s.id) ? "\nเว้นว่างแล้วกด OK = ยกเลิกล็อก" : ""}`, "");
+      if (v === null || (!v.trim() && !locked.has(s.id))) return;
+      const { data, error } = await sb.rpc("menu_lock_set", { p_profile: s.id, p_code: v });
+      msg("#sMsg", error, data === "removed" ? `ยกเลิกล็อกของ ${esc(s.full_name)} แล้ว` : `ตั้งรหัสล็อกของ ${esc(s.full_name)} แล้ว แจ้งรหัสให้คนนั้นทราบ`);
+      if (!error) { await loadRefs(); render(); } return;
+    }
     if (t.dataset.staffToggle) { const s = staff.find(x => x.id === t.dataset.staffToggle); r = await sb.from("profiles").update({ active: !s.active }).eq("id", s.id); }
     else if (t.dataset.locRename) { const l = locs.find(x => x.id === t.dataset.locRename); const n = (window.prompt("ชื่อแผนกใหม่", l.department) || "").trim(); if (!n || n === l.department) return; r = await sb.from("locations").update({ department: n }).eq("id", l.id); }
     else if (t.dataset.locToggle) { const l = locs.find(x => x.id === t.dataset.locToggle); r = await sb.from("locations").update({ active: !l.active }).eq("id", l.id); }
