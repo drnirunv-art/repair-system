@@ -41,6 +41,7 @@ create table if not exists public.fms_checks (
   assessor text not null, assessor_phone text,
   answers jsonb not null default '[]',   -- [{id, t, c: ME, r: high-risk, v: pass|part|fail|na, n: detail, na: reason, ph: [paths]}]
   ack_name text, ack_at timestamptz,
+  note text, photos text[] not null default '{}',   -- the assessor's general comment and walk-round photos for this check
   pass int not null default 0, part int not null default 0, fail int not null default 0, na int not null default 0, score numeric,
   created_by uuid references public.profiles(id) default auth.uid(), created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
   unique (round_id, kind, area, cat)
@@ -97,7 +98,7 @@ end $$;
 -- walk + tracer: fail needs detail + photo. doc: part (incomplete / out of date) or fail (missing) needs a note of what is missing.
 -- N/A needs a reason. Score = (pass + ½ part) ÷ (pass + part + fail) × 100, like Met 10 / Partially Met 5 / Not Met 0.
 -- Failed (and partial) items become findings; "repeat" counts earlier rounds where the same target failed the same item.
-create or replace function public.fms_save(p_round uuid, p_kind text, p_area text, p_cat text, p_assessor text, p_phone text, p_answers jsonb, p_ack text default null) returns jsonb
+create or replace function public.fms_save(p_round uuid, p_kind text, p_area text, p_cat text, p_assessor text, p_phone text, p_answers jsonb, p_ack text default null, p_note text default null, p_photos text[] default null) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare r fms_rounds; cid uuid; a jsonb; np int := 0; npt int := 0; nf int := 0; nn int := 0; v text; rep int; want int; sc numeric;
 begin
@@ -108,6 +109,7 @@ begin
   if coalesce(trim(p_area), '') = '' then raise exception '%', case p_kind when 'doc' then 'ใส่หน่วยงานเจ้าของเอกสาร' when 'tracer' then 'ใส่เป้าหมายที่ตามรอย (เครื่อง / ใบอนุญาต / หน่วยงาน)' else 'เลือกพื้นที่ที่ตรวจ' end; end if;
   if coalesce(trim(p_assessor), '') = '' or coalesce(trim(p_phone), '') = '' then raise exception 'ใส่ชื่อและเบอร์โทรผู้ประเมิน'; end if;
   if jsonb_typeof(p_answers) <> 'array' or jsonb_array_length(p_answers) = 0 then raise exception 'ไม่มีข้อตรวจ'; end if;
+  if coalesce(array_length(p_photos, 1), 0) > 30 then raise exception 'รูปเดินตรวจแนบได้ไม่เกิน 30 รูป'; end if;
   select count(*) into want from fms_items i where i.kind = p_kind and i.cat = p_cat and i.active
     and i.hospital_id is not distinct from (case when exists (select 1 from fms_items x where x.hospital_id = r.hospital_id and x.kind = p_kind and x.active) then r.hospital_id end);
   -- every item of this form (kind + category) must be answered, by its own id
@@ -115,6 +117,7 @@ begin
       where i.kind = p_kind and i.cat = p_cat and i.active) < want then raise exception 'ตอบให้ครบทุกข้อก่อนบันทึก'; end if;
   for a in select * from jsonb_array_elements(p_answers) loop
     v := a ->> 'v';
+    if coalesce(jsonb_array_length(a -> 'ph'), 0) > 10 then raise exception 'แนบรูปได้ไม่เกิน 10 รูปต่อข้อ'; end if;
     if v = 'pass' then np := np + 1;
     elsif v in ('fail', 'part') then
       if v = 'part' and p_kind <> 'doc' then raise exception 'ตอบได้เฉพาะ ผ่าน / ไม่ผ่าน / ไม่เกี่ยว'; end if;
@@ -128,11 +131,11 @@ begin
     else raise exception 'ตอบให้ครบทุกข้อก่อนบันทึก'; end if;
   end loop;
   sc := case when np + npt + nf > 0 then round((np + npt * 0.5) * 100.0 / (np + npt + nf), 1) end;
-  insert into fms_checks (round_id, hospital_id, kind, area, cat, assessor, assessor_phone, answers, ack_name, ack_at, pass, part, fail, na, score)
+  insert into fms_checks (round_id, hospital_id, kind, area, cat, assessor, assessor_phone, answers, ack_name, ack_at, note, photos, pass, part, fail, na, score)
   values (r.id, r.hospital_id, p_kind, trim(p_area), p_cat, trim(p_assessor), trim(p_phone), p_answers, nullif(trim(coalesce(p_ack, '')), ''), case when nullif(trim(coalesce(p_ack, '')), '') is not null then now() end,
-    np, npt, nf, nn, sc)
+    nullif(trim(coalesce(p_note, '')), ''), coalesce(p_photos, '{}'), np, npt, nf, nn, sc)
   on conflict (round_id, kind, area, cat) do update set assessor = excluded.assessor, assessor_phone = excluded.assessor_phone, answers = excluded.answers,
-    ack_name = coalesce(excluded.ack_name, fms_checks.ack_name), ack_at = coalesce(excluded.ack_at, fms_checks.ack_at),
+    ack_name = coalesce(excluded.ack_name, fms_checks.ack_name), ack_at = coalesce(excluded.ack_at, fms_checks.ack_at), note = excluded.note, photos = excluded.photos,
     pass = excluded.pass, part = excluded.part, fail = excluded.fail, na = excluded.na, score = excluded.score, updated_at = now()
   returning id into cid;
   -- findings: drop open, untouched findings whose item no longer fails; add new ones
@@ -221,9 +224,9 @@ begin
   return n;
 end $$;
 
-revoke all on function public.fms_round_open(int,int,text,uuid), public.fms_round_status(uuid,text), public.fms_save(uuid,text,text,text,text,text,jsonb,text),
+revoke all on function public.fms_round_open(int,int,text,uuid), public.fms_round_status(uuid,text), public.fms_save(uuid,text,text,text,text,text,jsonb,text,text,text[]),
   public.fms_free(uuid,text,text,text,text[]), public.fms_to_job(uuid), public.fms_close(uuid,text[],text), public.fms_items_replace(text,jsonb) from public, anon;
-grant execute on function public.fms_round_open(int,int,text,uuid), public.fms_round_status(uuid,text), public.fms_save(uuid,text,text,text,text,text,jsonb,text),
+grant execute on function public.fms_round_open(int,int,text,uuid), public.fms_round_status(uuid,text), public.fms_save(uuid,text,text,text,text,text,jsonb,text,text,text[]),
   public.fms_free(uuid,text,text,text,text[]), public.fms_to_job(uuid), public.fms_close(uuid,text[],text), public.fms_items_replace(text,jsonb) to authenticated;
 
 -- security gate desk: same badge log as wp_gate, with the checks the desk needs

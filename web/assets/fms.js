@@ -140,7 +140,7 @@
     $("#wStart").disabled = !!why;
     const rc = ck().filter(x => R && x.round_id === R.id).sort((a, b) => a.updated_at < b.updated_at ? 1 : -1);
     $("#wDone").innerHTML = `<tr><th>${K === "doc" ? "หน่วยงาน" : K === "tracer" ? "เป้าหมาย" : "พื้นที่"}</th><th>หมวด</th><th class="r">คะแนน</th><th class="r">ผ่าน</th>${K === "doc" ? `<th class="r">ไม่ครบ</th>` : ""}<th class="r">ไม่ผ่าน</th><th class="r">ไม่เกี่ยว</th><th>ผู้ประเมิน</th><th>หัวหน้ารับทราบ</th><th>บันทึกเมื่อ</th></tr>` +
-      (rc.map(c => `<tr class="click" data-c="${c.id}"><td>${esc(c.area)}</td><td>${esc(catName(c.cat))}</td><td class="sc ${cls(c.score)}">${c.score ?? "-"}</td><td class="r">${c.pass}</td>${K === "doc" ? `<td class="r">${c.part}</td>` : ""}<td class="r">${c.fail}</td><td class="r">${c.na}</td><td>${esc(c.assessor)}</td><td>${esc(c.ack_name || "-")}</td><td>${fmt(c.updated_at)}</td></tr>`).join("") || none(10, "ยังไม่มีผลตรวจในรอบนี้"));
+      (rc.map(c => `<tr class="click" data-c="${c.id}"><td>${esc(c.area)}${c.note || (c.photos || []).length ? ` <span class="meta" title="${esc(c.note || "")}">📝${(c.photos || []).length ? " " + c.photos.length + " รูป" : ""}</span>` : ""}</td><td>${esc(catName(c.cat))}</td><td class="sc ${cls(c.score)}">${c.score ?? "-"}</td><td class="r">${c.pass}</td>${K === "doc" ? `<td class="r">${c.part}</td>` : ""}<td class="r">${c.fail}</td><td class="r">${c.na}</td><td>${esc(c.assessor)}</td><td>${esc(c.ack_name || "-")}</td><td>${fmt(c.updated_at)}</td></tr>`).join("") || none(10, "ยังไม่มีผลตรวจในรอบนี้"));
     if (W) drawList(); else $("#wList").innerHTML = "";
     const d = R && Object.keys(localStorage).filter(k => k.startsWith(`rs-fms-${R.id}-${K}-`)).length;
     $("#wDraft").textContent = d ? `มีร่างที่ยังไม่บันทึก ${d} ชุดในเครื่องนี้ (เลือกพื้นที่และหมวดเดิมแล้วกดเริ่มตรวจเพื่อทำต่อ)` : "";
@@ -152,26 +152,31 @@
     if (!area) return toast("เลือกหรือพิมพ์พื้นที่ที่ตรวจ", true);
     const list = items.filter(i => i.cat === cat), old = ck().find(c => R && c.round_id === R.id && c.area === area && c.cat === cat), draft = store.get(dkey(area, cat));
     const prev = draft ? draft.ans : old ? old.answers : [];
-    W = { area, cat, list, old, ack: draft ? draft.ack : old ? old.ack_name || "" : "",
+    W = { area, cat, list, old, ack: draft ? draft.ack : old ? old.ack_name || "" : "", note: draft ? draft.note || "" : old ? old.note || "" : "", photos: draft ? draft.photos || [] : old ? old.photos || [] : [],
       ans: list.map(i => { const p = prev.find(a => a.id === i.id) || {}; return { id: i.id, t: i.text, c: i.ref || "", r: !!i.red, v: p.v || "", n: p.n || "", na: p.na || "", ph: p.ph || [] }; }) };
     drawList(); if (draft) toast("เปิดร่างที่บันทึกไว้ในเครื่องนี้");
     $("#wList").scrollIntoView({ behavior: "smooth", block: "start" });
   }
-  const saveDraft = () => { if (W) store.set(dkey(W.area, W.cat), { ans: W.ans, ack: W.ack, at: Date.now() }); };
+  const saveDraft = () => { if (W) store.set(dkey(W.area, W.cat), { ans: W.ans, ack: W.ack, note: W.note, photos: W.photos, at: Date.now() }); };
   async function drawList() {
     const done = W.ans.filter(a => a.v).length, ro = !mine() || !R || R.status !== "open";
-    const urls = await signed(W.ans.flatMap(a => a.ph));
+    const urls = await signed([...W.ans.flatMap(a => a.ph), ...W.photos]);
     $("#wList").innerHTML = `<h3 class="sec">${esc(W.area)} · ${esc(catName(W.cat))}</h3>
       <p class="meta">${W.old ? `เคยบันทึกเมื่อ ${fmt(W.old.updated_at)} โดย ${esc(W.old.assessor)} · แก้แล้วกดบันทึกใหม่ได้` : "ยังไม่เคยตรวจพื้นที่นี้ในหมวดนี้ของรอบนี้"} · ข้อที่มีแถบแดง = จุดเสี่ยงสูงตาม JCI 8th / Zero-Red</p>
       ${byMe(W.ans).map(g => meHead(g) + g.list.map(i => { const a = W.ans[i]; return `<div class="q${a.r ? " red" : ""}${a.v === "fail" || a.v === "part" ? " f" : a.v ? " done" : ""}" data-i="${i}">
         <div class="t">${i + 1}. ${esc(a.t)}${a.r ? `<span class="tagr r">จุดเสี่ยงสูง</span>` : ""}</div>
         <div class="ans">${(K === "doc" ? [["pass", "p", "มีครบ เป็นปัจจุบัน"], ["part", "o", "มีไม่ครบ / ไม่เป็นปัจจุบัน"], ["fail", "f", "ไม่มี"], ["na", "n", "ไม่เกี่ยว"]] : [["pass", "p", "มี / ผ่าน"], ["fail", "f", "ไม่มี / ไม่ผ่าน"], ["na", "n", "ไม่เกี่ยว"]]).map(([v, c, l]) => `<button type="button" class="${c}" data-v="${v}" aria-pressed="${a.v === v}" ${ro ? "disabled" : ""}>${l}</button>`).join("")}</div>
-        ${a.v === "fail" || a.v === "part" ? `<div class="more"><textarea data-n rows="2" placeholder="${K === "doc" ? "ขาดเอกสารอะไร / ฉบับปีไหน (บังคับ)" : "พบอะไร ที่ไหน (บังคับ)"}" ${ro ? "disabled" : ""}>${esc(a.n)}</textarea>
+        ${a.v === "pass" && !a.open && !a.n && !a.ph.length && !ro ? `<button type="button" class="btn small" data-more style="margin-top:6px">+ หมายเหตุ / แนบรูป</button>` : ""}
+        ${a.v === "fail" || a.v === "part" || (a.v === "pass" && (a.open || a.n || a.ph.length)) ? `<div class="more"><textarea data-n rows="2" placeholder="${a.v === "pass" ? "หมายเหตุเพิ่มเติม (ไม่บังคับ)" : K === "doc" ? "ขาดเอกสารอะไร / ฉบับปีไหน (บังคับ)" : "พบอะไร ที่ไหน (บังคับ)"}" ${ro ? "disabled" : ""}>${esc(a.n)}</textarea>
           <div class="ph">${a.ph.map((p, k) => urls[p] ? `<span><a href="${urls[p]}" target="_blank" rel="noopener"><img src="${urls[p]}" alt="รูปข้อ ${i + 1}"></a>${ro ? "" : `<br><button class="btn small" type="button" data-del="${k}">ลบ</button>`}</span>` : "").join("")}</div>
-          ${ro ? "" : `<label class="btn small" style="justify-self:start">+ แนบรูป (${K === "doc" ? "ไม่บังคับ" : "บังคับอย่างน้อย 1 รูป"} สูงสุด 10)<input type="file" accept="image/*" capture="environment" multiple hidden data-ph></label>`}</div>` : ""}
+          ${ro ? "" : `<label class="btn small" style="justify-self:start">+ แนบรูป (${K === "doc" || a.v === "pass" ? "ไม่บังคับ" : "บังคับอย่างน้อย 1 รูป"} สูงสุด 10)<input type="file" accept="image/*" capture="environment" multiple hidden data-ph></label>`}</div>` : ""}
         ${a.v === "na" ? `<div class="more"><select data-na ${ro ? "disabled" : ""}><option value="">เลือกเหตุผล</option>${NA.map(x => `<option ${a.na === x || (x.startsWith("อื่น") && a.na && !NA.includes(a.na)) ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>
           ${a.na && !NA.slice(0, 3).includes(a.na) ? `<input data-nax maxlength="200" placeholder="ระบุเหตุผล" value="${esc(NA.includes(a.na) ? "" : a.na)}" ${ro ? "disabled" : ""}>` : ""}</div>` : ""}
       </div>`; }).join("")).join("")}
+      <div class="panel" style="margin:14px 0 0;padding:12px"><b>ความเห็นเพิ่มเติม และรูปเดินตรวจ</b> <span class="meta">(ไม่บังคับ)</span>
+        <textarea id="wNote" rows="3" maxlength="3000" placeholder="สิ่งที่เห็นระหว่างเดินตรวจ ข้อเสนอแนะ คำชม หรือเรื่องที่ไม่อยู่ในข้อตรวจ" style="width:100%;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-top:6px" ${ro ? "disabled" : ""}>${esc(W.note)}</textarea>
+        <div class="ph" style="margin-top:6px">${W.photos.map((p, k) => urls[p] ? `<span><a href="${urls[p]}" target="_blank" rel="noopener"><img src="${urls[p]}" alt="รูปเดินตรวจ ${k + 1}"></a>${ro ? "" : `<br><button class="btn small" type="button" data-gdel="${k}">ลบ</button>`}</span>` : "").join("")}</div>
+        ${ro ? "" : `<label class="btn small" style="margin-top:6px">+ แนบรูปเดินตรวจ (สูงสุด 30)<input type="file" accept="image/*" capture="environment" multiple hidden id="wPh"></label>`}</div>
       <div class="sticky"><div class="meta">ตอบแล้ว ${done}/${W.ans.length} ข้อ · ผ่าน ${W.ans.filter(a => a.v === "pass").length}${K === "doc" ? ` · ไม่ครบ ${W.ans.filter(a => a.v === "part").length}` : ""} · ไม่ผ่าน ${W.ans.filter(a => a.v === "fail").length} · ไม่เกี่ยว ${W.ans.filter(a => a.v === "na").length}</div>
         <div class="pbar"><i style="width:${Math.round(done * 100 / W.ans.length)}%"></i></div>
         ${ro ? "" : `<div class="row"><input id="wAck" maxlength="120" placeholder="ชื่อหัวหน้าหน่วยงานที่รับทราบผล" value="${esc(W.ack)}" style="flex:1;min-width:200px;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
@@ -180,6 +185,9 @@
   $("#wList").addEventListener("click", ev => {
     const q = ev.target.closest(".q"), b = ev.target.closest("button[data-v]");
     if (b && q) { const a = W.ans[+q.dataset.i]; a.v = b.dataset.v; if (a.v !== "na") a.na = ""; saveDraft(); return drawList(); }
+    if (ev.target.closest("button[data-more]") && q) { W.ans[+q.dataset.i].open = true; return drawList(); }
+    const gdel = ev.target.closest("button[data-gdel]");
+    if (gdel) { W.photos.splice(+gdel.dataset.gdel, 1); saveDraft(); return drawList(); }
     const del = ev.target.closest("button[data-del]");
     if (del && q) { W.ans[+q.dataset.i].ph.splice(+del.dataset.del, 1); saveDraft(); return drawList(); }
     if (ev.target.id === "wAllP") { W.ans.forEach(a => { if (!a.v) a.v = "pass"; }); saveDraft(); return drawList(); }
@@ -189,12 +197,17 @@
   $("#wList").addEventListener("input", ev => {
     const q = ev.target.closest(".q");
     if (ev.target.id === "wAck") { W.ack = ev.target.value; return saveDraft(); }
+    if (ev.target.id === "wNote") { W.note = ev.target.value; return saveDraft(); }
     if (!q) return; const a = W.ans[+q.dataset.i];
     if (ev.target.matches("[data-n]")) a.n = ev.target.value;
     if (ev.target.matches("[data-nax]")) a.na = ev.target.value || "อื่น ๆ (ระบุ)";
     saveDraft();
   });
   $("#wList").addEventListener("change", guard(async ev => {
+    if (ev.target.id === "wPh") {
+      const files = [...ev.target.files].slice(0, 30 - W.photos.length); ev.target.value = ""; if (!files.length) return toast("แนบรูปเดินตรวจได้ไม่เกิน 30 รูป", true);
+      toast("กำลังส่งรูป…"); W.photos.push(...await uploadMedia(files, codeOf(hid()), "fms")); saveDraft(); drawList(); return toast("แนบรูปแล้ว");
+    }
     const q = ev.target.closest(".q"); if (!q) return; const a = W.ans[+q.dataset.i];
     if (ev.target.matches("[data-na]")) { a.na = ev.target.value; saveDraft(); return drawList(); }
     if (ev.target.matches("[data-ph]")) {
@@ -214,7 +227,7 @@
     if (!name || !phone) return toast("ใส่ชื่อและเบอร์โทรผู้ประเมินด้านบน", true);
     if (busy) return; busy = true;
     try {
-      const r = await rpc("fms_save", { p_round: R.id, p_kind: K, p_area: W.area, p_cat: W.cat, p_assessor: name, p_phone: phone, p_answers: W.ans, p_ack: W.ack || null });
+      const r = await rpc("fms_save", { p_round: R.id, p_kind: K, p_area: W.area, p_cat: W.cat, p_assessor: name, p_phone: phone, p_answers: W.ans.map(({ open, ...a }) => a), p_ack: W.ack || null, p_note: W.note || null, p_photos: W.photos });
       store.del(dkey(W.area, W.cat)); W = null; await loadRound(); drawWalk();
       toast(`บันทึกแล้ว คะแนน ${r.score ?? "-"} · ไม่ผ่าน ${r.fail} ข้อ (เข้ารายการข้อบกพร่องแล้ว)`);
     } catch (e) { toast(errText(e), true); } finally { busy = false; }
@@ -323,8 +336,9 @@
       { name: "ราย ME", header: 0, rows: [["ME", "หัวข้อ ME", "หมวด", "ผ่าน", "ไม่ครบ", "ไม่ผ่าน", "ไม่เกี่ยว", "คะแนน", "สถานะ ME"], ...d.byMeR.map(x => [x.ref, x.text, x.cat, x.pass, x.part, x.fail, x.na || 0, x.score ?? "", x.st])] },
       { name: "รายพื้นที่", header: 0, rows: [["พื้นที่", "หมวดที่ตรวจ", "ผ่าน", "ไม่ผ่าน", "คะแนน"], ...d.byArea.map(a => [a.area, a.cats, a.pass, a.fail, a.score ?? ""])] },
       { name: "ข้อไม่ผ่านบ่อย", header: 0, rows: [["ข้อตรวจ", "หมวด", "ME", "จุดเสี่ยงสูง", "ไม่ผ่าน (พื้นที่)", "พื้นที่"], ...d.top.map(t => [t.t, t.cat, t.c || "", t.r ? "ใช่" : "", t.n, [...new Set(t.areas)].join(", ")])] },
-      { name: "ผลตรวจทุกข้อ", header: 0, rows: [["พื้นที่", "หมวด", "ข้อ", "ข้อตรวจ", "ME", "จุดเสี่ยงสูง", "ผล", "รายละเอียด / เหตุผล", "ผู้ประเมิน", "หัวหน้ารับทราบ"],
-        ...d.rc.flatMap(c => c.answers.map((a, i) => [c.area, c.cat, i + 1, a.t, a.c || "", a.r ? "ใช่" : "", { pass: K === "doc" ? "มีครบ" : "ผ่าน", part: "มีไม่ครบ", fail: K === "doc" ? "ไม่มี" : "ไม่ผ่าน", na: "ไม่เกี่ยว" }[a.v] || "", a.v === "fail" || a.v === "part" ? a.n : a.v === "na" ? a.na : "", c.assessor, c.ack_name || ""]))] },
+      { name: "ผลตรวจทุกข้อ", header: 0, rows: [["พื้นที่", "หมวด", "ข้อ", "ข้อตรวจ", "ME", "จุดเสี่ยงสูง", "ผล", "รายละเอียด / เหตุผล / หมายเหตุ", "รูป", "ผู้ประเมิน", "หัวหน้ารับทราบ"],
+        ...d.rc.flatMap(c => c.answers.map((a, i) => [c.area, c.cat, i + 1, a.t, a.c || "", a.r ? "ใช่" : "", { pass: K === "doc" ? "มีครบ" : "ผ่าน", part: "มีไม่ครบ", fail: K === "doc" ? "ไม่มี" : "ไม่ผ่าน", na: "ไม่เกี่ยว" }[a.v] || "", a.v === "na" ? a.na : a.n || "", (a.ph || []).length || "", c.assessor, c.ack_name || ""]))] },
+      { name: "ความเห็นเพิ่มเติม", header: 0, rows: [["พื้นที่", "หมวด", "ความเห็นเพิ่มเติม", "รูปเดินตรวจ (รูป)", "ผู้ประเมิน", "บันทึกเมื่อ"], ...d.rc.filter(c => c.note || (c.photos || []).length).map(c => [c.area, c.cat, c.note || "", (c.photos || []).length, c.assessor, fmt(c.updated_at)])] },
       { name: "เทียบรอบ", header: 0, rows: [["รอบ", "จุดที่ตรวจ", "ไม่ผ่าน", "คะแนน", "ข้อบกพร่องค้าง"], ...d.byRound.map(x => [roundName(x.r), x.checks, x.fail, x.score ?? "", x.open])] }]); };
   $("#pP").onclick = guard(async () => { const d = report();
     await Office.pptx(`บทสรุปผู้บริหาร_FMS_Round_${codeOf(hid())}`, { title: `บทสรุปผู้บริหาร FMS Round · ${KIND[K]}`, org: codeOf(hid()), period: roundName(R), findings: d.fl, notes: d.notes,
