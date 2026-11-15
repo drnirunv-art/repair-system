@@ -122,7 +122,8 @@
   function renderViews() {
     const n = { all: jobs.filter(j => OPEN.includes(j.status)).length, mine: jobs.filter(j => OPEN.includes(j.status) && mine(j)).length,
       review: jobs.filter(j => j.status === "clear").length, approve: jobs.filter(j => j.status === "on_hold" && j.hold_status === "pending").length,
-      appoint: jobs.filter(j => OPEN.includes(j.status) && (j.appointment_at || j.hold_until)).length };
+      appoint: jobs.filter(j => OPEN.includes(j.status) && (j.appointment_at || j.hold_until)).length,
+      noplan: jobs.filter(noPlan).length, planlate: jobs.filter(planLate).length };
     $("#wViews").innerHTML = VIEWS.map(([k, l]) => `<button type="button" class="chip" data-view="${k}" aria-pressed="${view === k}">${l}<b>${n[k]}</b></button>`).join("")
       + `<span style="flex:1"></span><button type="button" class="chip" data-bytech aria-pressed="${byTech}">งานยังไม่ปิด รายช่าง</button>
         <button type="button" class="chip" data-layout="card" aria-pressed="${layout === "card"}">การ์ด</button><button type="button" class="chip" data-layout="table" aria-pressed="${layout === "table"}">ตาราง</button>`;
