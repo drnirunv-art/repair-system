@@ -125,7 +125,14 @@
           <label>อีเมลของเจ้าหน้าที่<input id="sEmail" type="email" required></label>
           <label>ชื่อที่แสดง<input id="sName"></label>
           <label>บทบาท<select id="sRole"></select></label>
-          <div class="row" style="align-self:end"><button class="btn primary">เพิ่ม / เปลี่ยนบทบาท</button></div>
+        </div>
+        <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:10px 0"><legend style="font-weight:600;padding:0 4px">หน้าที่คนนี้เข้าได้</legend>
+          <div id="sPages" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 12px"></div>
+          <p class="meta" style="margin:6px 0 0">ถ้าไม่ติ๊ก "เมนูเจ้าหน้าที่" คนนี้จะเปิดเมนูเจ้าหน้าที่ไม่ได้ เว้นแต่ใส่รหัสล็อกด้านล่าง</p></fieldset>
+        <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+          <label>รหัสล็อกเมนูเจ้าหน้าที่ (อย่างน้อย 4 ตัว)<input id="sLock" type="password" autocomplete="new-password" placeholder="เว้นว่าง = ไม่ตั้ง / ใช้รหัสเดิม"></label>
+          <div style="align-self:end"><span class="meta" id="sLockNow"></span><label class="ck" id="sLockOffL" hidden><input type="checkbox" id="sLockOff"> ยกเลิกรหัสล็อก</label></div>
+          <div class="row" style="align-self:end"><button class="btn primary">บันทึกเจ้าหน้าที่และสิทธิ์</button></div>
         </div><div id="sMsg"></div><div class="scroll" style="margin-top:12px"><table id="sList"></table></div></form>
       <form class="panel" id="fPrio"><h3>ความเร่งด่วนและ SLA</h3>
         <div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto">

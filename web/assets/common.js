@@ -77,45 +77,55 @@ const RS = (() => {
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", add); else add();
 })();
 
-// Staff main-menu lock per person: a head sets a lock code for someone in Settings > Staff. That person can use
-// FMS Round and the other pages, but the staff main menu (staff.html) asks for the code first.
+// Page access per person (set by a head in Settings > Staff): which staff pages someone may open, plus a lock code
+// for the staff main menu. Pages not ticked show a notice with links to the ticked ones. The lock code (or the
+// head's override with it) opens everything for this browser tab. Data rights still follow the person's role.
+const RS_PAGES = [["staff.html", "เมนูเจ้าหน้าที่ (ใบงาน อะไหล่ ขอซื้อ รายงาน ตั้งค่า)"], ["fms.html", "FMS Round · Tracer JCI"], ["gate.html", "ป้อม รปภ. ผู้รับเหมา"],
+  ["pmboard.html", "PM Board · ความพร้อมอาคาร"], ["pm.html", "PM Inhouse / PM MA"], ["ma.html", "สัญญา MA 12 โรง"], ["op.html", "บันทึก OP"], ["book.html", "Monthly Report"],
+  ["market.html", "ตลาดอะไหล่"], ["ref.html", "เบอร์ภายใน · ข้อมูลพื้นที่"], ["ac.html", "งานผู้รับเหมาแอร์"], ["survey.html", "แบบสอบถาม"], ["wp.html", "Work Permit"],
+  ["ops.html", "ส่งเวร · รายงานเดือน · คลังวิธีแก้"]];
 (() => {
   const here = (location.pathname.split("/").pop() || "index.html").toLowerCase();
-  if (here !== "staff.html") return;
-  const OK = "rs-menu-ok";
+  if (!RS_PAGES.some(([p]) => p === here)) return;
+  const OK = "rs-menu-ok", name = p => (RS_PAGES.find(x => x[0] === p) || [p, p])[1];
   let shown = false;
   const check = async session => {
     if (shown || !session || !session.user) return;
     try { if (sessionStorage.getItem(OK) === session.user.id) return; } catch (e) {}
-    const { data, error } = await RS.sb.rpc("menu_lock_mine");
-    if (error || data !== true) return;
+    const { data, error } = await RS.sb.rpc("my_access");
+    if (error || !data || !Array.isArray(data.pages)) return;
+    const pages = data.pages;
+    if (here === "staff.html") document.querySelectorAll("#tabs a[href]").forEach(a => { const p = a.getAttribute("href").split("?")[0]; if (!pages.includes(p)) a.hidden = true; });
+    if (pages.includes(here)) return;
     shown = true;
+    const links = pages.filter(p => p !== here).map(p => `<a class="btn" href="${RS.esc(p)}">${RS.esc(name(p))}</a>`).join("");
     const o = document.createElement("div");
-    o.className = "rsLock"; o.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(10,20,30,.6);display:flex;align-items:center;justify-content:center;padding:16px";
-    o.innerHTML = `<form style="background:var(--surface,#fff);border-radius:14px;padding:18px 20px;width:min(440px,100%);display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-      <h2 style="margin:0;font-size:18px">🔒 เมนูเจ้าหน้าที่ล็อกอยู่</h2>
-      <p class="sub" style="margin:0">บัญชีนี้ใช้หน้าเดินตรวจและหน้าอื่นได้ตามปกติ ถ้าจะเข้าเมนูเจ้าหน้าที่ ใส่รหัสล็อกที่หัวหน้าตั้งให้</p>
-      <label>รหัสล็อก<input name="p" type="password" required autocomplete="off" style="width:100%"></label>
-      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary">เข้าเมนูเจ้าหน้าที่</button><button class="btn" type="button" data-forgot>ลืมรหัส</button></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn" href="fms.html">ไปหน้า FMS Round / Tracer</a><a class="btn" href="gate.html">ไปหน้าป้อม รปภ.</a><button class="btn" type="button" data-out>ออกจากระบบ</button></div>
+    o.className = "rsLock"; o.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(10,20,30,.6);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto";
+    o.innerHTML = `<form style="background:var(--surface,#fff);border-radius:14px;padding:18px 20px;width:min(460px,100%);display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <h2 style="margin:0;font-size:18px">🔒 ${here === "staff.html" ? "เมนูเจ้าหน้าที่ล็อกอยู่" : "บัญชีนี้ไม่ได้รับสิทธิ์เปิดหน้านี้"}</h2>
+      <p class="sub" style="margin:0">${links ? "หน้าที่บัญชีนี้ใช้ได้อยู่ด้านล่าง" : "บัญชีนี้ยังไม่มีหน้าที่ใช้ได้ ให้ติดต่อหัวหน้า"}${data.locked ? " · ถ้าจะเปิดทุกหน้า ใส่รหัสล็อกที่หัวหน้าตั้งไว้" : ""}</p>
+      ${links ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${links}</div>` : ""}
+      ${data.locked ? `<label>รหัสล็อก<input name="p" type="password" required autocomplete="off" style="width:100%"></label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary">ปลดล็อก</button><button class="btn" type="button" data-forgot>ลืมรหัส</button></div>` : ""}
+      <div><button class="btn" type="button" data-out>ออกจากระบบ</button></div>
       <div class="meta" role="status"></div></form>`;
-    const f = o.querySelector("form"), m = f.querySelector("[role=status]"), b = f.querySelector("button.primary");
+    const f = o.querySelector("form"), m = f.querySelector("[role=status]");
     f.addEventListener("submit", async ev => {
-      ev.preventDefault(); b.disabled = true; m.textContent = "กำลังตรวจรหัส…";
-      const r = await RS.sb.rpc("menu_lock_check", { p_code: f.p.value });
-      b.disabled = false;
+      ev.preventDefault(); if (!f.p) return; const b = f.querySelector("button.primary"); b.disabled = true; m.textContent = "กำลังตรวจรหัส…";
+      const r = await RS.sb.rpc("menu_lock_check", { p_code: f.p.value }); b.disabled = false;
       if (r.error) { m.textContent = RS.errText(r.error); return; }
       if (r.data !== true) { f.p.value = ""; m.textContent = "รหัสล็อกไม่ถูกต้อง"; return; }
       try { sessionStorage.setItem(OK, session.user.id); } catch (e) {}
-      o.remove(); shown = false;
+      location.reload();
     });
-    f.querySelector("[data-forgot]").onclick = async () => {
+    const fg = f.querySelector("[data-forgot]");
+    if (fg) fg.onclick = async () => {
       if (!confirm("ขอรหัสล็อกใหม่?\n\nรหัสเดิมจะใช้ไม่ได้ ระบบจะส่งรหัสใหม่ไปที่อีเมลของผู้บริหารและหัวหน้าที่ตั้งรหัส ให้ถามรหัสใหม่จากหัวหน้า")) return;
       const r = await RS.sb.rpc("menu_lock_forgot");
       m.textContent = r.error ? RS.errText(r.error) : r.data ? "ส่งรหัสใหม่ทางอีเมลแล้ว ให้ถามรหัสใหม่จากหัวหน้า" : "ไม่พบอีเมลผู้รับ ให้ติดต่อหัวหน้า";
     };
-    f.querySelector("[data-out]").onclick = async () => { await RS.sb.auth.signOut(); location.reload(); };
-    document.body.appendChild(o); setTimeout(() => f.p.focus(), 50);
+    f.querySelector("[data-out]").onclick = async () => { await RS.sb.auth.signOut(); try { sessionStorage.removeItem(OK); } catch (e) {} location.reload(); };
+    document.body.appendChild(o); if (f.p) setTimeout(() => f.p.focus(), 50);
   };
   RS.sb.auth.getSession().then(r => check(r.data && r.data.session)).catch(() => {});
   RS.sb.auth.onAuthStateChange((ev, session) => { if (ev === "SIGNED_IN") check(session); });

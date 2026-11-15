@@ -116,3 +116,5 @@ table.jt .od{display:inline-block;min-width:22px;text-align:center;border-radius
 table.jt tr.jopen>td{padding:6px 0 14px;background:var(--bg)}
 dialog.pop{border:1px solid var(--line);border-radius:12px;padding:22px 26px;background:var(--surface);color:var(--fg);text-align:center;max-width:min(360px,calc(100% - 32px))}
 dialog.pop::backdrop{background:rgba(0,0,0,.45)}dialog.pop h3{margin:0 0 6px}dialog.pop p{margin:0 0 6px}
+
+label.ck{display:flex!important;flex-direction:row;gap:6px;align-items:center;justify-content:flex-start;text-align:left;font-weight:400;padding:3px 0;cursor:pointer}label.ck input{width:auto;margin:0}label.ck[hidden]{display:none!important}

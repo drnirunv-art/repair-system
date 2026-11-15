@@ -5,7 +5,7 @@
   const MANAGER = ["owner", "admin", "chief_engineer", "supervisor"];
   const APPROVER = ["owner", "admin", "chief_engineer"];
   const HOLD_STATUS = { pending: "รอ Owner อนุมัติ", ack: "รับทราบแล้ว", ack_memo: "รับทราบ + ขอ Memo", rejected: "ไม่อนุมัติ" };
-  let invites = [], locked = new Set(), me = null, H = null, staff = [], prios = [], types = [], locs = [], jobs = [], assignees = [], reasons = [];
+  let invites = [], access = new Map(), emailOf = new Map(), me = null, H = null, staff = [], prios = [], types = [], locs = [], jobs = [], assignees = [], reasons = [];
   const grpOf = name => (reasons.find(r => r.name === name) || {}).grp || "";
   function reasonOptions() {
     const act = reasons.filter(r => r.active), groups = [...new Set(act.map(r => r.grp || "อื่น ๆ"))];
@@ -138,7 +138,7 @@
       sb.from("locations").select("*").eq("hospital_id", H.id).order("building").order("floor").order("department"),
       sb.from("hold_reasons").select("*").eq("hospital_id", H.id).order("sort").order("name"),
       sb.from("hospital_settings").select("*").eq("hospital_id", H.id).maybeSingle()]);
-    if (isMgr()) { const iv = await sb.from("staff_invites").select("email,role,full_name").eq("hospital_id", H.id).is("used_at", null).order("created_at"); invites = iv.data || []; const lk = await sb.rpc("menu_lock_list"); locked = new Set((lk.data || []).map(x => typeof x === "string" ? x : x.menu_lock_list)); }
+    if (isMgr()) { const iv = await sb.from("staff_invites").select("email,role,full_name").eq("hospital_id", H.id).is("used_at", null).order("created_at"); invites = iv.data || []; const [ac, em] = await Promise.all([sb.rpc("staff_access_list"), sb.rpc("staff_emails")]); access = new Map((ac.data || []).map(a => [a.email, a])); emailOf = new Map((em.data || []).map(e => [e.profile_id, e.email])); }
     staff = s.data || []; prios = p.data || []; types = t.data || []; locs = l.data || []; reasons = r.data || [];
     if (st.data) S = st.data;
     opts($("#wStatus"), [["open", "งานที่ยังไม่ปิด"], ["", "ทุกสถานะ"], ...Object.entries(STATUS)]);
@@ -538,11 +538,19 @@
 
   /* ---------- setup ---------- */
   const msg = (el, err, okText) => $(el).innerHTML = err ? `<div class="note bad">${esc(errText(err))}</div>` : `<div class="note ok">${okText}</div>`;
+  const accText = email => { const a = access.get(email); return (!a || !a.pages ? `<small>ทุกหน้า</small>` : `<small>${a.pages.length} หน้า${a.pages.includes("staff.html") ? "" : " · ไม่รวมเมนูเจ้าหน้าที่"}</small>`) + (a && a.locked ? " 🔒" : ""); };
+  const drawPages = email => { const a = access.get((email || "").toLowerCase()), all = !a || !a.pages;
+    $("#sPages").innerHTML = `<label class="ck"><input type="checkbox" data-pall ${all ? "checked" : ""}> <b>ทุกหน้า</b></label>` + RS_PAGES.map(([p, l]) => `<label class="ck"><input type="checkbox" data-pg="${p}" ${all || a.pages.includes(p) ? "checked" : ""}> ${esc(l)}</label>`).join("");
+    $("#sLockNow").textContent = a && a.locked ? "ตอนนี้มีรหัสล็อกอยู่ · เว้นว่าง = ใช้รหัสเดิม" : "ยังไม่มีรหัสล็อก"; $("#sLockOffL").hidden = !(a && a.locked); $("#sLockOff").checked = false; };
+  $("#sPages").addEventListener("change", ev => { const all = $("#sPages [data-pall]");
+    if (ev.target === all) $("#sPages").querySelectorAll("[data-pg]").forEach(x => x.checked = all.checked);
+    else all.checked = [...$("#sPages").querySelectorAll("[data-pg]")].every(x => x.checked); });
   function renderSetup() {
-    $("#sList").innerHTML = "<tr><th>ชื่อ</th><th>บทบาท</th><th>สถานะ</th><th></th><th>ล็อกเมนูเจ้าหน้าที่</th></tr>" + staff.map(s => `<tr><td>${esc(s.full_name)}</td><td>${ROLES[s.role]}</td><td>${s.active ? "ใช้งาน" : "ปิดใช้"}</td>
+    if (!$("#sPages").innerHTML) drawPages("");
+    $("#sList").innerHTML = "<tr><th>ชื่อ</th><th>บทบาท</th><th>สถานะ</th><th></th><th>หน้าที่เข้าได้ / ล็อก</th></tr>" + staff.map(s => `<tr><td>${esc(s.full_name)}</td><td>${ROLES[s.role]}</td><td>${s.active ? "ใช้งาน" : "ปิดใช้"}</td>
       <td>${s.id !== me.id ? `<button class="btn small" type="button" data-staff-toggle="${s.id}">${s.active ? "ปิดใช้" : "เปิดใช้"}</button>` : ""}</td>
-      <td>${s.id !== me.id ? `${locked.has(s.id) ? "🔒 ล็อกอยู่ " : ""}<button class="btn small" type="button" data-staff-lock="${s.id}">${locked.has(s.id) ? "เปลี่ยน / ยกเลิกรหัส" : "ตั้งรหัสล็อก"}</button>` : ""}</td></tr>`).join("")
-      + invites.map(i => `<tr><td>${esc(i.full_name || i.email)}<br><small class="mono">${esc(i.email)}</small></td><td>${ROLES[i.role]}</td><td>รอสมัครบัญชี</td><td></td><td></td></tr>`).join("");
+      <td>${s.id !== me.id && emailOf.get(s.id) ? `${accText(emailOf.get(s.id))} <button class="btn small" type="button" data-staff-edit="${esc(emailOf.get(s.id))}">แก้สิทธิ์</button>` : ""}</td></tr>`).join("")
+      + invites.map(i => `<tr><td>${esc(i.full_name || i.email)}<br><small class="mono">${esc(i.email)}</small></td><td>${ROLES[i.role]}</td><td>รอสมัครบัญชี</td><td></td><td>${accText(i.email)} <button class="btn small" type="button" data-staff-edit="${esc(i.email)}">แก้สิทธิ์</button></td></tr>`).join("");
     $("#pList").innerHTML = "<tr><th>ชื่อ</th><th>ตอบรับภายใน</th><th>SLA ซ่อมเสร็จ</th><th>ค่าเริ่มต้นของฟอร์ม</th><th></th></tr>" + prios.map(p => `<tr><td>${esc(p.name)}</td><td>${p.respond_minutes ? p.respond_minutes + " นาที" : "-"}</td><td>${dur(p.sla_minutes)}</td>
       <td>${p.is_default ? "✓" : `<button class="btn small" type="button" data-prio-default="${p.id}">ตั้งเป็นค่าเริ่มต้น</button>`}</td><td><button class="btn small" type="button" data-del="priorities:${p.id}">ลบ</button></td></tr>`).join("");
     $("#oList").innerHTML = "<tr><th>อาคาร</th><th>ชั้น</th><th>แผนก</th><th></th></tr>" + locs.map(l => `<tr><td>${esc(l.building)}</td><td>${esc(l.floor)}</td><td>${esc(l.department)}${l.active ? "" : " <small>(ซ่อน)</small>"}</td>
@@ -561,20 +569,28 @@
       alert_not_started_min: +f.gNs.value, appointment_grace_min: +f.gGrace.value, hold_needs_approval: f.gApprove.checked, updated_at: new Date().toISOString() }).eq("hospital_id", H.id);
     msg("#gMsg", error, "บันทึกการตั้งค่าแล้ว"); if (!error) { await loadRefs(); render(); }
   };
-  $("#fStaff").onsubmit = async e => { e.preventDefault(); const { data, error } = await sb.rpc("add_staff", { p_email: $("#sEmail").value, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null }); msg("#sMsg", error, data === "invited" ? "บันทึกแล้ว อีเมลนี้ยังไม่ได้สมัคร ให้เจ้าตัวเปิดหน้านี้แล้วกด “สมัครบัญชี” ด้วยอีเมลนี้ ระบบจะใส่สิทธิ์ให้อัตโนมัติ" : "บันทึกเจ้าหน้าที่แล้ว"); if (!error) { $("#sEmail").value = ""; $("#sName").value = ""; await loadRefs(); render(); } };
+  $("#fStaff").onsubmit = async e => { e.preventDefault();
+    const em = $("#sEmail").value.trim().toLowerCase(), all = $("#sPages [data-pall]").checked, pages = all ? null : [...$("#sPages").querySelectorAll("[data-pg]:checked")].map(x => x.dataset.pg);
+    const lock = $("#sLockOff").checked ? "" : ($("#sLock").value.trim() || null);
+    if (pages && !pages.length) return msg("#sMsg", { message: "ติ๊กอย่างน้อย 1 หน้า หรือติ๊ก \"ทุกหน้า\"" });
+    const { data, error } = await sb.rpc("add_staff", { p_email: em, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null });
+    if (!error && (pages || lock !== null || access.has(em))) { const r = await sb.rpc("staff_access_set", { p_email: em, p_pages: pages, p_lock: lock }); if (r.error) return msg("#sMsg", r.error); }
+    $("#sLock").value = "";
+    const extra = pages ? ` · เข้าได้ ${pages.length} หน้า${pages.includes("staff.html") ? "" : " (เมนูเจ้าหน้าที่ต้องใช้รหัสล็อก)"}` : "";
+    msg("#sMsg", error, (data === "invited" ? "บันทึกแล้ว อีเมลนี้ยังไม่ได้สมัคร ให้เจ้าตัวเปิดหน้านี้แล้วกด “สมัครบัญชี” ด้วยอีเมลนี้ ระบบจะใส่สิทธิ์ให้อัตโนมัติ" : "บันทึกเจ้าหน้าที่แล้ว") + extra + (lock ? " · ตั้งรหัสล็อกแล้ว แจ้งรหัสให้คนนั้นทราบ" : ""));
+    if (!error) { $("#sEmail").value = ""; $("#sName").value = ""; await loadRefs(); render(); drawPages(""); }
+  };
   $("#fPrio").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("priorities").insert({ hospital_id: H.id, name: $("#pName").value.trim(), sla_minutes: +$("#pSla").value, is_default: !prios.length }); msg("#pMsg", error, "เพิ่มแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
   $("#fLoc").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("locations").insert({ hospital_id: H.id, building: $("#oB").value.trim(), floor: $("#oF").value.trim(), department: $("#oD").value.trim() }); msg("#oMsg", error, "เพิ่มตำแหน่งแล้ว"); if (!error) { $("#oD").value = ""; await loadRefs(); render(); } };
   $("#fType").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("job_types").insert({ hospital_id: H.id, code: $("#yCode").value.trim(), name: $("#yName").value.trim(), standard_minutes: +$("#yStd").value || null, kpi: $("#yKpi").checked }); msg("#yMsg", error, "เพิ่มประเภทงานแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
   $("#fReason").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("hold_reasons").insert({ hospital_id: H.id, name: $("#hName").value.trim(), grp: $("#hGrp").value || null, sort: 900 + reasons.length }); msg("#hMsg", error, "เพิ่มเหตุผลแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
   document.addEventListener("click", async e => {
     const t = e.target.closest("button"); if (!t) return; let r;
-    if (t.dataset.staffLock) {
-      const s = staff.find(x => x.id === t.dataset.staffLock); if (!s) return;
-      const v = window.prompt(`รหัสล็อกเมนูเจ้าหน้าที่ของ ${s.full_name}\n\nคนนี้จะใช้หน้าเดินตรวจและหน้าอื่นได้ แต่จะเข้าเมนูเจ้าหน้าที่ต้องใส่รหัสนี้\nพิมพ์รหัสอย่างน้อย 4 ตัว${locked.has(s.id) ? "\nเว้นว่างแล้วกด OK = ยกเลิกล็อก" : ""}`, "");
-      if (v === null || (!v.trim() && !locked.has(s.id))) return;
-      const { data, error } = await sb.rpc("menu_lock_set", { p_profile: s.id, p_code: v });
-      msg("#sMsg", error, data === "removed" ? `ยกเลิกล็อกของ ${esc(s.full_name)} แล้ว` : `ตั้งรหัสล็อกของ ${esc(s.full_name)} แล้ว แจ้งรหัสให้คนนั้นทราบ`);
-      if (!error) { await loadRefs(); render(); } return;
+    if (t.dataset.staffEdit) {
+      const em = t.dataset.staffEdit, pid = [...emailOf].find(([, v]) => v === em), st = pid && staff.find(x => x.id === pid[0]), iv = invites.find(i => i.email === em);
+      $("#sEmail").value = em; $("#sName").value = (st && st.full_name) || (iv && iv.full_name) || ""; $("#sRole").value = (st || iv || {}).role || $("#sRole").value;
+      drawPages(em); $("#sLock").value = ""; $("#sMsg").innerHTML = `<div class="note">กำลังแก้สิทธิ์ของ ${esc(em)} · ติ๊กหน้าที่ให้เข้าได้ แล้วกด "บันทึกเจ้าหน้าที่และสิทธิ์"</div>`;
+      $("#fStaff").scrollIntoView({ behavior: "smooth", block: "start" }); return;
     }
     if (t.dataset.staffToggle) { const s = staff.find(x => x.id === t.dataset.staffToggle); r = await sb.from("profiles").update({ active: !s.active }).eq("id", s.id); }
     else if (t.dataset.locRename) { const l = locs.find(x => x.id === t.dataset.locRename); const n = (window.prompt("ชื่อแผนกใหม่", l.department) || "").trim(); if (!n || n === l.department) return; r = await sb.from("locations").update({ department: n }).eq("id", l.id); }
