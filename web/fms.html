@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>FMS Round · Tracer JCI | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .hsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+  .hsel select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:200px}
+  .fg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 14px;margin:10px 0}
+  .fg label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+  .fg input,.fg select,.fg textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:inherit;background:#fff}
+  .q{border:1px solid var(--line);border-radius:10px;padding:12px;margin:8px 0;background:var(--surface)}
+  .q.red{border-left:5px solid #d93025}
+  .q.done{background:#f7fbf8}.q.f{background:#fff4f3}
+  .q .t{font-weight:600}.q .t small{font-weight:500;color:var(--muted)}
+  .tagr{display:inline-block;font-size:11px;font-weight:700;border-radius:5px;padding:0 6px;margin-left:6px;vertical-align:1px}
+  .tagr.r{background:#d93025;color:#fff}.tagr.me{background:#e8eef6;color:#234}
+  .ans{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .ans button{font:inherit;font-weight:600;border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;flex:1;min-width:110px}
+  .ans button[aria-pressed=true].p{background:#1e8e3e;color:#fff;border-color:#1e8e3e}
+  .ans button[aria-pressed=true].f{background:#d93025;color:#fff;border-color:#d93025}
+  .ans button[aria-pressed=true].o{background:#e37400;color:#fff;border-color:#e37400}
+  .ans button[aria-pressed=true].n{background:#6b7480;color:#fff;border-color:#6b7480}
+  .more{margin-top:8px;display:grid;gap:8px}.more textarea,.more select,.more input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:100%}
+  .ph{display:flex;gap:6px;flex-wrap:wrap}.ph img{width:84px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+  .pbar{height:10px;border-radius:6px;background:#e6e9ee;overflow:hidden;margin:6px 0 2px}.pbar i{display:block;height:100%;background:var(--accent)}
+  .sticky{position:sticky;bottom:0;background:var(--bg);padding:10px 0;border-top:1px solid var(--line);margin-top:10px;z-index:3}
+  td.sc{text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+  td.g{background:#d5f2dd}td.o{background:#ffe2b8}td.rd{background:#ffc9c4}td.na{background:#eef0f3;color:#8a94a0}
+  td.r,th.r{text-align:right}tr.click{cursor:pointer}tr.click:hover td{background:#f3f7fb}
+  .st{display:inline-block;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700;white-space:nowrap}
+  .st.open{background:#ffd98a}.st.done{background:#9be3b0}.st.rep{background:#ffb3ad}
+  dialog.form{border:0;border-radius:14px;padding:0;width:min(640px,94vw);max-height:92vh;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  dialog.form::backdrop{background:rgba(10,20,30,.45)}dialog.form .in{padding:18px 20px}
+  h3.sec{margin:22px 0 6px}
+  .mh{margin:16px 0 4px;padding:6px 10px;background:#e8eef6;border-radius:8px;font-size:14px;color:#1f2a37}
+  tr.ch td{background:#1f2a37;color:#fff;font-weight:700}tr.mr td{padding:0 4px}
+  @media (max-width:760px){.fg{grid-template-columns:1fr 1fr}}
+  @media (max-width:480px){.fg{grid-template-columns:1fr}.ans button{min-width:0}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">FMS</span><h1>FMS Round · Tracer JCI 8th</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าเจ้าหน้าที่</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="walk" aria-selected="true">เดินตรวจ</button>
+    <button role="tab" data-tab="find" aria-selected="false">ข้อบกพร่อง <b id="findN"></b></button>
+    <button role="tab" data-tab="rep" aria-selected="false">รายงาน</button>
+    <button role="tab" data-tab="board" aria-selected="false">กระดานพื้นที่ × หมวด</button>
+    <button role="tab" data-tab="form" aria-selected="false">แบบฟอร์มข้อตรวจ</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2 id="gateH">ต้องเข้าสู่ระบบก่อน</h2><p class="sub" id="gateP">เปิด <a href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <div id="body" hidden>
+    <p class="sub">คณะกรรมการ FMS ตรวจ 3 แบบ: 1) ตรวจเอกสารตาม ME 2) เดินตรวจหน้างาน 3) เดินตามรอยผู้ตรวจตามกลยุทธ์ ทุกแบบจัดตามหมวด FMS และแยกตาม ME ของ JCI 8th ข้อที่ไม่ผ่านกลายเป็นข้อบกพร่อง ส่งเข้าใบแจ้งซ่อมได้ และปิดด้วยรูปหลังแก้ไข</p>
+    <div class="hsel"><span id="hBox" hidden><select id="hSel"></select></span>
+      <label for="rSel">รอบตรวจ</label><select id="rSel"></select>
+      <button class="btn small" type="button" id="rNew" hidden>+ เปิดรอบใหม่</button><button class="btn small" type="button" id="rClose" hidden></button><span class="meta" id="rInfo"></span></div>
+    <div class="chips" id="kChips" role="group" aria-label="แบบการตรวจ"><button class="chip" type="button" data-k="doc" aria-pressed="false">1 ตรวจเอกสาร (ตาม ME)</button><button class="chip" type="button" data-k="walk" aria-pressed="true">2 เดินตรวจหน้างาน</button><button class="chip" type="button" data-k="tracer" aria-pressed="false">3 เดินตามรอยผู้ตรวจ (ตามกลยุทธ์)</button></div>
+    <p class="meta" id="kHelp" style="margin:-4px 0 12px"></p>
+
+    <section id="tab-walk" hidden>
+      <div id="wNo" class="empty" hidden></div>
+      <div id="wBox">
+        <div class="fg">
+          <label>ผู้ประเมิน *<input id="wName" maxlength="120"></label>
+          <label>เบอร์โทร *<input id="wPhone" maxlength="40" inputmode="tel"></label>
+          <label id="wAreaL">พื้นที่ / หน่วยงานที่ตรวจ * <input id="wArea" list="areas" maxlength="200" placeholder="พิมพ์หรือเลือก"></label>
+          <label>หมวด *<select id="wCat"></select></label>
+        </div>
+        <div class="panel" id="tHint" hidden style="margin:0 0 10px;padding:10px 12px;font-size:14px"></div>
+        <div class="row"><button class="btn primary" type="button" id="wStart">เริ่มตรวจ / เปิดผลเดิม</button><span class="meta" id="wDraft"></span></div>
+        <div id="wList"></div>
+        <h3 class="sec">ตรวจแล้วในรอบนี้</h3>
+        <div class="scroll"><table id="wDone"></table></div>
+      </div>
+    </section>
+
+    <section id="tab-find" hidden>
+      <div class="kpis" id="fK"></div>
+      <div class="filters"><select id="fSt"><option value="open">ยังไม่ปิด</option><option value="done">ปิดแล้ว</option><option value="">ทั้งหมด</option></select>
+        <select id="fCat"></select><input id="fQ" placeholder="ค้นหา พื้นที่ ข้อบกพร่อง">
+        <label class="row" style="flex:none;gap:6px"><input type="checkbox" id="fAll"> ทุกรอบ</label>
+        <button class="btn primary" type="button" id="fFree" hidden>+ แจ้งอิสระ (นอกแบบฟอร์ม)</button><button class="btn" type="button" id="fX">Excel</button></div>
+      <div class="scroll"><table id="fT"></table></div>
+    </section>
+
+    <section id="tab-rep" hidden>
+      <div class="kpis" id="pK"></div>
+      <div id="pExec"></div>
+      <div class="filters"><button class="btn" type="button" id="pX">Excel (บทสรุปผู้บริหาร + รายละเอียด)</button><button class="btn" type="button" id="pP">บทสรุปผู้บริหาร (PPT)</button></div>
+      <h3 class="sec">คะแนนรายหมวด</h3><div class="scroll"><table id="pCat"></table></div>
+      <h3 class="sec">คะแนนราย ME (JCI 8th)</h3><div class="scroll"><table id="pMe"></table></div>
+      <h3 class="sec">คะแนนรายพื้นที่</h3><div class="scroll"><table id="pArea"></table></div>
+      <h3 class="sec">ข้อที่ไม่ผ่านบ่อยที่สุด</h3><div class="scroll"><table id="pTop"></table></div>
+      <h3 class="sec">เทียบทุกรอบของปี</h3><div class="scroll"><table id="pRound"></table></div>
+    </section>
+
+    <section id="tab-board" hidden>
+      <p class="meta">คะแนน = ผ่าน ÷ (ผ่าน + ไม่ผ่าน) × 100 · เขียว ≥ 90 · ส้ม 80–89 · แดง &lt; 80 · เทา = ยังไม่ตรวจ · แตะช่องเพื่อเปิดผลตรวจ</p>
+      <div class="scroll"><table id="bT"></table></div>
+    </section>
+
+    <section id="tab-form" hidden>
+      <p class="sub" id="iInfo"></p>
+      <div class="filters"><button class="btn" type="button" id="iX">ดาวน์โหลดแบบฟอร์ม (Excel)</button>
+        <button class="btn" type="button" id="iImp" hidden>นำเข้าแบบฟอร์มของโรงพยาบาล (Excel)</button><button class="btn" type="button" id="iBack" hidden>กลับไปใช้แบบฟอร์มกลาง JCI 8th</button><input type="file" id="iFile" accept=".xlsx" hidden></div>
+      <div class="scroll"><table id="iT"></table></div>
+    </section>
+  </div>
+</main>
+<datalist id="areas"></datalist>
+<dialog id="dlg" class="form"><div class="in" id="dlgIn"></div></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+<script src="assets/fms.js"></script>
+</body>
+</html>

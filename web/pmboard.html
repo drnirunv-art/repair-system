@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>PM Board ความพร้อมอาคาร | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .hsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+  .hsel select,.hsel input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:auto}
+  .lg{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 12px}
+  .lg button{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line);border-radius:999px;padding:5px 12px;background:#fff;cursor:pointer;display:flex;gap:6px;align-items:center}
+  .lg button[aria-pressed=true]{outline:2px solid var(--accent);outline-offset:1px}
+  .sw{display:inline-block;width:12px;height:12px;border-radius:3px}
+  .c-ok{background:#1e8e3e;color:#fff}.c-bad{background:#ffc9c4;color:#7a1c14}.c-todo{background:#ffd98a;color:#4a3500}.c-late{background:#8b1a10;color:#fff}
+  .bld{margin:14px 0}.bld h3{margin:0 0 6px;font-size:15px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.bld h3 small{font-weight:500;color:var(--muted)}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:5px}
+  .tile{font:inherit;font-size:12px;font-weight:600;border:0;border-radius:6px;padding:6px 4px;cursor:pointer;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:"IBM Plex Mono",monospace}
+  .rb{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:10px 0;background:var(--surface)}.rb.allok{border-color:#9be3b0;background:#f3fbf5}
+  .rb h3{margin:0 0 8px;font-size:15px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.rb h3 small{font-weight:500;color:var(--muted)}
+  .rg{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:6px}
+  .rc{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:#eef0f3;color:#4b5563;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:1px}
+  .rc b{font-size:12px}
+  .rc.ok{background:#d5f2dd;color:#14532d;border-color:#9be3b0}.rc.bad{background:#ffc9c4;color:#7a1c14;border-color:#f3b9b3}
+  .rc:disabled{cursor:default}
+  dialog.form{border:0;border-radius:14px;padding:0;width:min(560px,94vw);max-height:92vh;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  dialog.form::backdrop{background:rgba(10,20,30,.45)}dialog.form .in{padding:18px 20px}
+  dialog textarea{font:inherit;width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px}
+  .kv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:4px 10px;font-size:14px;margin:8px 0}.kv span{color:var(--muted)}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">PMB</span><h1>PM Board · ความพร้อมอาคาร</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าเจ้าหน้าที่</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="board" aria-selected="true">กระดาน PM รายเครื่อง</button>
+    <button role="tab" data-tab="ready" aria-selected="false">ความพร้อมอาคาร 8 ระบบ</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2 id="gateH">ต้องเข้าสู่ระบบก่อน</h2><p class="sub" id="gateP">เปิด <a href="staff.html">หน้าเจ้าหน้าที่</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <div id="body" hidden>
+    <section id="tab-board">
+      <div class="hsel"><label for="m">เดือน</label><input type="month" id="m">
+        <label for="by">งาน</label><select id="by"><option value="">PM ทั้งหมด</option><option value="TW">PM Inhouse (TW)</option><option value="MA">PM MA (ผู้รับเหมา)</option></select>
+        <input id="q" placeholder="ค้นหา TAG ชื่อเครื่อง ชนิด" style="flex:1;min-width:180px"><button class="btn" type="button" id="x">Excel</button></div>
+      <div class="kpis" id="k"></div>
+      <div class="lg" id="lg" role="group" aria-label="กรองตามสี"></div>
+      <p class="meta" id="note"></p>
+      <div id="board"></div>
+    </section>
+    <section id="tab-ready" hidden>
+      <p class="sub">หัวหน้า (Chief / Supervisor / Admin / Owner) ยืนยันสถานะของแต่ละระบบในแต่ละอาคาร แตะช่องเพื่อเปลี่ยน ถ้า "ไม่พร้อม" ต้องใส่เหตุผล อาคารพร้อมใช้ = ครบทั้ง 8 ระบบ</p>
+      <div class="kpis" id="rk"></div>
+      <div class="filters"><button class="btn" type="button" id="rx">Excel</button></div>
+      <div id="rt"></div>
+    </section>
+  </div>
+</main>
+<dialog id="dlg" class="form"><div class="in" id="dlgIn"></div></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+<script src="assets/pmboard.js"></script>
+</body>
+</html>
