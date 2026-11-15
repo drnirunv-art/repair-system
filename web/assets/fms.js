@@ -31,8 +31,8 @@
   // items of one category grouped by ME, in form order: [{ ref, text, list: [index into the given array] }]
   const byMe = list => { const g = []; list.forEach((x, i) => { const r = x.ref || x.c || ""; let last = g[g.length - 1]; if (!last || last.ref !== r) g.push(last = { ref: r, text: MEs[r] || "", list: [] }); last.list.push(i); }); return g; };
   const meHead = g => `<div class="mh"><b>${esc(g.ref || "ไม่ระบุ ME")}</b>${g.text ? ` · ${esc(g.text)}` : ""}</div>`;
-  const hid = () => exec ? ($("#hSel").value || me.hospital_id) : me.hospital_id;
-  const mine = () => (hid() === me.hospital_id && can) || exec;
+  const hid = () => (exec || can) ? ($("#hSel").value || me.hospital_id) : me.hospital_id;
+  const mine = () => can || exec;
   const roundName = r => r ? `ครั้งที่ ${r.no}/${r.year_be}${r.title ? " · " + r.title : ""}` : "";
   const dkey = (area, cat) => `rs-fms-${R && R.id}-${K}-${area}-${cat}`;
   const ck = () => checks.filter(c => c.kind === K);
@@ -47,7 +47,7 @@
     me = data; H = me.hospitals; exec = (await sb.rpc("am_exec")).data === true; can = RUN.includes(me.role);
     if (!can && !exec) { $("#gateH").textContent = "หน้านี้สำหรับคณะกรรมการ FMS"; $("#gateP").textContent = "เปิดได้เฉพาะ Owner / Admin / Chief Engineer / Supervisor / จป. (Safety Officer) หากต้องใช้ ให้หัวหน้าเปลี่ยนสิทธิ์ในหน้าตั้งค่า"; $("#gate").hidden = false; return; }
     $("#who").textContent = `${me.full_name || ""} · ${H.name}`;
-    if (exec) { hospitals = (await sb.from("hospitals").select("id,code,name").order("code")).data || []; $("#hSel").innerHTML = hospitals.map(h => `<option value="${h.id}">${esc(h.code)} · ${esc(h.name)}</option>`).join(""); const pt2 = hospitals.find(x => x.code === "PT2"), keepH = store.get("rs-fms-h"); $("#hSel").value = keepH && hospitals.some(x => x.id === keepH) ? keepH : pt2 ? pt2.id : me.hospital_id; $("#hBox").hidden = false; }
+    if (exec || can) { hospitals = (await sb.from("hospitals").select("id,code,name").order("code")).data || []; $("#hSel").innerHTML = hospitals.map(h => `<option value="${h.id}">${esc(h.code)} · ${esc(h.name)}</option>`).join(""); const pt2 = hospitals.find(x => x.code === "PT2"), keepH = store.get("rs-fms-h"); $("#hSel").value = keepH && hospitals.some(x => x.id === keepH) ? keepH : pt2 ? pt2.id : me.hospital_id; $("#hBox").hidden = false; }
     $("#wName").value = me.full_name || ""; $("#wPhone").value = me.phone || ""; K = store.get("rs-fms-kind") || "walk";
     $("#body").hidden = false; $("#tabs").hidden = false;
     await loadHospital();
@@ -88,6 +88,9 @@
     if (K === "doc" && !$("#wArea").value) $("#wArea").value = "งานวิศวกรรม";
     const opt = v => `<option value="${esc(v)}">`;
     $("#areas").innerHTML = K === "tracer" ? [...targets.eq.map(e => `${e.tag} · ${e.name}`), ...targets.wp.map(p => `${p.permit_no} · ${p.title} (${p.company})`), ...areas].map(opt).join("") : K === "doc" ? ["งานวิศวกรรม", "คณะกรรมการ FMS", "งานรักษาความปลอดภัย", "งานอาชีวอนามัย (จป.)", "งานเครื่องมือแพทย์", ...areas].map(opt).join("") : areas.map(opt).join("");
+    $("#wDept").innerHTML = `<option value="">${areas.length ? "เลือกแผนก หรือพิมพ์เองในช่องถัดไป" : "ยังไม่มีรายชื่อแผนกของโรงนี้ พิมพ์เองในช่องถัดไป"}</option>` + areas.map(a => `<option ${$("#wArea").value === a ? "selected" : ""}>${esc(a)}</option>`).join("");
+    $("#wDeptL").hidden = K === "doc";
+    $("#wDeptN").textContent = `(${codeOf(hid())} ${n(areas.length)} แผนก)`;
     $("#wCat").innerHTML = cats().map(c => `<option value="${esc(c.cat)}">${esc(c.name)} (${c.n} ข้อ)</option>`).join("");
     $("#fCat").innerHTML = `<option value="">ทุกหมวด</option>` + cats().map(c => `<option value="${esc(c.cat)}">${esc(c.name)}</option>`).join("");
     $("#tHint").innerHTML = K === "tracer" ? `<b>เป้าหมายที่แนะนำ</b> TR1: สุ่ม 10 จุด (เกจ AIIR, ตู้ยา/ตู้เลือด, Zone valve ก๊าซ, ถังดับเพลิง, ประตูหนีไฟ/Damper, พัดลมห้องผ้าเปื้อน, Gen/ATS, Eyewash, น้ำ RO, AED) · TR7: เครื่องกลุ่มความเสี่ยงสูงตาม FMEA (FACP, Fire pump, หม้อแปลง, HV Switchgear, Generator/ATS, UPS, Chiller, ลิฟต์, ก๊าซทางการแพทย์) พบในทะเบียน ${n(targets.eq.length)} เครื่อง · TR4: Work Permit ที่กำลังทำงาน ${n(targets.wp.length)} ใบ${targets.wp.length ? ` (${targets.wp.slice(0, 3).map(p => esc(p.permit_no)).join(", ")}${targets.wp.length > 3 ? " …" : ""})` : ""} · พิมพ์ในช่องเป้าหมายเพื่อเลือก` : "";
@@ -182,6 +185,8 @@
         ${ro ? "" : `<div class="row"><input id="wAck" maxlength="120" placeholder="ชื่อหัวหน้าหน่วยงานที่รับทราบผล" value="${esc(W.ack)}" style="flex:1;min-width:200px;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
           <button class="btn" type="button" id="wAllP">ตอบ "ผ่าน" ข้อที่เหลือ</button><button class="btn primary" type="button" id="wSave">บันทึกผลตรวจ</button><button class="btn" type="button" id="wDrop">ล้างร่าง</button></div>`}</div>`;
   }
+  $("#wDept").onchange = () => { if ($("#wDept").value) $("#wArea").value = $("#wDept").value; };
+  $("#wArea").addEventListener("input", () => { const v = $("#wArea").value; $("#wDept").value = areas.includes(v) ? v : ""; });
   $("#wList").addEventListener("click", ev => {
     const q = ev.target.closest(".q"), b = ev.target.closest("button[data-v]");
     if (b && q) { const a = W.ans[+q.dataset.i]; a.v = b.dataset.v; if (a.v !== "na") a.na = ""; saveDraft(); return drawList(); }
