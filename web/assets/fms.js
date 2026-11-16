@@ -11,9 +11,12 @@
   const { sb, $, esc, fmt, errText, uploadMedia, signed } = RS;
   const RUN = ["owner", "admin", "chief_engineer", "supervisor", "safety_officer"], MGR = ["owner", "admin", "chief_engineer", "supervisor"];
   const NA = ["ไม่มีพื้นที่ / อุปกรณ์นี้ในหน่วยงาน", "ไม่อยู่ในขอบเขตของหน่วยงานนี้", "พื้นที่อยู่ระหว่างปรับปรุง / ปิดใช้งาน", "อื่น ๆ (ระบุ)"];
-  const KIND = { doc: "ตรวจเอกสาร (ตาม ME)", walk: "เดินตรวจหน้างาน", tracer: "เดินตามรอยผู้ตรวจ" };
+  const KIND = { doc: "ตรวจเอกสาร (ตาม ME)", walk: "เดินตรวจหน้างาน", tracer: "เดินตามรอยผู้ตรวจ", room: "เดินตรวจห้องเครื่อง" };
+  // "room" is the machine-room set: stored as walk-round checks (kind walk) of the MR groups, shown as its own mode 4
+  const isRoom = c => /^MR\d/.test(c || ""), dbK = () => K === "room" ? "walk" : K, kOk = x => x.kind === dbK() && (K === "room" ? isRoom(x.cat) : K === "walk" ? !isRoom(x.cat) : true);
   const HELP = {
     doc: "ตรวจว่าเอกสาร/หลักฐานของแต่ละ ME มีครบและเป็นปัจจุบัน (ปีล่าสุด) ตอบ มีครบ / มีไม่ครบหรือไม่เป็นปัจจุบัน / ไม่มี ระบบสรุปสถานะ ME เป็น Met / Partially Met / Not Met ให้ ช่อง \"หน่วยงาน\" ใส่เจ้าของเอกสาร เช่น งานวิศวกรรม",
+    room: "เดินตรวจห้องเครื่องทีละห้อง (Chiller, Generator, ห้องไฟฟ้า/MDB, Fire pump, ก๊าซทางการแพทย์, ระบบน้ำ/RO, Boiler) เลือกหมวดของห้อง หรือ \"ข้อทั่วไป\" ใช้ได้ทุกห้อง ตอบ ผ่าน / ไม่ผ่าน (กรอกรายละเอียด + แนบรูป) / ไม่เกี่ยว ข้อที่มีแถบแดงคือจุดเสี่ยงสูง",
     walk: "เดินดูพื้นที่จริงทีละหน่วยงาน ตอบ ผ่าน / ไม่ผ่าน (กรอกรายละเอียด + แนบรูป) / ไม่เกี่ยว ข้อที่มีแถบแดงคือจุดเสี่ยงสูงตาม JCI 8th และ Zero-Red",
     tracer: "เดินตามรอยแบบที่ผู้ตรวจ JCI ทำ แยกตามกลยุทธ์: TR1 Reverse-Tracer สุ่ม 10 จุด ดึงหลักฐานให้ได้ใน 15 นาที (สัปดาห์ละ 2 รอบ เป้า ดึงทัน 100%) · TR2 กวาด Zero-Red 5 จุดหลายแผนก (เป้า 0 จุดแดง) · TR3 Micro-Drill ถาม-ตอบครบ 3 กะ รวม Outsource (เป้า ตอบถูก ≥ 90%) · TR4 ตามงานผู้รับเหมาที่มี Work Permit / ICRA · TR5 ซ้อมสถานการณ์ระบบล้มเหลว · TR6 จุดที่ผู้ตรวจแพทย์/พยาบาลเพ่งเล็ง · TR7 เครื่องจักรความเสี่ยงสูงจาก FMEA · TR8 สัญญา SLA และงานค้าง ช่อง \"เป้าหมาย\" ใส่จุดที่สุ่ม TAG เครื่อง เลขใบอนุญาต หรือหน่วยงาน" };
   const FMEA = /FACP|fire ?alarm|แจ้งเหตุเพลิง|fire ?pump|jockey|ปั๊มดับเพลิง|transformer|หม้อแปลง|switchgear|MDB|generator|เครื่องกำเนิด|ATS|UPS|chiller|ชิลเลอร์|lift|elevator|ลิฟต์|medical gas|ก๊าซทางการแพทย์|manifold|boiler|หม้อไอน้ำ|RO\b/i;
@@ -35,7 +38,7 @@
   const mine = () => can || exec;
   const roundName = r => r ? `ครั้งที่ ${r.no}/${r.year_be}${r.title ? " · " + r.title : ""}` : "";
   const dkey = (area, cat) => `rs-fms-${R && R.id}-${K}-${area}-${cat}`;
-  const ck = () => checks.filter(c => c.kind === K);
+  const ck = () => checks.filter(kOk);
   const store = { get: k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }, del: k => { try { localStorage.removeItem(k); } catch {} } };
 
   sb.auth.onAuthStateChange((_e, session) => setTimeout(() => boot(session), 0));
@@ -82,15 +85,15 @@
   // ---------- kind (doc / walk / tracer) ----------
   function setKind(k, quiet) {
     K = KIND[k] ? k : "walk"; store.set("rs-fms-kind", K); W = null;
-    const h = hid(), ownRows = allItems.filter(i => i.hospital_id === h && i.kind === K); own = ownRows.length > 0;
-    items = own ? ownRows : allItems.filter(i => !i.hospital_id && i.kind === K);
+    const h = hid(), ownRows = allItems.filter(i => i.hospital_id === h && kOk(i)); own = ownRows.length > 0;
+    items = own ? ownRows : allItems.filter(i => !i.hospital_id && kOk(i));
     document.querySelectorAll("#kChips .chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.k === K));
     $("#kHelp").textContent = HELP[K];
     $("#wAreaL").firstChild.textContent = K === "doc" ? "หน่วยงาน / เจ้าของเอกสาร * " : K === "tracer" ? "เป้าหมายที่ตามรอย (TAG เครื่อง / เลข Work Permit / หน่วยงาน) * " : "พื้นที่ / หน่วยงานที่ตรวจ * ";
-    $("#wArea").placeholder = K === "doc" ? "เช่น งานวิศวกรรม" : "พิมพ์หรือเลือก";
+    $("#wArea").placeholder = K === "doc" ? "เช่น งานวิศวกรรม" : K === "room" ? "เช่น ห้อง Chiller ชั้น B1" : "พิมพ์หรือเลือก";
     if (K === "doc" && !$("#wArea").value) $("#wArea").value = "งานวิศวกรรม";
     const opt = v => `<option value="${esc(v)}">`;
-    $("#areas").innerHTML = K === "tracer" ? [...targets.eq.map(e => `${e.tag} · ${e.name}`), ...targets.wp.map(p => `${p.permit_no} · ${p.title} (${p.company})`), ...areas].map(opt).join("") : K === "doc" ? ["งานวิศวกรรม", "คณะกรรมการ FMS", "งานรักษาความปลอดภัย", "งานอาชีวอนามัย (จป.)", "งานเครื่องมือแพทย์", ...areas].map(opt).join("") : areas.map(opt).join("");
+    $("#areas").innerHTML = K === "room" ? ["ห้อง Chiller", "ห้อง Generator", "ห้องไฟฟ้า / MDB", "ห้องหม้อแปลง", "ห้อง Fire pump", "ห้องก๊าซทางการแพทย์ / Manifold", "ห้องปั๊ม Vacuum / Air", "ห้องปั๊มน้ำ / ถังเก็บน้ำ", "ห้อง RO", "ห้อง Boiler", "ห้อง AHU", "ห้อง UPS"].map(opt).join("") : K === "tracer" ? [...targets.eq.map(e => `${e.tag} · ${e.name}`), ...targets.wp.map(p => `${p.permit_no} · ${p.title} (${p.company})`), ...areas].map(opt).join("") : K === "doc" ? ["งานวิศวกรรม", "คณะกรรมการ FMS", "งานรักษาความปลอดภัย", "งานอาชีวอนามัย (จป.)", "งานเครื่องมือแพทย์", ...areas].map(opt).join("") : areas.map(opt).join("");
     $("#wDept").innerHTML = `<option value="">${areas.length ? "เลือกแผนก หรือพิมพ์เองในช่องถัดไป" : "ยังไม่มีรายชื่อแผนกของโรงนี้ พิมพ์เองในช่องถัดไป"}</option>` + areas.map(a => `<option ${$("#wArea").value === a ? "selected" : ""}>${esc(a)}</option>`).join("");
     $("#wDeptL").hidden = K === "doc";
     $("#wDeptN").textContent = `(${codeOf(hid())} ${n(areas.length)} แผนก)`;
@@ -235,7 +238,7 @@
     if (!name || !phone) return toast("ใส่ชื่อและเบอร์โทรผู้ประเมินด้านบน", true);
     if (busy) return; busy = true;
     try {
-      const r = await rpc("fms_save", { p_round: R.id, p_kind: K, p_area: W.area, p_cat: W.cat, p_assessor: name, p_phone: phone, p_answers: W.ans.map(({ open, ...a }) => a), p_ack: W.ack || null, p_note: W.note || null, p_photos: W.photos });
+      const r = await rpc("fms_save", { p_round: R.id, p_kind: dbK(), p_area: W.area, p_cat: W.cat, p_assessor: name, p_phone: phone, p_answers: W.ans.map(({ open, ...a }) => a), p_ack: W.ack || null, p_note: W.note || null, p_photos: W.photos });
       store.del(dkey(W.area, W.cat)); W = null; await loadRound(); drawWalk();
       toast(`บันทึกแล้ว คะแนน ${r.score ?? "-"} · ไม่ผ่าน ${r.fail} ข้อ (เข้ารายการข้อบกพร่องแล้ว)`);
     } catch (e) { toast(errText(e), true); } finally { busy = false; }
@@ -243,10 +246,10 @@
 
   // ---------- findings ----------
   const findRows = () => { const st = $("#fSt").value, c = $("#fCat").value, q = $("#fQ").value.trim().toLowerCase(), all = $("#fAll").checked;
-    return finds.filter(f => (!st || f.status === st) && (!c || f.cat === c) && f.kind === K && (all || !R || f.round_id === R.id || (f.free && !f.round_id)) && (!q || (f.area + " " + f.title + " " + (f.detail || "")).toLowerCase().includes(q))); };
+    return finds.filter(f => (!st || f.status === st) && (!c || f.cat === c) && kOk(f) && (all || !R || f.round_id === R.id || (f.free && !f.round_id)) && (!q || (f.area + " " + f.title + " " + (f.detail || "")).toLowerCase().includes(q))); };
   ["#fSt", "#fCat", "#fAll"].forEach(s => $(s).onchange = () => drawFind()); $("#fQ").oninput = () => drawFind();
   async function drawFind() {
-    const l = findRows(), all = finds.filter(f => f.kind === K && ($("#fAll").checked || !R || f.round_id === R.id));
+    const l = findRows(), all = finds.filter(f => kOk(f) && ($("#fAll").checked || !R || f.round_id === R.id));
     const isRed = f => { const it = allItems.find(i => i.id === f.item_id); return !!(it && it.red); };
     $("#fK").innerHTML = kpis([["ทั้งหมด", n(all.length)], ["ยังไม่ปิด", n(all.filter(f => f.status === "open").length), true], ["จุดเสี่ยงสูงยังไม่ปิด", n(all.filter(f => f.status === "open" && isRed(f)).length), true], ["พบซ้ำจากรอบก่อน", n(all.filter(f => f.repeat_n > 0).length), true], ["ส่งเข้าใบแจ้งซ่อมแล้ว", n(all.filter(f => f.job_id).length)], ["ปิดแล้ว", `${n(all.filter(f => f.status === "done").length)} (${pct(all.filter(f => f.status === "done").length, all.length) ?? 0}%)`]]);
     const urls = await signed(l.slice(0, 200).flatMap(f => [...f.photos.slice(0, 2), ...f.after_photos.slice(0, 1)]));
@@ -307,8 +310,8 @@
     const kmeOrder = r => { const m = /^(\D+)\.(\d+)\.(\d+) ME (\d+)/.exec(r) || []; return [m[1] === "FMS" ? 0 : 1, +m[2] || 99, +m[3] || 0, +m[4] || 0]; };
     const byMeR = [...mm.values()].map(x => ({ ...x, part: x.part || 0, text: MEs[x.ref] || "", score: pct(x.pass + (x.part || 0) / 2, x.pass + (x.part || 0) + x.fail), st: meSt(x) })).sort((a, b) => { const p = kmeOrder(a.ref), q = kmeOrder(b.ref); for (let i = 0; i < 4; i++) if (p[i] !== q[i]) return p[i] - q[i]; return 0; });
     const redFail = rc.reduce((s, c) => s + c.answers.filter(a => a.v === "fail" && a.r).length, 0);
-    const byRound = rounds.filter(r => R && r.year_be === R.year_be).sort((a, b) => a.no - b.no).map(r => ({ r, ...stats(ck().filter(c => c.round_id === r.id)), open: finds.filter(f => f.kind === K && f.round_id === r.id && f.status === "open").length }));
-    const rf = finds.filter(f => f.kind === K && R && f.round_id === R.id), done = rf.filter(f => f.status === "done").length;
+    const byRound = rounds.filter(r => R && r.year_be === R.year_be).sort((a, b) => a.no - b.no).map(r => ({ r, ...stats(ck().filter(c => c.round_id === r.id)), open: finds.filter(f => kOk(f) && f.round_id === r.id && f.status === "open").length }));
+    const rf = finds.filter(f => kOk(f) && R && f.round_id === R.id), done = rf.filter(f => f.status === "done").length;
     const fl = [];
     if (rc.length) {
       fl.push(`${KIND[K]} · ${roundName(R)} ตรวจ ${n(rc.length)} จุด (${n(am.size)} พื้นที่) คะแนนรวม ${all.score ?? "-"} จาก 100 · ผ่าน ${n(all.pass)} ข้อ${K === "doc" ? ` มีไม่ครบ ${n(all.part)} ข้อ` : ""} ไม่ผ่าน ${n(all.fail)} ข้อ`);
@@ -405,7 +408,7 @@
   function drawForm() {
     const mgr = hid() === me.hospital_id && MGR.includes(me.role);
     $("#iInfo").textContent = `${KIND[K]}: ` + (own ? `โรงพยาบาลนี้ใช้แบบฟอร์มของตัวเอง ${items.length} ข้อ ${cats().length} หมวด` : `ใช้แบบฟอร์มกลางตามมาตรฐาน JCI 8th Edition ${items.length} ข้อ ${cats().length} หมวด (FMS 03–10) ข้อที่ติดป้าย "จุดเสี่ยงสูง" มาจาก High-Risk Checkpoints และ SAF Zero-Red · โรงพยาบาลปรับเป็นแบบฟอร์มของตัวเองได้โดยดาวน์โหลด Excel แก้ แล้วนำเข้า`);
-    $("#iImp").hidden = !mgr; $("#iBack").hidden = !(mgr && own);
+    $("#iImp").hidden = !mgr || K === "room"; $("#iBack").hidden = !(mgr && own) || K === "room";
     $("#iT").innerHTML = `<tr><th class="r">ข้อ</th><th>ข้อตรวจ</th><th>จุดเสี่ยงสูง</th></tr>` + cats().map(c => { const l = items.filter(i => i.cat === c.cat);
       return `<tr class="ch"><td colspan="3">${esc(c.name)} · ${l.length} ข้อ</td></tr>` + byMe(l).map(g => `<tr class="mr"><td colspan="3">${meHead(g)}</td></tr>` + g.list.map(k => { const i = l[k];
         return `<tr><td class="r">${i.no}</td><td>${esc(i.text)}</td><td>${i.red ? `<span class="tagr r">ใช่</span>` : ""}</td></tr>`; }).join("")).join(""); }).join("");
