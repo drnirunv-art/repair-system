@@ -5,11 +5,12 @@
   --bad:#c2352b;--bad-soft:#fbe9e7;--ok-soft:#e5f4ef;
   --font:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
   color-scheme:light}
-@media (prefers-color-scheme:dark){:root{
+/* dark colours kept but switched off (user 2026-11-16: text must be black on every screen, even when the computer is set to dark mode) */
+:root[data-theme=dark]{
   --bg:#11161c;--surface:#19212a;--fg:#e6ebf0;--muted:#97a3b0;--line:#2c3743;
   --accent:#f08a3c;--accent-ink:#1a0e05;--accent-soft:#3a2614;
   --s-register:#97a3b0;--s-assign:#5aa4e6;--s-work_on:#3cc39c;--s-on_hold:#e3a948;--s-clear:#a88cf0;--s-evaluated:#a88cf0;--s-close:#7d8a97;--s-cancel:#6b7682;
-  --bad:#ff7a6e;--bad-soft:#3a1d1a;--ok-soft:#14302a;color-scheme:dark}}
+  --bad:#ff7a6e;--bad-soft:#3a1d1a;--ok-soft:#14302a;color-scheme:dark}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.55}
