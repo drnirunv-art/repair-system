@@ -88,45 +88,59 @@ const RS_PAGES = [["staff.html", "เมนูเจ้าหน้าที่ 
   const here = (location.pathname.split("/").pop() || "index.html").toLowerCase();
   if (!RS_PAGES.some(([p]) => p === here)) return;
   const OK = "rs-menu-ok", name = p => (RS_PAGES.find(x => x[0] === p) || [p, p])[1];
+  // while a signed-in person's page list loads, keep the page blank so pages they may not use never flash on screen
+  let signedIn = false; try { signedIn = Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch (e) {}
+  const st = document.createElement("style"); st.textContent = "html.rsWait body{visibility:hidden}"; document.head.appendChild(st);
+  const show = () => document.documentElement.classList.remove("rsWait");
+  if (signedIn) { document.documentElement.classList.add("rsWait"); setTimeout(show, 4000); }
   let shown = false;
   const check = async session => {
-    if (shown || !session || !session.user) return;
-    try { if (sessionStorage.getItem(OK) === session.user.id) return; } catch (e) {}
-    const { data, error } = await RS.sb.rpc("my_access");
-    if (error || !data || !Array.isArray(data.pages)) return;
-    const pages = data.pages;
-    if (here === "staff.html") document.querySelectorAll("#tabs a[href]").forEach(a => { const p = a.getAttribute("href").split("?")[0]; if (!pages.includes(p)) a.hidden = true; });
-    if (pages.includes(here)) return;
-    shown = true;
-    const links = pages.filter(p => p !== here).map(p => `<a class="btn" href="${RS.esc(p)}">${RS.esc(name(p))}</a>`).join("");
-    const o = document.createElement("div");
-    o.className = "rsLock"; o.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(10,20,30,.6);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto";
-    o.innerHTML = `<form style="background:var(--surface,#fff);border-radius:14px;padding:18px 20px;width:min(460px,100%);display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-      <h2 style="margin:0;font-size:18px">🔒 ${here === "staff.html" ? "เมนูเจ้าหน้าที่ล็อกอยู่" : "บัญชีนี้ไม่ได้รับสิทธิ์เปิดหน้านี้"}</h2>
-      <p class="sub" style="margin:0">${links ? "หน้าที่บัญชีนี้ใช้ได้อยู่ด้านล่าง" : "บัญชีนี้ยังไม่มีหน้าที่ใช้ได้ ให้ติดต่อหัวหน้า"}${data.locked ? " · ถ้าจะเปิดทุกหน้า ใส่รหัสล็อกที่หัวหน้าตั้งไว้" : ""}</p>
-      ${links ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${links}</div>` : ""}
-      ${data.locked ? `<label>รหัสล็อก<input name="p" type="password" required autocomplete="off" style="width:100%"></label>
-      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary">ปลดล็อก</button><button class="btn" type="button" data-forgot>ลืมรหัส</button></div>` : ""}
-      <div><button class="btn" type="button" data-out>ออกจากระบบ</button></div>
-      <div class="meta" role="status"></div></form>`;
-    const f = o.querySelector("form"), m = f.querySelector("[role=status]");
-    f.addEventListener("submit", async ev => {
-      ev.preventDefault(); if (!f.p) return; const b = f.querySelector("button.primary"); b.disabled = true; m.textContent = "กำลังตรวจรหัส…";
-      const r = await RS.sb.rpc("menu_lock_check", { p_code: f.p.value }); b.disabled = false;
-      if (r.error) { m.textContent = RS.errText(r.error); return; }
-      if (r.data !== true) { f.p.value = ""; m.textContent = "รหัสล็อกไม่ถูกต้อง"; return; }
-      try { sessionStorage.setItem(OK, session.user.id); } catch (e) {}
-      location.reload();
-    });
-    const fg = f.querySelector("[data-forgot]");
-    if (fg) fg.onclick = async () => {
-      if (!confirm("ขอรหัสล็อกใหม่?\n\nรหัสเดิมจะใช้ไม่ได้ ระบบจะส่งรหัสใหม่ไปที่อีเมลของผู้บริหารและหัวหน้าที่ตั้งรหัส ให้ถามรหัสใหม่จากหัวหน้า")) return;
-      const r = await RS.sb.rpc("menu_lock_forgot");
-      m.textContent = r.error ? RS.errText(r.error) : r.data ? "ส่งรหัสใหม่ทางอีเมลแล้ว ให้ถามรหัสใหม่จากหัวหน้า" : "ไม่พบอีเมลผู้รับ ให้ติดต่อหัวหน้า";
-    };
-    f.querySelector("[data-out]").onclick = async () => { await RS.sb.auth.signOut(); try { sessionStorage.removeItem(OK); } catch (e) {} location.reload(); };
-    document.body.appendChild(o); if (f.p) setTimeout(() => f.p.focus(), 50);
+    try {
+      if (shown || !session || !session.user) return;
+      try { if (sessionStorage.getItem(OK) === session.user.id) return; } catch (e) {}
+      const { data, error } = await RS.sb.rpc("my_access");
+      if (error || !data || !Array.isArray(data.pages)) return;
+      const pages = data.pages, staffOk = pages.includes("staff.html");
+      // links to pages this person may not open are taken off the page, so they only see what was given to them
+      const tidy = () => document.querySelectorAll("header a[href]").forEach(a => {
+        const p = (a.getAttribute("href") || "").split("?")[0].toLowerCase(); if (!RS_PAGES.some(x => x[0] === p) || pages.includes(p)) return;
+        if (p === "staff.html" && pages.length > 1) a.textContent = "← หน้าของฉัน"; else a.hidden = true; });
+      tidy(); setTimeout(tidy, 1500);
+      if (pages.includes(here)) return;
+      // only one page given and no code: go straight to it
+      if (here === "staff.html" && !staffOk && pages.length === 1 && !data.locked) { location.replace(pages[0]); return new Promise(() => {}); }
+      shown = true;
+      const links = pages.filter(p => p !== here).map(p => `<a class="btn" style="justify-content:flex-start;padding:14px 16px;font-size:16px" href="${RS.esc(p)}">${RS.esc(name(p))}</a>`).join("");
+      const o = document.createElement("div");
+      o.className = "rsLock"; o.style.cssText = "position:fixed;inset:0;z-index:9999;background:var(--bg,#f4f6f8);display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow:auto;visibility:visible";
+      o.innerHTML = `<form style="background:var(--surface,#fff);border:1px solid var(--line,#e3e6ea);border-radius:14px;padding:20px;width:min(460px,100%);display:flex;flex-direction:column;gap:12px">
+        <h2 style="margin:0;font-size:20px">หน้าของฉัน</h2>
+        <p class="sub" style="margin:0">${RS.esc(session.user.email || "")}${links ? " · เลือกหน้าที่ต้องการใช้งาน" : ""}</p>
+        ${links ? `<div style="display:flex;flex-direction:column;gap:8px">${links}</div>` : `<p style="margin:0">บัญชีนี้ยังไม่ได้เปิดใช้งาน ให้ติดต่อหัวหน้า</p>`}
+        ${data.locked ? `<details><summary class="meta" style="cursor:pointer">🔑 ใส่รหัส</summary><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+        <input name="p" type="password" autocomplete="off" style="width:100%" aria-label="รหัส">
+        <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary">ตกลง</button><button class="btn" type="button" data-forgot>ลืมรหัส</button></div></div></details>` : ""}
+        <div><button class="btn" type="button" data-out>ออกจากระบบ</button></div>
+        <div class="meta" role="status"></div></form>`;
+      const f = o.querySelector("form"), m = f.querySelector("[role=status]");
+      f.addEventListener("submit", async ev => {
+        ev.preventDefault(); if (!f.p || !f.p.value) return; const b = f.querySelector("button.primary"); b.disabled = true; m.textContent = "กำลังตรวจรหัส…";
+        const r = await RS.sb.rpc("menu_lock_check", { p_code: f.p.value }); b.disabled = false;
+        if (r.error) { m.textContent = RS.errText(r.error); return; }
+        if (r.data !== true) { f.p.value = ""; m.textContent = "รหัสไม่ถูกต้อง"; return; }
+        try { sessionStorage.setItem(OK, session.user.id); } catch (e) {}
+        location.reload();
+      });
+      const fg = f.querySelector("[data-forgot]");
+      if (fg) fg.onclick = async () => {
+        if (!confirm("ขอรหัสใหม่?\n\nรหัสเดิมจะใช้ไม่ได้ ระบบจะส่งรหัสใหม่ไปที่อีเมลของผู้บริหารและหัวหน้าที่ตั้งรหัส ให้ถามรหัสใหม่จากหัวหน้า")) return;
+        const r = await RS.sb.rpc("menu_lock_forgot");
+        m.textContent = r.error ? RS.errText(r.error) : r.data ? "ส่งรหัสใหม่ทางอีเมลแล้ว ให้ถามรหัสใหม่จากหัวหน้า" : "ไม่พบอีเมลผู้รับ ให้ติดต่อหัวหน้า";
+      };
+      f.querySelector("[data-out]").onclick = async () => { await RS.sb.auth.signOut(); try { sessionStorage.removeItem(OK); } catch (e) {} location.replace("staff.html"); };
+      document.body.appendChild(o);
+    } finally { show(); }
   };
-  RS.sb.auth.getSession().then(r => check(r.data && r.data.session)).catch(() => {});
+  RS.sb.auth.getSession().then(r => { if (!(r.data && r.data.session)) show(); return check(r.data && r.data.session); }).catch(show);
   RS.sb.auth.onAuthStateChange((ev, session) => { if (ev === "SIGNED_IN") check(session); });
 })();
