@@ -19,6 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      # stamp each page's own scripts and styles with this commit, so a browser that loads the new page also loads the new files
+      - run: sed -i -E "s#(src|href)=\"assets/([^\"?]+)\"#\1=\"assets/\2?v=${GITHUB_SHA::7}\"#g" web/*.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web
