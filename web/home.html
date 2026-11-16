@@ -39,6 +39,7 @@
     <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">หน้าหลักของฉัน</h2><button class="btn small" id="out" type="button">ออกจากระบบ</button></div>
       <p class="sub" id="hello" style="margin:6px 0 0"></p>
+      <label id="hospL" hidden style="margin-top:10px">โรงพยาบาลที่กำลังทำงาน<select id="hosp"></select></label>
       <div class="cards" id="cards"></div>
     </div>
   </section>
@@ -76,6 +77,10 @@
     const list = me && me.hospital_id ? RS_PAGES.map(x => x[0]).filter(p => pages.includes(p)) : [];
     $("#cards").innerHTML = list.map(p => { const [i, t, s] = ICON[p] || ["▫️", p, ""]; return `<a href="${p}"><i>${i}</i><span>${esc(t)}${s ? `<small>${esc(s)}</small>` : ""}</span></a>`; }).join("")
       || `<p class="sub">บัญชีนี้ยังไม่ได้เปิดใช้งาน ให้แจ้งหัวหน้าเพิ่มอีเมลนี้ในระบบ</p>`;
+    // more than one hospital given: pick the one being worked in now
+    const mh = (await sb.rpc("my_hospitals")).data || [];
+    if (mh.length > 1) { $("#hosp").innerHTML = mh.map(h => `<option value="${h.id}" ${h.current ? "selected" : ""}>${esc(h.code)} · ${esc(h.name)}</option>`).join(""); $("#hospL").hidden = false;
+      $("#hosp").onchange = async () => { const r = await sb.rpc("switch_hospital", { p_hospital: $("#hosp").value }); if (r.error) return msg(esc(errText(r.error))); location.reload(); }; }
     $("#home").hidden = false;
     // came from a link that needs signing in first (e.g. the sign-up approval e-mail): continue there
     const next = new URLSearchParams(location.search).get("next");

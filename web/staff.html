@@ -129,6 +129,9 @@
         </div>
         <fieldset style="border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:10px 0"><legend style="font-weight:600;padding:0 4px">หน้าที่คนนี้เข้าได้</legend>
           <div id="sPages" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 12px"></div>
+          <div id="sHospsBox" hidden style="margin:10px 0 0;padding-top:8px;border-top:1px dashed var(--line)"><b>โรงพยาบาลที่คนนี้เข้าได้</b>
+            <div id="sHosps" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:2px 12px;margin-top:4px"></div>
+            <p class="meta" style="margin:4px 0 0">ถ้าให้มากกว่า 1 โรง คนนี้เลือกโรงที่กำลังทำงานได้ที่ "หน้าหลักของฉัน"</p></div>
           <p class="meta" style="margin:6px 0 0">คนนี้เข้าระบบที่ "หน้าหลักของฉัน" และจะเห็นเฉพาะหน้าที่ติ๊กไว้ หน้าอื่นจะไม่ปรากฏให้เห็น</p></fieldset>
         <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
           <label hidden>รหัสล็อกเมนูเจ้าหน้าที่ (อย่างน้อย 4 ตัว)<input id="sLock" type="password" autocomplete="new-password" placeholder="เว้นว่าง = ไม่ตั้ง / ใช้รหัสเดิม"></label>

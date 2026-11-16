@@ -112,17 +112,30 @@
   }
 
   // executives pick the hospital when adding staff; the sign-up e-mail link (?tab=setup&staff=email) opens that person ready to set
+  // which hospitals a person may work in (executives only): ticks per hospital, or every hospital
+  let hospAcc = new Map(), allHosps = [];
+  const drawHosps = email => { if ($("#sHospsBox").hidden) return; const a = hospAcc.get((email || "").toLowerCase()), primary = $("#sHosp").value;
+    const all = !!(a && a.all_hospitals), on = new Set([...(a && a.hospitals || []), primary]);
+    $("#sHosps").innerHTML = `<label class="ck"><input type="checkbox" data-hall ${all ? "checked" : ""}> <b>ทุกโรงพยาบาล</b></label>` +
+      allHosps.map(h => `<label class="ck"><input type="checkbox" data-hs="${h.id}" ${all || on.has(h.id) ? "checked" : ""} ${h.id === primary ? "disabled" : ""}> ${esc(h.code)} · ${esc(h.name)}</label>`).join(""); };
+  $("#sHosps").addEventListener("change", ev => { const all = $("#sHosps [data-hall]");
+    if (ev.target === all) $("#sHosps").querySelectorAll("[data-hs]").forEach(c => { if (!c.disabled) c.checked = all.checked; });
+    else all.checked = [...$("#sHosps").querySelectorAll("[data-hs]")].every(c => c.checked); });
+  $("#sHosp").addEventListener("change", () => drawHosps($("#sEmail").value));
+  $("#sEmail").addEventListener("change", () => drawHosps($("#sEmail").value));
   async function staffFromLink() {
     if (!isMgr()) return;
     const ex = await sb.rpc("am_exec"); if (ex.data === true) {
       const { data: hs } = await sb.from("hospitals").select("id,code,name").order("code");
-      if (hs && hs.length) { $("#sHosp").innerHTML = hs.map(h => `<option value="${h.id}">${esc(h.code)} · ${esc(h.name)}</option>`).join(""); $("#sHosp").value = H.id; $("#sHospL").hidden = false; } }
+      if (hs && hs.length) { allHosps = hs; $("#sHosp").innerHTML = hs.map(h => `<option value="${h.id}">${esc(h.code)} · ${esc(h.name)}</option>`).join(""); $("#sHosp").value = H.id; $("#sHospL").hidden = false; $("#sHospsBox").hidden = false;
+        const hl = await sb.rpc("staff_hospitals_list"); hospAcc = new Map((hl.data || []).map(x => [x.email, x])); drawHosps(""); } }
     const q = new URLSearchParams(location.search), em = (q.get("staff") || "").trim().toLowerCase(); if (!em) return;
     show("setup"); history.replaceState(null, "", location.pathname);
     $("#sEmail").value = em; drawPages(em);
     if (!access.has(em)) $("#sPages").querySelectorAll("input[type=checkbox]").forEach(c => c.checked = false); // a new person starts with no pages; tick what they may use
     const { data: hid } = await sb.rpc("staff_hospital_of", { p_email: em }).then(r => r, () => ({}));
     if (hid && !$("#sHospL").hidden) $("#sHosp").value = hid;
+    drawHosps(em);
     $("#sMsg").innerHTML = `<div class="note">ตั้งสิทธิ์ให้ ${esc(em)}: ${$("#sHospL").hidden ? "" : "เลือกโรงพยาบาล "}ใส่ชื่อ เลือกบทบาท ติ๊กหน้าที่ให้เข้าได้ แล้วกด "บันทึกเจ้าหน้าที่และสิทธิ์"</div>`;
     setTimeout(() => { $("#fStaff").scrollIntoView({ behavior: "smooth", block: "start" }); $("#sName").focus(); }, 300);
   }
@@ -595,10 +608,13 @@
     const { data, error } = hosp ? await sb.rpc("add_staff_in", { p_hospital: hosp, p_email: em, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null })
       : await sb.rpc("add_staff", { p_email: em, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null });
     if (!error && (pages || lock !== null || access.has(em))) { const r = await sb.rpc("staff_access_set", { p_email: em, p_pages: pages, p_lock: lock }); if (r.error) return msg("#sMsg", r.error); }
+    if (!error && !$("#sHospsBox").hidden) { const hall = $("#sHosps [data-hall]").checked, hs = [...$("#sHosps").querySelectorAll("[data-hs]:checked")].map(c => c.dataset.hs);
+      const r = await sb.rpc("staff_hospitals_set", { p_email: em, p_all: hall, p_hospitals: hs }); if (r.error) return msg("#sMsg", r.error);
+      hospAcc.set(em, { email: em, all_hospitals: hall, hospitals: hs }); }
     $("#sLock").value = "";
     const extra = pages ? ` · เข้าได้ ${pages.length} หน้า${pages.includes("staff.html") ? "" : ""}` : "";
     msg("#sMsg", error, (data === "invited" ? "บันทึกแล้ว อีเมลนี้ยังไม่ได้สมัคร ให้เจ้าตัวเปิดหน้าหลัก home.html แล้วกด “สมัครบัญชีครั้งแรก” ด้วยอีเมลนี้ ระบบจะใส่สิทธิ์ให้อัตโนมัติ" : "บันทึกเจ้าหน้าที่แล้ว") + extra + (lock ? " · ตั้งรหัสล็อกแล้ว แจ้งรหัสให้คนนั้นทราบ" : ""));
-    if (!error) { $("#sEmail").value = ""; $("#sName").value = ""; await loadRefs(); render(); drawPages(""); }
+    if (!error) { $("#sEmail").value = ""; $("#sName").value = ""; await loadRefs(); render(); drawPages(""); drawHosps(""); }
   };
   $("#fPrio").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("priorities").insert({ hospital_id: H.id, name: $("#pName").value.trim(), sla_minutes: +$("#pSla").value, is_default: !prios.length }); msg("#pMsg", error, "เพิ่มแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
   $("#fLoc").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("locations").insert({ hospital_id: H.id, building: $("#oB").value.trim(), floor: $("#oF").value.trim(), department: $("#oD").value.trim() }); msg("#oMsg", error, "เพิ่มตำแหน่งแล้ว"); if (!error) { $("#oD").value = ""; await loadRefs(); render(); } };
@@ -609,7 +625,7 @@
     if (t.dataset.staffEdit) {
       const em = t.dataset.staffEdit, pid = [...emailOf].find(([, v]) => v === em), st = pid && staff.find(x => x.id === pid[0]), iv = invites.find(i => i.email === em);
       $("#sEmail").value = em; $("#sName").value = (st && st.full_name) || (iv && iv.full_name) || ""; $("#sRole").value = (st || iv || {}).role || $("#sRole").value;
-      drawPages(em); $("#sLock").value = ""; $("#sMsg").innerHTML = `<div class="note">กำลังแก้สิทธิ์ของ ${esc(em)} · ติ๊กหน้าที่ให้เข้าได้ แล้วกด "บันทึกเจ้าหน้าที่และสิทธิ์"</div>`;
+      drawPages(em); drawHosps(em); $("#sLock").value = ""; $("#sMsg").innerHTML = `<div class="note">กำลังแก้สิทธิ์ของ ${esc(em)} · ติ๊กหน้าที่ให้เข้าได้ แล้วกด "บันทึกเจ้าหน้าที่และสิทธิ์"</div>`;
       $("#fStaff").scrollIntoView({ behavior: "smooth", block: "start" }); return;
     }
     if (t.dataset.staffToggle) { const s = staff.find(x => x.id === t.dataset.staffToggle); r = await sb.from("profiles").update({ active: !s.active }).eq("id", s.id); }
