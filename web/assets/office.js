@@ -88,6 +88,7 @@ window.Office = (() => {
   }
   // one table → .xlsx with the summary sheet first. opts: { title, org, period, findings, notes }
   function table(name, head, rows, opts = {}) {
+    if (deckBuf) { deckBuf.push({ name, head, rows, opts }); return; }   // a PPT / Word / PDF button is asking: collect, build the deck afterwards
     const a = analyze(head, rows), title = opts.title || name.replace(/\.(csv|xlsx)$/i, "").replace(/-/g, " ");
     xlsx(name, [summarySheet({ title, org: opts.org, period: opts.period, findings: [...(opts.findings || []), ...a.findings], notes: opts.notes || [], figures: a.figures, groups: a.groups }),
       { name: "ข้อมูล", rows: [head, ...rows], header: 0 }]);
@@ -145,6 +146,31 @@ window.Office = (() => {
       if (b.style.alignSelf) c.style.alignSelf = b.style.alignSelf;
       c.onclick = () => { mode = m; b.click(); setTimeout(() => { mode = null; }, 0); }; b.after(c); }); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addMore); else addMore();
+  // pages whose results so far had only an Excel button: PPT / Word / PDF beside it build an executive summary + analysis
+  // from the very same rows the Excel file gets (the button's own handler runs; Office.table calls are collected, not saved)
+  let deckBuf = null;
+  const TABLE_DECK = { "op.html": ["#sCsv", "#mCsv"], "ac.html": ["#uCsv", "#cCsv"], "gate.html": ["#x"], "survey.html": ["#vCsv"], "pmboard.html": ["#x", "#rx"] };
+  function tableDeck(list) {
+    const first = list[0], o = first.opts || {}, title = o.title || first.name.replace(/-/g, " "), many = list.length > 1;
+    const d = { title, org: o.org, period: o.period, findings: [], kpis: [], analysis: [], sections: [], notes: [] };
+    list.forEach(({ name, head, rows, opts = {} }) => { const a = analyze(head, rows), tag = many ? `${opts.title || name}: ` : "";
+      [...(opts.findings || []), ...a.findings].forEach(f => d.findings.push(tag + f));
+      a.figures.slice(0, many ? 4 : 8).forEach(([k, v]) => d.kpis.push([(many ? (opts.title || name) + " · " : "") + k, nf(v)]));
+      a.groups.forEach(g => { const [t1, t2] = g.rows, n = rows.length;
+        d.analysis.push(`${tag}${g.title}: แบ่งได้ ${nf(g.rows.length)} กลุ่ม กลุ่มใหญ่สุด "${t1[0]}" ${nf(t1[1])} รายการ (${t1[2]})${t2 ? ` รองลงมา "${t2[0]}" ${nf(t2[1])} (${t2[2]})` : ""}${t1[1] / n > 0.5 ? " เกินครึ่งหนึ่ง ควรดูเป็นลำดับแรก" : ""}`);
+        d.sections.push({ title: tag + g.title, head: [g.title, "จำนวน", "สัดส่วน"], rows: g.rows }); });
+      a.figures.filter(f => /สูงสุด$/.test(f[0])).slice(0, 3).forEach(f => d.analysis.push(`${tag}${f[0].replace(": สูงสุด", "")}: ค่าสูงสุด ${nf(f[1])} (เฉลี่ย ${nf((a.figures.find(x => x[0] === f[0].replace("สูงสุด", "เฉลี่ย")) || [])[1] ?? "-")})`));
+      (opts.notes || []).forEach(t => d.notes.push(tag + t)); });
+    if (!d.analysis.length) d.analysis.push("ข้อมูลชุดนี้ยังไม่มีกลุ่มหรือตัวเลขให้เปรียบเทียบ ดูรายละเอียดในไฟล์ Excel");
+    d.sections = d.sections.slice(0, 8); return d;
+  }
+  const addDeck = () => (TABLE_DECK[(location.pathname.split("/").pop() || "")] || []).forEach(sel => { const b = document.querySelector("button" + sel); if (!b || b.dataset.deck) return; b.dataset.deck = 1;
+    [["pptx", "PPT (บทสรุป + วิเคราะห์)"], ["docx", "Word (บทสรุป + วิเคราะห์)"], ["pdf", "PDF (บทสรุป)"]].reverse().forEach(([m, label]) => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bprimary\b/, ""); c.textContent = label;
+      if (b.style.alignSelf) c.style.alignSelf = b.style.alignSelf;
+      c.onclick = async () => { deckBuf = []; try { b.click(); } finally { var got = deckBuf; deckBuf = null; }
+        if (!got.length) return; const d = tableDeck(got), nm = got[0].name + "_บทสรุปผู้บริหาร";
+        try { mode = m === "pptx" ? null : m; await pptx(nm, d); } catch (e) { alert(e.message || e); } }; b.after(c); }); });
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addDeck); else addDeck();
   async function pptx(name, d) {
     const m = mode; mode = null;
     if (m === "docx") return docx(name, d);
