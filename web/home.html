@@ -77,6 +77,9 @@
     $("#cards").innerHTML = list.map(p => { const [i, t, s] = ICON[p] || ["▫️", p, ""]; return `<a href="${p}"><i>${i}</i><span>${esc(t)}${s ? `<small>${esc(s)}</small>` : ""}</span></a>`; }).join("")
       || `<p class="sub">บัญชีนี้ยังไม่ได้เปิดใช้งาน ให้แจ้งหัวหน้าเพิ่มอีเมลนี้ในระบบ</p>`;
     $("#home").hidden = false;
+    // came from a link that needs signing in first (e.g. the sign-up approval e-mail): continue there
+    const next = new URLSearchParams(location.search).get("next");
+    if (next && /^[a-z]+\.html(\?[^#]*)?$/.test(next) && list.includes(next.split("?")[0])) location.replace(next);
   };
   sb.auth.getSession().then(r => boot(r.data && r.data.session));
   sb.auth.onAuthStateChange((ev, s) => { if (ev === "SIGNED_IN" || ev === "SIGNED_OUT") { drawn = false; boot(s); } });

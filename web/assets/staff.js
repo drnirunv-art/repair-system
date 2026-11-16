@@ -86,7 +86,7 @@
     ["#login", "#reset", "#pending", ...TABS.map(x => "#tab-" + x)].forEach(s => $(s).hidden = true);
     $("#tabs").hidden = true; $("#logout").hidden = !session; $("#bell").hidden = !session; $("#who").textContent = "";
     if (channel) { sb.removeChannel(channel); channel = null; }
-    if (!session && !recovering) { location.replace("home.html"); return; }
+    if (!session && !recovering) { location.replace("home.html" + (location.search ? "?next=" + encodeURIComponent("staff.html" + location.search) : "")); return; }
     if (!session) { $("#login").hidden = false; return; }
     if (recovering) { $("#reset").hidden = false; $("#rWho").textContent = `บัญชี ${session.user.email} · พิมพ์รหัสผ่านใหม่ 2 ครั้ง แล้วกดบันทึก`; return; }
     const { data } = await sb.from("profiles").select("id,full_name,role,hospital_id,hospitals(id,code,name)").eq("id", session.user.id).maybeSingle();
@@ -108,6 +108,23 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "memos", filter: "hospital_id=eq." + H.id }, () => loadDocs().then(render)).subscribe();
     show(store.get("rs-staff-tab", "jobs"));
     bellLabel();
+    staffFromLink();
+  }
+
+  // executives pick the hospital when adding staff; the sign-up e-mail link (?tab=setup&staff=email) opens that person ready to set
+  async function staffFromLink() {
+    if (!isMgr()) return;
+    const ex = await sb.rpc("am_exec"); if (ex.data === true) {
+      const { data: hs } = await sb.from("hospitals").select("id,code,name").order("code");
+      if (hs && hs.length) { $("#sHosp").innerHTML = hs.map(h => `<option value="${h.id}">${esc(h.code)} · ${esc(h.name)}</option>`).join(""); $("#sHosp").value = H.id; $("#sHospL").hidden = false; } }
+    const q = new URLSearchParams(location.search), em = (q.get("staff") || "").trim().toLowerCase(); if (!em) return;
+    show("setup"); history.replaceState(null, "", location.pathname);
+    $("#sEmail").value = em; drawPages(em);
+    if (!access.has(em)) $("#sPages").querySelectorAll("input[type=checkbox]").forEach(c => c.checked = false); // a new person starts with no pages; tick what they may use
+    const { data: hid } = await sb.rpc("staff_hospital_of", { p_email: em }).then(r => r, () => ({}));
+    if (hid && !$("#sHospL").hidden) $("#sHosp").value = hid;
+    $("#sMsg").innerHTML = `<div class="note">ตั้งสิทธิ์ให้ ${esc(em)}: ${$("#sHospL").hidden ? "" : "เลือกโรงพยาบาล "}ใส่ชื่อ เลือกบทบาท ติ๊กหน้าที่ให้เข้าได้ แล้วกด "บันทึกเจ้าหน้าที่และสิทธิ์"</div>`;
+    setTimeout(() => { $("#fStaff").scrollIntoView({ behavior: "smooth", block: "start" }); $("#sName").focus(); }, 300);
   }
 
   /* ---------- tabs and quick views ---------- */
@@ -574,7 +591,9 @@
     const em = $("#sEmail").value.trim().toLowerCase(), all = $("#sPages [data-pall]").checked, pages = all ? null : [...$("#sPages").querySelectorAll("[data-pg]:checked")].map(x => x.dataset.pg);
     const lock = $("#sLockOff").checked ? "" : ($("#sLock").value.trim() || null);
     if (pages && !pages.length) return msg("#sMsg", { message: "ติ๊กอย่างน้อย 1 หน้า หรือติ๊ก \"ทุกหน้า\"" });
-    const { data, error } = await sb.rpc("add_staff", { p_email: em, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null });
+    const hosp = !$("#sHospL").hidden && $("#sHosp").value;
+    const { data, error } = hosp ? await sb.rpc("add_staff_in", { p_hospital: hosp, p_email: em, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null })
+      : await sb.rpc("add_staff", { p_email: em, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null });
     if (!error && (pages || lock !== null || access.has(em))) { const r = await sb.rpc("staff_access_set", { p_email: em, p_pages: pages, p_lock: lock }); if (r.error) return msg("#sMsg", r.error); }
     $("#sLock").value = "";
     const extra = pages ? ` · เข้าได้ ${pages.length} หน้า${pages.includes("staff.html") ? "" : ""}` : "";
