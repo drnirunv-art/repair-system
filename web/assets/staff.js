@@ -113,9 +113,10 @@
 
   // executives pick the hospital when adding staff; the sign-up e-mail link (?tab=setup&staff=email) opens that person ready to set
   // which hospitals a person may work in (executives only): ticks per hospital, or every hospital
-  let hospAcc = new Map(), allHosps = [];
-  const drawHosps = email => { if ($("#sHospsBox").hidden) return; const a = hospAcc.get((email || "").toLowerCase()), primary = $("#sHosp").value;
-    const all = !!(a && a.all_hospitals), on = new Set([...(a && a.hospitals || []), primary]);
+  let hospAcc = new Map(), allHosps = [], central = new Set();
+  const drawHosps = email => { if ($("#sHospsBox").hidden) return; const a = hospAcc.get((email || "").toLowerCase()), primary = $("#sHosp").value, cen = primary === "central";
+    const all = !!(a && a.all_hospitals), on = new Set([...(a && a.hospitals || []), ...(cen ? [] : [primary])]);
+    $("#sHospHint").textContent = cen ? "(ส่วนกลาง: ติ๊กอย่างน้อย 1 โรง หรือ \"ทุกโรงพยาบาล\")" : "(โรงที่สังกัดติ๊กไว้ให้เสมอ)";
     $("#sHosps").innerHTML = `<label class="ck"><input type="checkbox" data-hall ${all ? "checked" : ""}> <b>ทุกโรงพยาบาล</b></label>` +
       allHosps.map(h => `<label class="ck"><input type="checkbox" data-hs="${h.id}" ${all || on.has(h.id) ? "checked" : ""} ${h.id === primary ? "disabled" : ""}> ${esc(h.code)} · ${esc(h.name)}</label>`).join(""); };
   $("#sHosps").addEventListener("change", ev => { const all = $("#sHosps [data-hall]");
@@ -127,14 +128,15 @@
     if (!isMgr()) return;
     const ex = await sb.rpc("am_exec"); if (ex.data === true) {
       const { data: hs } = await sb.from("hospitals").select("id,code,name").order("code");
-      if (hs && hs.length) { allHosps = hs; $("#sHosp").innerHTML = hs.map(h => `<option value="${h.id}">${esc(h.code)} · ${esc(h.name)}</option>`).join(""); $("#sHosp").value = H.id; $("#sHospL").hidden = false; $("#sHospsBox").hidden = false;
-        const hl = await sb.rpc("staff_hospitals_list"); hospAcc = new Map((hl.data || []).map(x => [x.email, x])); drawHosps(""); } }
+      if (hs && hs.length) { allHosps = hs; $("#sHosp").innerHTML = `<option value="central">ส่วนกลาง (ไม่สังกัดโรงใด)</option>` + hs.map(h => `<option value="${h.id}">${esc(h.code)} · ${esc(h.name)}</option>`).join(""); $("#sHosp").value = H.id; $("#sHospL").hidden = false; $("#sHospsBox").hidden = false;
+        const [hl, cl] = await Promise.all([sb.rpc("staff_hospitals_list"), sb.rpc("staff_central_list")]); hospAcc = new Map((hl.data || []).map(x => [x.email, x]));
+        central = new Set((cl.data || []).map(x => typeof x === "string" ? x : x.staff_central_list)); drawHosps(""); renderSetup(); } }
     const q = new URLSearchParams(location.search), em = (q.get("staff") || "").trim().toLowerCase(); if (!em) return;
     show("setup"); history.replaceState(null, "", location.pathname);
     $("#sEmail").value = em; drawPages(em);
     if (!access.has(em)) $("#sPages").querySelectorAll("input[type=checkbox]").forEach(c => c.checked = false); // a new person starts with no pages; tick what they may use
     const { data: hid } = await sb.rpc("staff_hospital_of", { p_email: em }).then(r => r, () => ({}));
-    if (hid && !$("#sHospL").hidden) $("#sHosp").value = hid;
+    if (hid && !$("#sHospL").hidden) $("#sHosp").value = central.has(em) ? "central" : hid;
     drawHosps(em);
     $("#sMsg").innerHTML = `<div class="note">ตั้งสิทธิ์ให้ ${esc(em)}: ${$("#sHospL").hidden ? "" : "เลือกโรงพยาบาล "}ใส่ชื่อ เลือกบทบาท ติ๊กหน้าที่ให้เข้าได้ แล้วกด "บันทึกเจ้าหน้าที่และสิทธิ์"</div>`;
     setTimeout(() => { $("#fStaff").scrollIntoView({ behavior: "smooth", block: "start" }); $("#sName").focus(); }, 300);
@@ -578,10 +580,10 @@
     else all.checked = [...$("#sPages").querySelectorAll("[data-pg]")].every(x => x.checked); });
   function renderSetup() {
     if (!$("#sPages").innerHTML) drawPages("");
-    $("#sList").innerHTML = "<tr><th>ชื่อ</th><th>บทบาท</th><th>สถานะ</th><th></th><th>หน้าที่เข้าได้ / ล็อก</th></tr>" + staff.map(s => `<tr><td>${esc(s.full_name)}</td><td>${ROLES[s.role]}</td><td>${s.active ? "ใช้งาน" : "ปิดใช้"}</td>
+    $("#sList").innerHTML = "<tr><th>ชื่อ</th><th>บทบาท</th><th>สถานะ</th><th></th><th>หน้าที่เข้าได้ / ล็อก</th></tr>" + staff.map(s => `<tr><td>${esc(s.full_name)}${central.has(emailOf.get(s.id)) ? ' <span class="tag">ส่วนกลาง</span>' : ""}</td><td>${ROLES[s.role]}</td><td>${s.active ? "ใช้งาน" : "ปิดใช้"}</td>
       <td>${s.id !== me.id ? `<button class="btn small" type="button" data-staff-toggle="${s.id}">${s.active ? "ปิดใช้" : "เปิดใช้"}</button>` : ""}</td>
       <td>${s.id !== me.id && emailOf.get(s.id) ? `${accText(emailOf.get(s.id))} <button class="btn small" type="button" data-staff-edit="${esc(emailOf.get(s.id))}">แก้สิทธิ์</button>` : ""}</td></tr>`).join("")
-      + invites.map(i => `<tr><td>${esc(i.full_name || i.email)}<br><small class="mono">${esc(i.email)}</small></td><td>${ROLES[i.role]}</td><td>รอสมัครบัญชี</td><td></td><td>${accText(i.email)} <button class="btn small" type="button" data-staff-edit="${esc(i.email)}">แก้สิทธิ์</button></td></tr>`).join("");
+      + invites.map(i => `<tr><td>${esc(i.full_name || i.email)}${central.has(i.email) ? ' <span class="tag">ส่วนกลาง</span>' : ""}<br><small class="mono">${esc(i.email)}</small></td><td>${ROLES[i.role]}</td><td>รอสมัครบัญชี</td><td></td><td>${accText(i.email)} <button class="btn small" type="button" data-staff-edit="${esc(i.email)}">แก้สิทธิ์</button></td></tr>`).join("");
     $("#pList").innerHTML = "<tr><th>ชื่อ</th><th>ตอบรับภายใน</th><th>SLA ซ่อมเสร็จ</th><th>ค่าเริ่มต้นของฟอร์ม</th><th></th></tr>" + prios.map(p => `<tr><td>${esc(p.name)}</td><td>${p.respond_minutes ? p.respond_minutes + " นาที" : "-"}</td><td>${dur(p.sla_minutes)}</td>
       <td>${p.is_default ? "✓" : `<button class="btn small" type="button" data-prio-default="${p.id}">ตั้งเป็นค่าเริ่มต้น</button>`}</td><td><button class="btn small" type="button" data-del="priorities:${p.id}">ลบ</button></td></tr>`).join("");
     $("#oList").innerHTML = "<tr><th>อาคาร</th><th>ชั้น</th><th>แผนก</th><th></th></tr>" + locs.map(l => `<tr><td>${esc(l.building)}</td><td>${esc(l.floor)}</td><td>${esc(l.department)}${l.active ? "" : " <small>(ซ่อน)</small>"}</td>
@@ -604,16 +606,21 @@
     const em = $("#sEmail").value.trim().toLowerCase(), all = $("#sPages [data-pall]").checked, pages = all ? null : [...$("#sPages").querySelectorAll("[data-pg]:checked")].map(x => x.dataset.pg);
     const lock = $("#sLockOff").checked ? "" : ($("#sLock").value.trim() || null);
     if (pages && !pages.length) return msg("#sMsg", { message: "ติ๊กอย่างน้อย 1 หน้า หรือติ๊ก \"ทุกหน้า\"" });
-    const hosp = !$("#sHospL").hidden && $("#sHosp").value;
+    let hosp = !$("#sHospL").hidden && $("#sHosp").value; const cen = hosp === "central";
+    if (cen) { const hall = $("#sHosps [data-hall]").checked, first = $("#sHosps [data-hs]:checked");
+      if (!hall && !first) return msg("#sMsg", { message: "คนส่วนกลาง: ติ๊กโรงพยาบาลที่เข้าทำงานได้อย่างน้อย 1 โรง หรือติ๊ก \"ทุกโรงพยาบาล\"" });
+      const cur = hospAcc.get(em), curH = cur && (cur.hospitals || []).find(id => $(`#sHosps [data-hs="${id}"]:checked`)); // keep the hospital they are in if still ticked
+      hosp = curH || (first && first.dataset.hs) || H.id; }
     const { data, error } = hosp ? await sb.rpc("add_staff_in", { p_hospital: hosp, p_email: em, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null })
       : await sb.rpc("add_staff", { p_email: em, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null });
     if (!error && (pages || lock !== null || access.has(em))) { const r = await sb.rpc("staff_access_set", { p_email: em, p_pages: pages, p_lock: lock }); if (r.error) return msg("#sMsg", r.error); }
     if (!error && !$("#sHospsBox").hidden) { const hall = $("#sHosps [data-hall]").checked, hs = [...$("#sHosps").querySelectorAll("[data-hs]:checked")].map(c => c.dataset.hs);
       const r = await sb.rpc("staff_hospitals_set", { p_email: em, p_all: hall, p_hospitals: hs }); if (r.error) return msg("#sMsg", r.error);
-      hospAcc.set(em, { email: em, all_hospitals: hall, hospitals: hs }); }
+      hospAcc.set(em, { email: em, all_hospitals: hall, hospitals: hs });
+      if (cen || central.has(em)) { const c = await sb.rpc("staff_central_set", { p_email: em, p_central: cen }); if (c.error) return msg("#sMsg", c.error); cen ? central.add(em) : central.delete(em); } }
     $("#sLock").value = "";
     const extra = pages ? ` · เข้าได้ ${pages.length} หน้า${pages.includes("staff.html") ? "" : ""}` : "";
-    msg("#sMsg", error, (data === "invited" ? "บันทึกแล้ว อีเมลนี้ยังไม่ได้สมัคร ให้เจ้าตัวเปิดหน้าหลัก home.html แล้วกด “สมัครบัญชีครั้งแรก” ด้วยอีเมลนี้ ระบบจะใส่สิทธิ์ให้อัตโนมัติ" : "บันทึกเจ้าหน้าที่แล้ว") + extra + (lock ? " · ตั้งรหัสล็อกแล้ว แจ้งรหัสให้คนนั้นทราบ" : ""));
+    msg("#sMsg", error, (cen ? "สังกัดส่วนกลาง · " : "") + (data === "invited" ? "บันทึกแล้ว อีเมลนี้ยังไม่ได้สมัคร ให้เจ้าตัวเปิดหน้าหลัก home.html แล้วกด “สมัครบัญชีครั้งแรก” ด้วยอีเมลนี้ ระบบจะใส่สิทธิ์ให้อัตโนมัติ" : "บันทึกเจ้าหน้าที่แล้ว") + extra + (lock ? " · ตั้งรหัสล็อกแล้ว แจ้งรหัสให้คนนั้นทราบ" : ""));
     if (!error) { $("#sEmail").value = ""; $("#sName").value = ""; await loadRefs(); render(); drawPages(""); drawHosps(""); }
   };
   $("#fPrio").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("priorities").insert({ hospital_id: H.id, name: $("#pName").value.trim(), sla_minutes: +$("#pSla").value, is_default: !prios.length }); msg("#pMsg", error, "เพิ่มแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
@@ -625,6 +632,7 @@
     if (t.dataset.staffEdit) {
       const em = t.dataset.staffEdit, pid = [...emailOf].find(([, v]) => v === em), st = pid && staff.find(x => x.id === pid[0]), iv = invites.find(i => i.email === em);
       $("#sEmail").value = em; $("#sName").value = (st && st.full_name) || (iv && iv.full_name) || ""; $("#sRole").value = (st || iv || {}).role || $("#sRole").value;
+      if (!$("#sHospL").hidden) { const stH = st && st.hospital_id || iv && iv.hospital_id || H.id; $("#sHosp").value = central.has(em) ? "central" : stH; }
       drawPages(em); drawHosps(em); $("#sLock").value = ""; $("#sMsg").innerHTML = `<div class="note">กำลังแก้สิทธิ์ของ ${esc(em)} · ติ๊กหน้าที่ให้เข้าได้ แล้วกด "บันทึกเจ้าหน้าที่และสิทธิ์"</div>`;
       $("#fStaff").scrollIntoView({ behavior: "smooth", block: "start" }); return;
     }

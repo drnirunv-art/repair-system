@@ -74,6 +74,7 @@
     const [{ data: me }, { data: acc }] = await Promise.all([sb.from("profiles").select("full_name,hospital_id,hospitals(name)").eq("id", session.user.id).maybeSingle(), sb.rpc("my_access")]);
     const pages = acc && Array.isArray(acc.pages) ? acc.pages : RS_PAGES.map(x => x[0]);
     $("#hello").textContent = `สวัสดีครับ ${(me && me.full_name) || session.user.email}${me && me.hospitals ? " · " + me.hospitals.name : ""}`;
+    sb.rpc("my_central").then(r => { if (r && r.data === true) $("#hello").textContent += " (สังกัดส่วนกลาง)"; }, () => {});
     const list = me && me.hospital_id ? RS_PAGES.map(x => x[0]).filter(p => pages.includes(p)) : [];
     $("#cards").innerHTML = list.map(p => { const [i, t, s] = ICON[p] || ["▫️", p, ""]; return `<a href="${p}"><i>${i}</i><span>${esc(t)}${s ? `<small>${esc(s)}</small>` : ""}</span></a>`; }).join("")
       || `<p class="sub">บัญชีนี้ยังไม่ได้เปิดใช้งาน ให้แจ้งหัวหน้าเพิ่มอีเมลนี้ในระบบ</p>`;
