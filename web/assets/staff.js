@@ -86,6 +86,7 @@
     ["#login", "#reset", "#pending", ...TABS.map(x => "#tab-" + x)].forEach(s => $(s).hidden = true);
     $("#tabs").hidden = true; $("#logout").hidden = !session; $("#bell").hidden = !session; $("#who").textContent = "";
     if (channel) { sb.removeChannel(channel); channel = null; }
+    if (!session && !recovering) { location.replace("home.html"); return; }
     if (!session) { $("#login").hidden = false; return; }
     if (recovering) { $("#reset").hidden = false; $("#rWho").textContent = `บัญชี ${session.user.email} · พิมพ์รหัสผ่านใหม่ 2 ครั้ง แล้วกดบันทึก`; return; }
     const { data } = await sb.from("profiles").select("id,full_name,role,hospital_id,hospitals(id,code,name)").eq("id", session.user.id).maybeSingle();
@@ -538,7 +539,7 @@
 
   /* ---------- setup ---------- */
   const msg = (el, err, okText) => $(el).innerHTML = err ? `<div class="note bad">${esc(errText(err))}</div>` : `<div class="note ok">${okText}</div>`;
-  const accText = email => { const a = access.get(email); return (!a || !a.pages ? `<small>ทุกหน้า</small>` : `<small>${a.pages.length} หน้า${a.pages.includes("staff.html") ? "" : " · ไม่รวมเมนูเจ้าหน้าที่"}</small>`) + (a && a.locked ? " 🔒" : ""); };
+  const accText = email => { const a = access.get(email); return (!a || !a.pages ? `<small>ทุกหน้า</small>` : `<small>${a.pages.length} หน้า${a.pages.includes("staff.html") ? "" : " · ไม่รวมใบงาน"}</small>`) ; };
   const drawPages = email => { const a = access.get((email || "").toLowerCase()), all = !a || !a.pages;
     $("#sPages").innerHTML = `<label class="ck"><input type="checkbox" data-pall ${all ? "checked" : ""}> <b>ทุกหน้า</b></label>` + RS_PAGES.map(([p, l]) => `<label class="ck"><input type="checkbox" data-pg="${p}" ${all || a.pages.includes(p) ? "checked" : ""}> ${esc(l)}</label>`).join("");
     $("#sLockNow").textContent = a && a.locked ? "ตอนนี้มีรหัสล็อกอยู่ · เว้นว่าง = ใช้รหัสเดิม" : "ยังไม่มีรหัสล็อก"; $("#sLockOffL").hidden = !(a && a.locked); $("#sLockOff").checked = false; };
@@ -576,8 +577,8 @@
     const { data, error } = await sb.rpc("add_staff", { p_email: em, p_role: $("#sRole").value, p_full_name: $("#sName").value.trim() || null });
     if (!error && (pages || lock !== null || access.has(em))) { const r = await sb.rpc("staff_access_set", { p_email: em, p_pages: pages, p_lock: lock }); if (r.error) return msg("#sMsg", r.error); }
     $("#sLock").value = "";
-    const extra = pages ? ` · เข้าได้ ${pages.length} หน้า${pages.includes("staff.html") ? "" : " (เมนูเจ้าหน้าที่ต้องใช้รหัสล็อก)"}` : "";
-    msg("#sMsg", error, (data === "invited" ? "บันทึกแล้ว อีเมลนี้ยังไม่ได้สมัคร ให้เจ้าตัวเปิดหน้านี้แล้วกด “สมัครบัญชี” ด้วยอีเมลนี้ ระบบจะใส่สิทธิ์ให้อัตโนมัติ" : "บันทึกเจ้าหน้าที่แล้ว") + extra + (lock ? " · ตั้งรหัสล็อกแล้ว แจ้งรหัสให้คนนั้นทราบ" : ""));
+    const extra = pages ? ` · เข้าได้ ${pages.length} หน้า${pages.includes("staff.html") ? "" : ""}` : "";
+    msg("#sMsg", error, (data === "invited" ? "บันทึกแล้ว อีเมลนี้ยังไม่ได้สมัคร ให้เจ้าตัวเปิดหน้าหลัก home.html แล้วกด “สมัครบัญชีครั้งแรก” ด้วยอีเมลนี้ ระบบจะใส่สิทธิ์ให้อัตโนมัติ" : "บันทึกเจ้าหน้าที่แล้ว") + extra + (lock ? " · ตั้งรหัสล็อกแล้ว แจ้งรหัสให้คนนั้นทราบ" : ""));
     if (!error) { $("#sEmail").value = ""; $("#sName").value = ""; await loadRefs(); render(); drawPages(""); }
   };
   $("#fPrio").onsubmit = async e => { e.preventDefault(); const { error } = await sb.from("priorities").insert({ hospital_id: H.id, name: $("#pName").value.trim(), sla_minutes: +$("#pSla").value, is_default: !prios.length }); msg("#pMsg", error, "เพิ่มแล้ว"); if (!error) { e.target.reset(); await loadRefs(); render(); } };
