@@ -47,7 +47,10 @@
     me = data; H = me.hospitals; exec = (await sb.rpc("am_exec")).data === true; can = RUN.includes(me.role);
     if (!can && !exec) { $("#gateH").textContent = "หน้านี้สำหรับคณะกรรมการ FMS"; $("#gateP").textContent = "เปิดได้เฉพาะ Owner / Admin / Chief Engineer / Supervisor / จป. (Safety Officer) หากต้องใช้ ให้หัวหน้าเปลี่ยนสิทธิ์ในหน้าตั้งค่า"; $("#gate").hidden = false; return; }
     $("#who").textContent = `${me.full_name || ""} · ${H.name}`;
-    if (exec || can) { hospitals = (await sb.from("hospitals").select("id,code,name").order("code")).data || []; $("#hSel").innerHTML = hospitals.map(h => `<option value="${h.id}">${esc(h.code)} · ${esc(h.name)}</option>`).join(""); const pt2 = hospitals.find(x => x.code === "PT2"), keepH = store.get("rs-fms-h"); $("#hSel").value = keepH && hospitals.some(x => x.id === keepH) ? keepH : pt2 ? pt2.id : me.hospital_id; $("#hBox").hidden = false; }
+    if (exec || can) { // executives see all 12; everyone else only the hospitals ticked for them in Settings > Staff
+      hospitals = exec ? (await sb.from("hospitals").select("id,code,name").order("code")).data || [] : ((await sb.rpc("my_hospitals")).data || []).map(h => ({ id: h.id, code: h.code, name: h.name }));
+      if (!hospitals.length) hospitals = [{ id: me.hospital_id, code: H.code, name: H.name }];
+      $("#hSel").innerHTML = hospitals.map(h => `<option value="${h.id}">${esc(h.code)} · ${esc(h.name)}</option>`).join(""); const pt2 = hospitals.find(x => x.code === "PT2"), keepH = store.get("rs-fms-h"); $("#hSel").value = keepH && hospitals.some(x => x.id === keepH) ? keepH : pt2 ? pt2.id : me.hospital_id; $("#hSel").disabled = hospitals.length < 2; $("#hBox").hidden = false; }
     $("#wName").value = me.full_name || ""; $("#wPhone").value = me.phone || ""; K = store.get("rs-fms-kind") || "walk";
     $("#body").hidden = false; $("#tabs").hidden = false;
     await loadHospital();
