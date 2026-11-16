@@ -140,7 +140,7 @@ window.Office = (() => {
   }
   // every executive-summary PPT button gets a Word and a PDF button beside it; they build the very same deck
   const MORE = ["#pP", "#sP", "#moPpt", "#exPpt", "#fPpt", "#mpPpt"];
-  const addMore = () => MORE.forEach(sel => { const b = document.querySelector(sel); if (!b || b.dataset.more) return; b.dataset.more = 1;
+  const addMore = () => MORE.forEach(sel => { const b = document.querySelector("button" + sel); if (!b || b.dataset.more) return; b.dataset.more = 1;
     [["docx", "Word (บทสรุป + วิเคราะห์)"], ["pdf", "PDF"]].reverse().forEach(([m, label]) => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bprimary\b/, ""); c.textContent = label;
       if (b.style.alignSelf) c.style.alignSelf = b.style.alignSelf;
       c.onclick = () => { mode = m; b.click(); setTimeout(() => { mode = null; }, 0); }; b.after(c); }); });
