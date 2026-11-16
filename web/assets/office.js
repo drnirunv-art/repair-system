@@ -97,7 +97,58 @@ window.Office = (() => {
   const loadPptx = () => lib || (lib = new Promise((ok, bad) => { if (window.PptxGenJS) return ok();
     const s = document.createElement("script"); s.src = "assets/vendor/pptxgen.bundle.js"; s.onload = ok; s.onerror = () => { lib = null; bad(new Error("โหลดตัวสร้าง PowerPoint ไม่สำเร็จ ลองใหม่อีกครั้ง")); }; document.head.appendChild(s); }));
   // deck: { title, org, period, findings: [], analysis: [], notes: [], kpis: [[label, value]], sections: [{ title, head, rows, chart: true|false, note }] }
+  // the same deck as Word (.docx) and PDF, so every executive summary comes as Excel + PPT + Word + PDF
+  let mode = null;
+  const deckParts = d => { const out = [];
+    if ((d.findings || []).length) out.push({ h: "บทสรุปผู้บริหาร", list: d.findings });
+    if ((d.kpis || []).length) out.push({ h: "ตัวเลขสำคัญ", head: ["ตัวชี้วัด", "ค่า"], rows: d.kpis });
+    if ((d.analysis || []).length) out.push({ h: "บทวิเคราะห์", list: d.analysis });
+    (d.sections || []).filter(x => x.rows && x.rows.length).forEach(x => out.push({ h: x.title, head: x.head, rows: x.rows, note: x.note }));
+    if ((d.notes || []).length) out.push({ h: "ข้อสังเกตและข้อเสนอแนะ", list: d.notes });
+    return out; };
+  function docx(name, d) {
+    const R = (t, o = {}) => `<w:r><w:rPr><w:rFonts w:ascii="Tahoma" w:hAnsi="Tahoma" w:cs="Tahoma"/>${o.b ? "<w:b/><w:bCs/>" : ""}${o.i ? "<w:i/><w:iCs/>" : ""}${o.c ? `<w:color w:val="${o.c}"/>` : ""}<w:sz w:val="${o.sz || 22}"/><w:szCs w:val="${o.sz || 22}"/></w:rPr><w:t xml:space="preserve">${x(t)}</w:t></w:r>`;
+    const P = (t, o = {}) => `<w:p><w:pPr><w:spacing w:after="${o.after ?? 120}"/>${o.ind ? `<w:ind w:left="360" w:hanging="360"/>` : ""}${o.al ? `<w:jc w:val="${o.al}"/>` : ""}</w:pPr>${R(t, o)}</w:p>`;
+    const cell = (v, h, al, w) => `<w:tc><w:tcPr>${w ? `<w:tcW w:w="${w}" w:type="dxa"/>` : ""}${h ? '<w:shd w:val="clear" w:color="auto" w:fill="DCE9F5"/>' : ""}</w:tcPr><w:p><w:pPr><w:spacing w:after="0"/>${al ? `<w:jc w:val="${al}"/>` : ""}</w:pPr>${R(v, { b: h, sz: 18 })}</w:p></w:tc>`;
+    const T = (head, rows) => `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblLayout w:type="fixed"/><w:tblBorders>${["top", "left", "bottom", "right", "insideH", "insideV"].map(k => `<w:${k} w:val="single" w:sz="4" w:color="BFCBD8"/>`).join("")}</w:tblBorders><w:tblCellMar><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr>
+      <w:tblGrid>${head.map((_, i) => `<w:gridCol w:w="${Math.round(head.length < 2 ? 9638 : i ? 9638 * (head.length > 3 ? 0.6 : 0.5) / (head.length - 1) : 9638 * (head.length > 3 ? 0.4 : 0.5))}"/>`).join("")}</w:tblGrid>
+      <w:tr><w:trPr><w:tblHeader/></w:trPr>${head.map(h => cell(h, true)).join("")}</w:tr>${rows.map(r => `<w:tr>${head.map((_, i) => cell(r[i] ?? "", false, i && isNum(r[i]) ? "right" : null)).join("")}</w:tr>`).join("")}</w:tbl>${P("", { after: 60 })}`;
+    let body = P(d.title, { b: 1, sz: 36, after: 60 }) + P([d.org, d.period].filter(Boolean).join(" · "), { sz: 24, c: "0B5CAD", after: 40 }) + P("ออกรายงานเมื่อ " + now(), { sz: 18, c: "5B6776", after: 240 });
+    deckParts(d).forEach(s => { body += P(s.h, { b: 1, sz: 28, c: "1F2A37", after: 100 });
+      if (s.list) s.list.forEach((t, i) => body += P(`${i + 1}. ${t}`, { ind: 1 }));
+      if (s.rows) body += T(s.head, s.rows);
+      if (s.note) body += P(s.note, { i: 1, c: "0B5CAD" }); });
+    const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+    save(zip([{ name: "[Content_Types].xml", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>' },
+      { name: "_rels/.rels", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
+      { name: "word/document.xml", data: doc }]), name.replace(/\.(pptx|docx)$/i, "") + ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  }
+  let pdfLib;
+  const loadPdf = () => pdfLib || (pdfLib = new Promise((ok, bad) => { if (window.html2pdf) return ok();
+    const s = document.createElement("script"); s.src = "assets/vendor/html2pdf.bundle.min.js"; s.onload = ok; s.onerror = () => { pdfLib = null; bad(new Error("โหลดตัวสร้าง PDF ไม่สำเร็จ ลองใหม่อีกครั้ง")); }; document.head.appendChild(s); }));
+  async function pdf(name, d) {
+    await loadPdf();
+    const h = v => x(v), el = document.createElement("div");
+    el.style.cssText = "width:690px;padding:4px;font-family:Tahoma,'IBM Plex Sans Thai',sans-serif;color:#1F2A37;font-size:13px;line-height:1.55;background:#fff";
+    el.innerHTML = `<h1 style="font-size:24px;margin:0 0 4px">${h(d.title)}</h1><div style="color:#0B5CAD;font-size:15px">${h([d.org, d.period].filter(Boolean).join(" · "))}</div><div style="color:#5B6776;font-size:11px;margin-bottom:14px">ออกรายงานเมื่อ ${h(now())}</div>` +
+      deckParts(d).map(s => `<h2 style="font-size:17px;margin:16px 0 6px;border-bottom:2px solid #0B5CAD;padding-bottom:3px;page-break-after:avoid">${h(s.h)}</h2>` +
+        (s.list ? `<ol style="margin:0;padding-left:22px">${s.list.map(t => `<li style="margin-bottom:4px;page-break-inside:avoid">${h(t)}</li>`).join("")}</ol>` : "") +
+        (s.rows ? `<table style="border-collapse:collapse;width:100%;font-size:11px"><thead><tr>${s.head.map(c => `<th style="background:#DCE9F5;border:1px solid #BFCBD8;padding:4px 6px;text-align:left">${h(c)}</th>`).join("")}</tr></thead><tbody>${s.rows.map(r => `<tr style="page-break-inside:avoid">${s.head.map((_, i) => `<td style="border:1px solid #BFCBD8;padding:3px 6px;${i && isNum(r[i]) ? "text-align:right" : ""}">${h(r[i] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table>` : "") +
+        (s.note ? `<p style="color:#0B5CAD;font-style:italic;margin:6px 0 0">${h(s.note)}</p>` : "")).join("");
+    const sx = window.scrollX, sy = window.scrollY; window.scrollTo(0, 0);
+    try { await window.html2pdf().set({ margin: [10, 10, 12, 10], filename: name.replace(/\.(pptx|pdf)$/i, "") + ".pdf", image: { type: "jpeg", quality: 0.95 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }, pagebreak: { mode: ["avoid-all", "css"] } }).from(el).save(); } finally { window.scrollTo(sx, sy); }
+  }
+  // every executive-summary PPT button gets a Word and a PDF button beside it; they build the very same deck
+  const MORE = ["#pP", "#sP", "#moPpt", "#exPpt", "#fPpt", "#mpPpt"];
+  const addMore = () => MORE.forEach(sel => { const b = document.querySelector(sel); if (!b || b.dataset.more) return; b.dataset.more = 1;
+    [["docx", "Word (บทสรุป + วิเคราะห์)"], ["pdf", "PDF"]].reverse().forEach(([m, label]) => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bprimary\b/, ""); c.textContent = label;
+      if (b.style.alignSelf) c.style.alignSelf = b.style.alignSelf;
+      c.onclick = () => { mode = m; b.click(); setTimeout(() => { mode = null; }, 0); }; b.after(c); }); });
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addMore); else addMore();
   async function pptx(name, d) {
+    const m = mode; mode = null;
+    if (m === "docx") return docx(name, d);
+    if (m === "pdf") return pdf(name, d);
     await loadPptx();
     const p = new window.PptxGenJS(); p.layout = "LAYOUT_WIDE"; const F = "Tahoma", INK = "1F2A37", ACC = "0B5CAD", MUT = "5B6776";
     const foot = (s, i) => { s.addText(`${d.org || ""} · ${d.title}`, { x: 0.5, y: 7.0, w: 10, h: 0.3, fontFace: F, fontSize: 10, color: MUT }); s.addText(String(i), { x: 12.2, y: 7.0, w: 0.7, h: 0.3, fontFace: F, fontSize: 10, color: MUT, align: "right" }); };
@@ -159,5 +210,5 @@ window.Office = (() => {
     }
     return out;
   }
-  return { xlsx, table, analyze, summarySheet, pptx, zip, xlsxParts, readXlsx };
+  return { xlsx, table, analyze, summarySheet, pptx, docx, pdf, zip, xlsxParts, readXlsx };
 })();
