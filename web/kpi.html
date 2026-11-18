@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>KPI ตามสัญญา แนบ 4 | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .hsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+  .hsel select,.hsel input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:auto;color:#17212b;background:#fff}
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+  table.kt td,table.kt th{padding:6px 8px;vertical-align:top;color:#17212b}
+  table.kt th{background:#eef3f8;text-align:left;font-size:13px;white-space:nowrap}
+  table.kt tr.cat td{background:#f4f7fb;font-weight:700}
+  table.kt td.code{font-family:"IBM Plex Mono",monospace;white-space:nowrap}
+  table.kt td.t{min-width:220px;max-width:420px}table.kt td.t small{display:block;color:#4b5563;font-size:12px;margin-top:2px}
+  table.kt input,table.kt select{font:inherit;padding:5px 7px;border:1px solid var(--line);border-radius:6px;width:96px;color:#17212b;background:#fff}
+  table.kt input.nt{width:170px}
+  table.kt td.v{white-space:nowrap}
+  table.kt td.sys{font-size:12px;color:#374151;min-width:130px}
+  .sc{font-weight:700;white-space:nowrap}.sc.ok{color:#14632f}.sc.mid{color:#8a5a00}.sc.bad{color:#9b1c13}
+  .tot{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;margin:12px 0}
+  .tot .kpi b.ok{color:#14632f}.tot .kpi b.bad{color:#9b1c13}.tot .kpi b.mid{color:#8a5a00}
+  table.yt td,table.yt th{padding:6px 8px;text-align:center;color:#17212b;white-space:nowrap}table.yt td:first-child,table.yt th:first-child{text-align:left}
+  table.yt a{color:#17212b;text-decoration:none;font-weight:600}
+  .g{background:#d5f0df}.m{background:#fcefd2}.w{background:#fbe0c8}.b{background:#f8d7d3}
+  .lgd{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;margin:8px 0}.lgd span{padding:2px 8px;border-radius:6px}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">KPI</span><h1>KPI ตามสัญญา (เอกสารแนบ 4)</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าเจ้าหน้าที่</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="month" aria-selected="true">KPI รายเดือน รายโรง</button>
+    <button role="tab" data-tab="year" aria-selected="false" id="tYear" hidden>ภาพรวม 12 โรง ทั้งปี</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="home.html">หน้าหลัก</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <div id="body" hidden>
+    <section id="tab-month">
+      <p class="sub">คะแนนเต็ม 100 ผ่านเมื่อได้ 90 ขึ้นไป เกณฑ์แต่ละข้อเป็นของสัญญาโรงนั้นเอง ข้อที่ระบบคิดให้ได้ จะมีค่าในช่อง "ค่าจากระบบ" กด "ใช้ค่าจากระบบ" แล้วตรวจทานก่อนกด "บันทึก" ข้อที่เหลือหัวหน้ากรอกเองจากเอกสารประจำเดือน</p>
+      <div class="hsel"><label for="h">โรงพยาบาล</label><select id="h"></select>
+        <label for="m">เดือน</label><input type="month" id="m">
+        <button class="btn" type="button" id="auto">ใช้ค่าจากระบบ</button>
+        <button class="btn primary" type="button" id="save">บันทึก</button>
+        <button class="btn" type="button" id="kX">Excel</button><button class="btn" type="button" id="kP">PPT (บทสรุป + วิเคราะห์)</button></div>
+      <p class="meta" id="rule"></p>
+      <div class="tot" id="tot"></div>
+      <div class="tw"><table class="kt" id="kt"></table></div>
+      <p class="meta" id="saved"></p>
+    </section>
+    <section id="tab-year" hidden>
+      <div class="hsel"><label for="y">ปี พ.ศ.</label><select id="y"></select>
+        <button class="btn" type="button" id="yX">Excel</button><button class="btn" type="button" id="yP">PPT (บทสรุป + วิเคราะห์)</button></div>
+      <div class="lgd"><span class="g">90 ขึ้นไป ผ่าน</span><span class="m">80–89 ส่วนลด 3%</span><span class="w">60–79 ส่วนลด 5–7%</span><span class="b">ต่ำกว่า 60 ส่วนลด 10%</span><span>– ยังไม่บันทึก</span></div>
+      <div class="tot" id="ytot"></div>
+      <div class="tw"><table class="yt" id="yt"></table></div>
+      <p class="meta">ส่วนลดค่าบริการตามผล KPI มีในสัญญาของ พญาไท 1, 2, 3, นวมินทร์, บ่อวิน และศรีราชา เท่านั้น ตัวเลขเป็นคะแนนที่บันทึกในหน้านี้</p>
+    </section>
+  </div>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+<script src="assets/kpi.js"></script>
+</body>
+</html>
