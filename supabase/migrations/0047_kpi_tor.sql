@@ -10,6 +10,8 @@ alter table public.kpi_monthly add column if not exists ap_cause text;
 alter table public.kpi_monthly add column if not exists ap_action text;
 alter table public.kpi_monthly add column if not exists ap_owner text;
 alter table public.kpi_monthly add column if not exists ap_due date;
+-- RCA for that item: fishbone 4M causes (man, machine, method, material), 5 Why, and the corrective project (name, goal, budget)
+alter table public.kpi_monthly add column if not exists ap_rca jsonb;
 
 create policy "kpi exec read" on public.kpi_monthly for select to authenticated using (public.am_exec());
 create policy "kpi exec write" on public.kpi_monthly for all to authenticated using (public.am_exec()) with check (public.am_exec());

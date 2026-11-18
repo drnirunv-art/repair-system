@@ -94,6 +94,38 @@
     "8.3.5": ["ซ่อมระบบที่หยุดให้กลับมาใช้งาน และมีแผนสำรองระหว่างซ่อม", "เพิ่มการตรวจประจำวันของระบบสาธารณูปโภคหลัก"]
   };
   const sugText = c => (SUG[c] || ["ระบุวิธีแก้ไข"]).map((t, i) => `${i + 1}. ${t}`).join("\n");
+  // RCA: fishbone (Ishikawa) with 4M; the system suggests likely causes per KPI group, the head keeps the ones that fit and adds the real ones
+  const M4 = [["man", "คน (Man)"], ["machine", "เครื่องจักร (Machine)"], ["method", "วิธีการ (Method)"], ["material", "วัสดุ / อะไหล่ (Material)"]];
+  const RCA4 = {
+    "1": { man: ["ช่างไม่พอหรือลา ช่วงที่มีงาน PM มาก", "ยังไม่ได้อบรมวิธีทำ PM เครื่องนั้น"], machine: ["เครื่องใช้งานอยู่ ปิดทำ PM ไม่ได้", "เครื่องเก่า ชำรุดบ่อย"], method: ["ไม่ได้แบ่งงาน PM เป็นรายสัปดาห์", "ไม่ได้กดสร้างงาน PM ตั้งแต่ต้นเดือน", "ใบ PM ค้างรอลงนาม"], material: ["อะไหล่หรือวัสดุสิ้นเปลืองไม่พอ", "เครื่องมือวัดไม่พร้อมหรือหมดอายุสอบเทียบ"] },
+    "2": { man: ["ไม่มีคนรับงานประจำกะ รับงานช้า", "ทักษะซ่อมไม่พอ ซ่อมไม่ถึงสาเหตุ"], machine: ["เครื่องเสื่อมสภาพ เสียซ้ำ", "ไม่มีเครื่องสำรอง"], method: ["ไม่ตรวจงานก่อนปิดงาน", "ไม่ได้ตั้งวันเสร็จตอนมอบหมาย", "ไม่ได้เปิดเสียงเตือนงานใหม่"], material: ["รออะไหล่ ซื้อช้า", "ใช้อะไหล่ไม่ตรงสเปก"] },
+    "3": { man: ["คนไม่พอเมื่อเทียบจำนวนงาน", "ไม่มีผู้รับผิดชอบไล่ปิดงานค้าง"], machine: ["งานใหญ่ต้องหยุดระบบ ทำได้เฉพาะวันหยุด"], method: ["งานที่ต้องรอไม่ได้ขออนุมัติหยุดงานในระบบ", "ไม่ได้ทบทวนงานค้างทุกสัปดาห์", "เข้าพื้นที่ไม่ได้ ไม่ได้นัดหน่วยงาน"], material: ["รออะไหล่สั่งพิเศษ", "รองบหรืออนุมัติจัดซื้อ"] },
+    "4": { man: ["ผู้ส่งหลักลาหรือไม่อยู่ ไม่มีคนสำรอง"], machine: ["ระบบหรืออินเทอร์เน็ตขัดข้องวันส่ง"], method: ["ไม่มีปฏิทินกำหนดส่ง", "ไม่มีขั้นตอนตรวจทานก่อนส่ง"], material: ["ข้อมูลจากหน่วยงานอื่นมาช้า", "แบบฟอร์มไม่ครบหรือไม่ใช่ฉบับล่าสุด"] },
+    "5": { man: ["พนักงานติดงานหรืออยู่เวร ไม่ได้เข้าร่วม"], machine: ["ไม่มีสถานที่หรืออุปกรณ์ซ้อม"], method: ["ไม่ได้วางตารางล่วงหน้าทั้งปี", "ไม่ได้เก็บใบลงชื่อเป็นหลักฐาน"], material: ["ไม่มีเอกสารหรือสื่อการอบรม"] },
+    "8": { man: ["ผู้ควบคุมระบบไม่ได้ตรวจค่าทุกวัน"], machine: ["อุปกรณ์ประสิทธิภาพลดลง ต้องล้างหรือปรับตั้ง", "มีจุดรั่วหรือชำรุดที่ยังไม่พบ"], method: ["ไม่ได้ปรับตารางเดินเครื่องตามภาระจริง", "ไม่ได้เทียบค่ากับเดือนก่อน"], material: ["สารเคมีหรือวัสดุไม่ได้มาตรฐาน", "มิเตอร์หรือเครื่องวัดคลาดเคลื่อน"] } };
+  const lines = t => String(t || "").split("\n").map(x => x.replace(/^\s*(?:[-•]|\d+[.)])\s*/, "").trim()).filter(Boolean);
+  // Thai vowel and tone marks take no width, so count only the letters that do
+  const vis = t => t.replace(/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/g, "").length;
+  const cut = (t, n) => { if (vis(t) <= n) return t; let k = t.length; while (k > 0 && vis(t.slice(0, k)) > n - 1) k--; return t.slice(0, k) + "…"; };
+  const short = t => String(t || "").replace(/\s*\(.*$/, "");
+  const wrap = (t, n) => { const out = []; let rest = String(t || ""); while (rest.length > n && out.length < 2) { let k = rest.lastIndexOf(" ", n); if (k < n / 2) k = n; out.push(rest.slice(0, k).trim()); rest = rest.slice(k).trim(); } out.push(cut(rest, n)); return out; };
+  function fishSvg(c, title, r) {
+    const W = 1400, H = 600, Y = 300, x = v => esc(v);
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>` +
+      `<line x1="30" y1="${Y}" x2="1132" y2="${Y}" stroke="#1F2A37" stroke-width="6"/><polygon points="1126,${Y - 24} 1150,${Y} 1126,${Y + 24}" fill="#1F2A37"/>` +
+      `<rect x="1152" y="${Y - 92}" width="236" height="184" rx="14" fill="#FDE8E6" stroke="#B42318" stroke-width="3"/>` +
+      `<text x="1270" y="${Y - 52}" text-anchor="middle" font-size="22" font-weight="bold" fill="#9B1C13">ปัญหา: ข้อ ${x(c)} ตก</text>` +
+      wrap(short(title), 17).map((t, i) => `<text x="1270" y="${Y - 14 + i * 30}" text-anchor="middle" font-size="18" fill="#1F2A37">${x(t)}</text>`).join("");
+    M4.forEach(([k, lab], i) => { const J = i % 2 ? 1040 : 560, top = i < 2, ex = J - 220, ey = top ? 70 : 530;
+      s += `<line x1="${ex}" y1="${ey}" x2="${J}" y2="${Y}" stroke="#0B5CAD" stroke-width="4"/>` +
+        `<rect x="${ex - 125}" y="${top ? ey - 52 : ey + 6}" width="250" height="46" rx="9" fill="#0B5CAD"/><text x="${ex}" y="${top ? ey - 21 : ey + 37}" text-anchor="middle" fill="#ffffff" font-size="19" font-weight="bold">${lab}</text>`;
+      lines(r[k]).slice(0, 4).forEach((t, j) => { const yy = top ? 112 + 44 * j : 352 + 44 * j, bx = top ? ex + 220 * (yy - 70) / 230 : ex + 220 * (530 - yy) / 230;
+        s += `<line x1="${bx - 24}" y1="${yy}" x2="${bx}" y2="${yy}" stroke="#0B5CAD" stroke-width="2"/><text x="${bx - 30}" y="${yy + 6}" text-anchor="end" font-size="16" fill="#1F2A37">${x(cut(t, 28))}</text>`; }); });
+    return s + "</svg>";
+  }
+  const fishPng = svg => new Promise(ok => { const img = new Image();
+    img.onload = () => { const cv = document.createElement("canvas"); cv.width = 1400; cv.height = 600; cv.getContext("2d").drawImage(img, 0, 0); try { ok(cv.toDataURL("image/png")); } catch (e) { ok(null); } };
+    img.onerror = () => ok(null); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
   const thd = d => d ? new Date(d + "T00:00:00").toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }) : "-";
   const catOf = c => ["5", "6", "7"].includes(c) ? "5" : c[0];
   const has = v => v !== undefined && v !== null && v !== "";
@@ -138,7 +170,7 @@
     const [a, s] = await Promise.all([sb.rpc("kpi_auto", { p_hospital: h, p_year: y, p_month: m }), sb.from("kpi_monthly").select("*").eq("hospital_id", h).eq("month", first)]);
     if (a.error) throw a.error; if (s.error) throw s.error;
     auto = a.data || {}; saved = (s.data || []).filter(r => r.hospital_id === h && r.month === first);
-    vals = {}; saved.forEach(r => vals[r.item] = { v: r.note && r.note.startsWith("pass:") ? r.note.slice(5, 9) === "pass" ? "pass" : "fail" : has(r.actual) ? +r.actual : "", n: (r.note || "").replace(/^pass:(pass|fail) ?/, ""), src: r.source, cause: r.ap_cause || "", act: r.ap_action || "", owner: r.ap_owner || "", due: r.ap_due || "" });
+    vals = {}; saved.forEach(r => vals[r.item] = { v: r.note && r.note.startsWith("pass:") ? r.note.slice(5, 9) === "pass" ? "pass" : "fail" : has(r.actual) ? +r.actual : "", n: (r.note || "").replace(/^pass:(pass|fail) ?/, ""), src: r.source, cause: r.ap_cause || "", act: r.ap_action || "", owner: r.ap_owner || "", due: r.ap_due || "", rca: r.ap_rca || null });
     if (!saved.length) fillAuto(false);
     draw();
   }
@@ -179,7 +211,10 @@
   const defDue = () => { const [y, m] = ym(); const d = new Date(Date.UTC(y, m + 1, 0)); return d.toISOString().slice(0, 10); };   // end of the month after
   const failed = () => ITEMS().map(it => ({ it, sc: scoreOf(it, (vals[it.code] || {}).v) })).filter(x => x.sc != null && x.sc < x.it.max);
   const shown = x => { const v = (vals[x.it.code] || {}).v; return x.it.kind === "pass" ? (v === "pass" ? "ผ่าน" : "ไม่ผ่าน") : v + (x.it.kind === "pct" ? "%" : x.it.kind === "count" ? " " : ""); };
-  const apOf = c => { const x = vals[c] || {}; return { cause: x.cause || "", act: x.act || sugText(c), owner: x.owner || "หัวหน้างานวิศวกรรม (Chief Engineer)", due: x.due || defDue() }; };
+  const rcaDef = c => { const L = RCA4[catOf(c)] || RCA4["2"], it = ITEMS().find(i => i.code === c) || { title: "", max: 0, target: "" };
+    return { man: L.man.join("\n"), machine: L.machine.join("\n"), method: L.method.join("\n"), material: L.material.join("\n"), why: "",
+      proj: `โครงการแก้ไข KPI ข้อ ${c} ${short(it.title)}`, goal: `ข้อ ${c} กลับมาได้ ${it.max}/${it.max} คะแนน (${it.target}) ภายในเดือนถัดไป และคงไว้ 3 เดือนติด`, budget: "ไม่ใช้งบเพิ่ม" }; };
+  const apOf = c => { const x = vals[c] || {}; return { cause: x.cause || "", act: x.act || sugText(c), owner: x.owner || "หัวหน้างานวิศวกรรม (Chief Engineer)", due: x.due || defDue(), rca: Object.assign(rcaDef(c), x.rca || {}) }; };
   let apSig = "";
   function drawAp() {
     const F = failed(), w = canWrite(), sig = F.map(x => x.it.code).join(",") + "|" + $("#h").value + $("#m").value;
@@ -187,11 +222,23 @@
     if (!F.length) { $("#ap").innerHTML = `<div class="apok">ไม่มีข้อที่ตกในข้อที่มีค่าแล้ว ยังไม่ต้องทำ Action plan</div>`; return; }
     $("#ap").innerHTML = F.map(x => { const a = apOf(x.it.code), c = x.it.code, dis = w ? "" : "disabled";
       return `<div class="apc"><h3>ข้อ ${c} ${esc(x.it.title)} <small>ได้ ${x.sc}/${x.it.max} · ค่าจริง ${esc(shown(x))} · เป้าหมาย ${esc(x.it.target)}</small></h3><div class="apg">` +
-        `<div><label for="apc-${c}">สาเหตุที่ตก</label><textarea id="apc-${c}" data-ap="cause" data-k="${c}" ${dis} placeholder="เช่น ช่างลาป่วย 2 คน งานเข้าพื้นที่ไม่ได้">${esc(a.cause)}</textarea></div>` +
+        `<div><label for="apc-${c}">สาเหตุราก (สรุปจาก RCA ด้านล่าง)</label><textarea id="apc-${c}" data-ap="cause" data-k="${c}" ${dis} placeholder="เช่น ช่างลาป่วย 2 คน งานเข้าพื้นที่ไม่ได้">${esc(a.cause)}</textarea></div>` +
         `<div style="grid-column:span 2"><label for="apa-${c}">วิธีแก้ไข (ระบบเสนอให้ ปรับได้)</label><textarea id="apa-${c}" data-ap="act" data-k="${c}" ${dis}>${esc(a.act)}</textarea></div>` +
         `<div><label for="apo-${c}">ผู้รับผิดชอบ</label><input id="apo-${c}" data-ap="owner" data-k="${c}" ${dis} value="${esc(a.owner)}"><label for="apd-${c}" style="margin-top:6px">กำหนดเสร็จ</label><input type="date" id="apd-${c}" data-ap="due" data-k="${c}" ${dis} value="${esc(a.due)}"></div>` +
-        `</div></div>`; }).join("");
+        `</div><details class="rca" open><summary>RCA วิเคราะห์สาเหตุราก: ก้างปลา 4M · 5 Why · โครงการแก้ไข</summary>` +
+        `<p class="meta">ระบบใส่สาเหตุที่พบบ่อยของข้อนี้ไว้ให้ก่อน ลบข้อที่ไม่ใช่ และเพิ่มสาเหตุจริงหน้างาน บรรทัดละ 1 สาเหตุ (ก้างปลาแสดง 4 บรรทัดแรกของแต่ละ M)</p><div class="apg">` +
+        M4.map(([k, lab]) => `<div><label for="r${k}-${c}">${lab}</label><textarea id="r${k}-${c}" data-rca="${k}" data-k="${c}" ${dis} style="min-height:100px">${esc(a.rca[k])}</textarea></div>`).join("") + `</div>` +
+        `<div class="fish" id="fish-${c}">${fishSvg(c, x.it.title, a.rca)}</div><div class="apg">` +
+        `<div style="grid-column:span 2"><label for="rwhy-${c}">5 Why (ถามทำไมต่อกันจนถึงสาเหตุราก แล้วสรุปไว้ในช่อง "สาเหตุราก")</label><textarea id="rwhy-${c}" data-rca="why" data-k="${c}" ${dis} placeholder="ทำไม 1: …
+ทำไม 2: …
+ทำไม 3: …
+ทำไม 4: …
+ทำไม 5: …">${esc(a.rca.why)}</textarea></div>` +
+        `<div><label for="rproj-${c}">ชื่อโครงการแก้ไข</label><input id="rproj-${c}" data-rca="proj" data-k="${c}" ${dis} value="${esc(a.rca.proj)}"><label for="rgoal-${c}" style="margin-top:6px">เป้าหมายโครงการ</label><textarea id="rgoal-${c}" data-rca="goal" data-k="${c}" ${dis} style="min-height:60px">${esc(a.rca.goal)}</textarea><label for="rbud-${c}" style="margin-top:6px">งบประมาณ</label><input id="rbud-${c}" data-rca="budget" data-k="${c}" ${dis} value="${esc(a.rca.budget)}"></div>` +
+        `</div></details></div>`; }).join("");
     $("#ap").querySelectorAll("[data-ap]").forEach(el => el.oninput = () => { const c = el.dataset.k; vals[c] = Object.assign(vals[c] || { v: "" }, { [el.dataset.ap]: el.value }); });
+    $("#ap").querySelectorAll("[data-rca]").forEach(el => el.oninput = () => { const c = el.dataset.k, a = apOf(c); a.rca[el.dataset.rca] = el.value; vals[c] = Object.assign(vals[c] || { v: "" }, { rca: a.rca });
+      if (M4.some(m => m[0] === el.dataset.rca)) { const F = failed().find(f => f.it.code === c); $("#fish-" + CSS.escape(c)).innerHTML = fishSvg(c, F ? F.it.title : "", a.rca); } });
   }
   $("#save").onclick = guard(async () => {
     if (!canWrite()) return toast("บัญชีนี้บันทึก KPI ของโรงนี้ไม่ได้", true);
@@ -199,7 +246,7 @@
     const rows = ITEMS().filter(it => has((vals[it.code] || {}).v) || (vals[it.code] || {}).n).map(it => { const x = vals[it.code] || {}, sc = scoreOf(it, x.v);
       return { hospital_id: h, month: first, item: it.code, target: it.target, actual: it.kind === "pass" || !has(x.v) ? null : +x.v, score: sc, max_score: it.max,
         note: (it.kind === "pass" && has(x.v) ? `pass:${x.v} ` : "") + (x.n || "").trim(), source: x.src || "manual", updated_by: me.id, updated_at: new Date().toISOString(),
-        ...(sc != null && sc < it.max ? (a => ({ ap_cause: a.cause.trim() || null, ap_action: a.act.trim() || null, ap_owner: a.owner.trim() || null, ap_due: a.due || null }))(apOf(it.code)) : { ap_cause: null, ap_action: null, ap_owner: null, ap_due: null }) }; });
+        ...(sc != null && sc < it.max ? (a => ({ ap_cause: a.cause.trim() || null, ap_action: a.act.trim() || null, ap_owner: a.owner.trim() || null, ap_due: a.due || null, ap_rca: a.rca }))(apOf(it.code)) : { ap_cause: null, ap_action: null, ap_owner: null, ap_due: null, ap_rca: null }) }; });
     if (!rows.length) return toast("ยังไม่มีค่าให้บันทึก", true);
     const { error } = await sb.from("kpi_monthly").upsert(rows, { onConflict: "hospital_id,month,item" }); if (error) throw error;
     toast(`บันทึก KPI ${rows.length} ข้อแล้ว`); await loadMonth();
@@ -232,17 +279,22 @@
       { name: "Action plan", rows: [["ข้อ", "ได้", "เต็ม", "สาเหตุ", "วิธีแก้ไข", "ผู้รับผิดชอบ", "กำหนดเสร็จ"], ...failed().map(x => { const a = apOf(x.it.code); return [x.it.code, x.sc, x.it.max, a.cause, a.act, a.owner, thd(a.due)]; })], header: 0 }]); };
   $("#kP").onclick = () => { const [y, m] = ym(); return Office.pptx(`KPI_${hosp().code}_${y + 543}-${String(m).padStart(2, "0")}_บทสรุปผู้บริหาร`, monthDeck()).catch(e => toast(errText(e), true)); };
 
-  function apDeck() {
+  async function apDeck() {
     const [y, m] = ym(), H = hosp(), F = failed().sort((a, b) => (b.it.max - b.sc) - (a.it.max - a.sc)), t = r1(total());
     const lostPts = r1(F.reduce((s, x) => s + x.it.max - x.sc, 0));
     const findings = F.length ? [`KPI ${H.name} เดือน ${mName(y, m)} ได้ ${t} คะแนน มีข้อที่ตก ${F.length} ข้อ เสียรวม ${lostPts} คะแนน`,
         t >= 90 ? "ยังผ่านเกณฑ์ 90 แต่ต้องแก้ข้อที่ตกเพื่อไม่ให้คะแนนลดลงเดือนถัดไป" : `ไม่ผ่านเกณฑ์ 90 ต้องได้เพิ่มอีก ${r1(90 - t)} คะแนน${DISC.includes(H.code) ? ` (ส่วนลดค่าบริการเดือนนี้ ${disc(t)}%)` : ""}`,
         `ลำดับความสำคัญ: ${F.slice(0, 4).map(x => `${x.it.code} (เสีย ${r1(x.it.max - x.sc)})`).join(", ")}`,
         `ทุกข้อมีผู้รับผิดชอบและกำหนดเสร็จ ติดตามผลในการประชุมประจำเดือนและใน KPI เดือนถัดไป`] : ["ไม่มีข้อที่ตก ยังไม่ต้องทำ Action plan"];
-    const sections = F.map(x => { const a = apOf(x.it.code);
-      return { title: `ข้อ ${x.it.code} ${x.it.title}`.slice(0, 70), head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 15,
+    const pics = await Promise.all(F.map(x => fishPng(fishSvg(x.it.code, x.it.title, apOf(x.it.code).rca))));
+    const sections = F.flatMap((x, k) => { const a = apOf(x.it.code), r = a.rca, why = lines(r.why);
+      return [...(pics[k] ? [{ title: `RCA ก้างปลา 4M ข้อ ${x.it.code}`, img: pics[k], note: `สาเหตุราก: ${a.cause || "(ยังไม่ระบุ)"}` }] : []),
+        { title: `ข้อ ${x.it.code} ${x.it.title}`.slice(0, 70), head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 15,
         rows: [["ผลเดือนนี้", `ได้ ${x.sc}/${x.it.max} ค่าจริง ${shown(x)} เป้าหมาย ${x.it.target}`], ["สาเหตุ", a.cause || "(ยังไม่ระบุ)"], ...a.act.split("\n").filter(Boolean).map((s, i) => [i ? "" : "วิธีแก้ไข", s]),
-          ["ผู้รับผิดชอบ", a.owner], ["กำหนดเสร็จ", thd(a.due)], ["วัดผล", `KPI ข้อ ${x.it.code} เดือนถัดไปต้องได้ ${x.it.max}/${x.it.max} (${x.it.target})`]] }; });
+          ["ผู้รับผิดชอบ", a.owner], ["กำหนดเสร็จ", thd(a.due)], ["วัดผล", `KPI ข้อ ${x.it.code} เดือนถัดไปต้องได้ ${x.it.max}/${x.it.max} (${x.it.target})`]] },
+        { title: `โครงการแก้ไข ข้อ ${x.it.code}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 14,
+          rows: [["ชื่อโครงการ", r.proj], ["เป้าหมาย", r.goal], ...(why.length ? why.slice(0, 5).map((t, i) => [i ? "" : "5 Why", t]) : [["5 Why", "(ยังไม่ได้ทำ)"]]), ["สาเหตุราก", a.cause || "(ยังไม่ระบุ)"],
+            ["งบประมาณ", r.budget || "-"], ["ผู้รับผิดชอบ", a.owner], ["กำหนดเสร็จ", thd(a.due)]] }]; });
     return { title: `Action plan แก้ไข KPI ${H.code}`, org: H.name, period: mName(y, m), findings,
       kpis: [["คะแนนรวม", t], ["ข้อที่ตก", F.length], ["คะแนนที่เสีย", lostPts], ["เป้าหมาย", "≥ 90"]],
       analysis: F.map(x => `${x.it.code}: ${apOf(x.it.code).cause || "ยังไม่ระบุสาเหตุ"}`).slice(0, 9),
@@ -250,13 +302,16 @@
       notes: F.length ? ["หัวหน้าติดตามความคืบหน้าทุกสัปดาห์ และรายงานผลในการประชุมประจำเดือนกับโรงพยาบาล", "ถ้าข้อใดแก้ไม่ทันกำหนด ให้แจ้งเหตุผลและวันที่ใหม่ล่วงหน้า"] : [] };
   }
   const apName = () => { const [y, m] = ym(); return `ActionPlan_KPI_${hosp().code}_${y + 543}-${String(m).padStart(2, "0")}`; };
-  $("#kA").onclick = () => { if (!failed().length) return toast("ยังไม่มีข้อที่ตก จึงไม่มี Action plan", true); return Office.pptx(apName(), apDeck()).catch(e => toast(errText(e), true)); };
-  $("#kAW").onclick = () => { if (!failed().length) return toast("ยังไม่มีข้อที่ตก จึงไม่มี Action plan", true); try { Office.docx(apName(), apDeck()); } catch (e) { toast(errText(e), true); } };
-  $("#kAF").onclick = () => { if (!failed().length) return toast("ยังไม่มีข้อที่ตก จึงไม่มี Action plan", true); return Promise.resolve(Office.pdf(apName(), apDeck())).catch(e => toast(errText(e), true)); };
-  $("#kAX").onclick = () => { if (!failed().length) return toast("ยังไม่มีข้อที่ตก จึงไม่มี Action plan", true); const d = apDeck();
-    const rows = [["ข้อ", "ตัวชี้วัด", "ค่าจริง", "เป้าหมาย", "ได้", "เต็ม", "สาเหตุ", "วิธีแก้ไข", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "สถานะ"]];
+  const apRun = fn => () => { if (!failed().length) return toast("ยังไม่มีข้อที่ตก จึงไม่มี Action plan", true); return apDeck().then(fn).catch(e => toast(errText(e), true)); };
+  $("#kA").onclick = apRun(d => Office.pptx(apName(), d));
+  $("#kAW").onclick = apRun(d => Office.docx(apName(), d));
+  $("#kAF").onclick = apRun(d => Office.pdf(apName(), d));
+  $("#kAX").onclick = apRun(d => {
+    const rows = [["ข้อ", "ตัวชี้วัด", "ค่าจริง", "เป้าหมาย", "ได้", "เต็ม", "สาเหตุราก", "วิธีแก้ไข", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "สถานะ"]];
     failed().forEach(x => { const a = apOf(x.it.code); rows.push([x.it.code, x.it.title, shown(x), x.it.target, x.sc, x.it.max, a.cause, a.act, a.owner, thd(a.due), "กำลังแก้ไข"]); });
-    Office.xlsx(apName(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes, figures: d.kpis }), { name: "Action plan", rows, header: 0 }]); };
+    const rca = [["ข้อ", "ตัวชี้วัด", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก", "ชื่อโครงการ", "เป้าหมายโครงการ", "งบประมาณ"]];
+    failed().forEach(x => { const a = apOf(x.it.code), r = a.rca; rca.push([x.it.code, x.it.title, ...M4.map(m => lines(r[m[0]]).join("\n")), lines(r.why).join("\n"), a.cause, r.proj, r.goal, r.budget]); });
+    Office.xlsx(apName(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes, figures: d.kpis }), { name: "Action plan", rows, header: 0 }, { name: "RCA ก้างปลา 4M", rows: rca, header: 0 }]); });
 
   // ---------- AI 3 roles: AI 1 proposes, AI 2 analyses and reviews, AI 3 checks, fixes and writes the report ----------
   let aiRep = null;
@@ -264,10 +319,11 @@
   $("#kAI").onclick = guard(async () => {
     const F = failed(); if (!F.length) return toast("ยังไม่มีข้อที่ตก จึงไม่ต้องทำ Action plan", true);
     const [y, m] = ym(), H = hosp(), t = r1(total()), box = $("#aiBox"); box.hidden = false;
-    box.innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2>${ROLES}<p>กำลังทำงานต่อกัน 3 ขั้น ใช้เวลาประมาณ 1–3 นาที อย่าเพิ่งปิดหน้านี้…</p>`;
+    box.innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2>${ROLES}<p>กำลังทำ RCA ก้างปลา 4M และ Action plan ต่อกัน 3 ขั้น ใช้เวลาประมาณ 1–3 นาที อย่าเพิ่งปิดหน้านี้…</p>`;
     box.scrollIntoView({ behavior: "smooth", block: "start" });
     const body = { hospital_id: H.id, year: y, month: m, hospital: H.name, month_name: mName(y, m), total: t, discount: DISC.includes(H.code) ? disc(t) + "%" : "ไม่มีในสัญญา",
-      failed: F.map(x => { const a = apOf(x.it.code); return { code: x.it.code, title: x.it.title, target: x.it.target, actual: shown(x), score: x.sc, max: x.it.max, system_note: x.it.sysNote, cause: a.cause, draft_action: a.act, owner: a.owner, due: a.due }; }) };
+      failed: F.map(x => { const a = apOf(x.it.code); return { code: x.it.code, title: x.it.title, target: x.it.target, actual: shown(x), score: x.sc, max: x.it.max, system_note: x.it.sysNote, cause: a.cause, draft_action: a.act, owner: a.owner, due: a.due,
+        rca: { man: lines(a.rca.man), machine: lines(a.rca.machine), method: lines(a.rca.method), material: lines(a.rca.material), why5: lines(a.rca.why), project: a.rca.proj, goal: a.rca.goal, budget: a.rca.budget } }; }) };
     const { data, error } = await sb.functions.invoke("kpi-ai", { body });
     let msg = error ? (error.context && typeof error.context.json === "function" ? ((await error.context.json().catch(() => ({}))).error || error.message) : error.message) : data && data.error;
     if (msg) { box.innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2><p class="note bad">ทำไม่สำเร็จ: ${esc(msg)}</p>`; return; }
@@ -277,31 +333,41 @@
     const R = aiRep, w = canWrite();
     $("#aiBox").innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2>${ROLES}<p class="meta">AI 1 เสนอ → AI 2 วิเคราะห์ทบทวน → AI 3 ตรวจสอบแก้ไขแล้วเรียบเรียง ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
       `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p><h3>บทวิเคราะห์</h3><ul>${R.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
-      R.items.map(it => `<h3>ข้อ ${esc(it.code)} ${esc(it.title)}</h3><p><b>สาเหตุราก:</b> ${esc(it.root_cause)}</p><div class="tw"><table><thead><tr><th>วิธีการ / ขั้นตอน</th><th>ผู้รับผิดชอบ</th><th>กำหนดเสร็จ</th><th>วัดผล</th></tr></thead><tbody>` +
+      R.items.map(it => `<h3>ข้อ ${esc(it.code)} ${esc(it.title)}</h3><div class="fish">${fishSvg(it.code, it.title, aiRca(it))}</div>` +
+        `<p><b>5 Why:</b></p><ol>${(it.why5 || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><p><b>สาเหตุราก:</b> ${esc(it.root_cause)}</p>` +
+        `<p><b>โครงการแก้ไข:</b> ${esc(it.project.name)} · <b>เป้าหมาย:</b> ${esc(it.project.goal)} · <b>งบประมาณ:</b> ${esc(it.project.budget)}</p><div class="tw"><table><thead><tr><th>วิธีการ / ขั้นตอน</th><th>ผู้รับผิดชอบ</th><th>กำหนดเสร็จ</th><th>วัดผล</th></tr></thead><tbody>` +
         it.actions.map(a => `<tr><td>${esc(a.step)}</td><td>${esc(a.owner)}</td><td>${esc(a.due)}</td><td>${esc(a.measure)}</td></tr>`).join("") + `</tbody></table></div><p><b>ผลที่คาดหวัง:</b> ${esc(it.expected_result)}</p>`).join("") +
       `<h3>แผนเวลา</h3><div class="tw"><table><thead><tr><th>ช่วงเวลา</th><th>กิจกรรม</th></tr></thead><tbody>${R.timeline.map(x => `<tr><td>${esc(x.when)}</td><td>${esc(x.activity)}</td></tr>`).join("")}</tbody></table></div>` +
       `<h3>ความเสี่ยงของแผน</h3><ul>${R.risks.map(x => `<li>${esc(x)}</li>`).join("")}</ul><h3>สิ่งที่ AI 2 ทบทวนและ AI 3 แก้แล้ว</h3><ul>${R.review_notes.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       `<h3>การติดตามผล</h3><ul>${R.follow_up.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       `<div class="hsel"><button class="btn" type="button" id="aiP">รายงาน AI (PPT)</button><button class="btn" type="button" id="aiW">รายงาน AI (Word)</button><button class="btn" type="button" id="aiF">รายงาน AI (PDF)</button><button class="btn" type="button" id="aiX">รายงาน AI (Excel)</button>` +
       (w ? `<button class="btn" type="button" id="aiUse">ใส่แผนของ AI ลงในช่อง Action plan</button>` : "") + `</div>`;
-    $("#aiP").onclick = () => Office.pptx(aiName(), aiDeck()).catch(e => toast(errText(e), true));
-    $("#aiW").onclick = () => { try { Office.docx(aiName(), aiDeck()); } catch (e) { toast(errText(e), true); } };
-    $("#aiF").onclick = () => Promise.resolve(Office.pdf(aiName(), aiDeck())).catch(e => toast(errText(e), true));
-    $("#aiX").onclick = () => { const d = aiDeck(), rows = [["ข้อ", "ตัวชี้วัด", "สาเหตุราก", "วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล", "ผลที่คาดหวัง"]];
+    const aiRun = fn => () => aiDeck().then(fn).catch(e => toast(errText(e), true));
+    $("#aiP").onclick = aiRun(d => Office.pptx(aiName(), d));
+    $("#aiW").onclick = aiRun(d => Office.docx(aiName(), d));
+    $("#aiF").onclick = aiRun(d => Office.pdf(aiName(), d));
+    $("#aiX").onclick = aiRun(d => { const rows = [["ข้อ", "ตัวชี้วัด", "สาเหตุราก", "วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล", "ผลที่คาดหวัง"]];
       aiRep.items.forEach(it => it.actions.forEach((a, i) => rows.push([i ? "" : it.code, i ? "" : it.title, i ? "" : it.root_cause, a.step, a.owner, a.due, a.measure, i ? "" : it.expected_result])));
       Office.xlsx(aiName(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes }), { name: "Action plan", rows, header: 0 },
-        { name: "แผนเวลา", rows: [["ช่วงเวลา", "กิจกรรม"], ...aiRep.timeline.map(x => [x.when, x.activity])], header: 0 }, { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...aiRep.analysis.map(x => [x]), [], ["ความเสี่ยง"], ...aiRep.risks.map(x => [x]), [], ["AI 2 ทบทวน / AI 3 แก้แล้ว"], ...aiRep.review_notes.map(x => [x])], header: 0 }]); };
+        { name: "RCA ก้างปลา 4M", rows: [["ข้อ", "ตัวชี้วัด", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก", "ชื่อโครงการ", "เป้าหมายโครงการ", "งบประมาณ"],
+          ...aiRep.items.map(it => [it.code, it.title, ...M4.map(m => (it.m4[m[0]] || []).join("\n")), (it.why5 || []).join("\n"), it.root_cause, it.project.name, it.project.goal, it.project.budget])], header: 0 },
+        { name: "แผนเวลา", rows: [["ช่วงเวลา", "กิจกรรม"], ...aiRep.timeline.map(x => [x.when, x.activity])], header: 0 }, { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...aiRep.analysis.map(x => [x]), [], ["ความเสี่ยง"], ...aiRep.risks.map(x => [x]), [], ["AI 2 ทบทวน / AI 3 แก้แล้ว"], ...aiRep.review_notes.map(x => [x])], header: 0 }]); });
     if ($("#aiUse")) $("#aiUse").onclick = () => { aiRep.items.forEach(it => { const c = it.code; if (!vals[c]) return;
-        vals[c].act = it.actions.map((a, i) => `${i + 1}. ${a.step} (${a.owner} · ${a.due} · วัดผล: ${a.measure})`).join("\n"); if (!vals[c].cause) vals[c].cause = it.root_cause; });
+        vals[c].act = it.actions.map((a, i) => `${i + 1}. ${a.step} (${a.owner} · ${a.due} · วัดผล: ${a.measure})`).join("\n"); if (!vals[c].cause) vals[c].cause = it.root_cause;
+        vals[c].rca = Object.assign(apOf(c).rca, { ...Object.fromEntries(M4.map(m => [m[0], (it.m4[m[0]] || []).join("\n")])), why: (it.why5 || []).join("\n"), proj: it.project.name, goal: it.project.goal, budget: it.project.budget }); });
       apSig = ""; drawAp(); toast("ใส่แผนของ AI แล้ว ตรวจทานแล้วกด บันทึก"); $("#ap").scrollIntoView({ behavior: "smooth" }); };
   }
   const aiName = () => { const [y, m] = ym(); return `ActionPlan_AI_KPI_${hosp().code}_${y + 543}-${String(m).padStart(2, "0")}`; };
-  function aiDeck() { const [y, m] = ym(), H = hosp(), R = aiRep;
+  const aiRca = it => Object.fromEntries(M4.map(m => [m[0], (it.m4 && it.m4[m[0]] || []).join("\n")]));
+  async function aiDeck() { const [y, m] = ym(), H = hosp(), R = aiRep, pics = await Promise.all(R.items.map(it => fishPng(fishSvg(it.code, it.title, aiRca(it)))));
     return { title: `รายงาน Action plan แก้ไข KPI ${H.code}`, org: H.name, period: mName(y, m) + " · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)",
       findings: [R.summary], kpis: [["คะแนนรวม", r1(total())], ["ข้อที่ตก", R.items.length], ["ขั้นตอนแก้ไขทั้งหมด", R.items.reduce((s, it) => s + it.actions.length, 0)]],
       analysis: R.analysis.slice(0, 9),
-      sections: [...R.items.map(it => ({ title: `ข้อ ${it.code} ${it.title}`.slice(0, 70), head: ["วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล"], chart: false, left: true, colW: [5.6, 2.4, 1.7, 2.6], fs: 12,
-          rows: [["สาเหตุราก: " + it.root_cause, "", "", ""], ...it.actions.map(a => [a.step, a.owner, a.due, a.measure]), ["ผลที่คาดหวัง: " + it.expected_result, "", "", ""]] })),
+      sections: [...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M ข้อ ${it.code}`, img: pics[k], note: "สาเหตุราก: " + it.root_cause }] : []),
+        { title: `5 Why และโครงการแก้ไข ข้อ ${it.code}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 14,
+          rows: [...(it.why5 || []).slice(0, 5).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", it.root_cause], ["ชื่อโครงการ", it.project.name], ["เป้าหมาย", it.project.goal], ["งบประมาณ", it.project.budget]] },
+        { title: `ข้อ ${it.code} ${it.title}`.slice(0, 70), head: ["วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล"], chart: false, left: true, colW: [5.6, 2.4, 1.7, 2.6], fs: 12,
+          rows: [...it.actions.map(a => [a.step, a.owner, a.due, a.measure]), ["ผลที่คาดหวัง: " + it.expected_result, "", "", ""]] }]),
         { title: "แผนเวลา", head: ["ช่วงเวลา", "กิจกรรม"], chart: false, left: true, colW: [2.8, 9.5], fs: 13, rows: R.timeline.map(x => [x.when, x.activity]) },
         { title: "ความเสี่ยงและการทบทวน", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.8, 9.5], fs: 12, rows: [...R.risks.map((x, i) => [i ? "" : "ความเสี่ยง", x]), ...R.review_notes.map((x, i) => [i ? "" : "AI 2 ทบทวน / AI 3 แก้", x])] }],
       notes: R.follow_up.slice(0, 9) }; }
