@@ -370,31 +370,47 @@
       { name: "แผนงาน วันวางเสร็จ", rows: [["ข้อ", "ลำดับ", "ขั้นตอน", "ผู้รับผิดชอบ", "เริ่ม", "วางเสร็จ", "จำนวนวัน", "สถานะ"], ...failed().flatMap(x => apOf(x.it.code).rca.plan.map((p, i) => [x.it.code, i + 1, p.step, p.owner, thd(p.start), thd(p.end), dDiff(p.start, p.end) + 1, p.status !== "เสร็จ" && p.end < today() ? p.status + " (เลยกำหนด)" : p.status]))], header: 0 }]); });
 
   // ---------- AI 3 roles: AI 1 proposes, AI 2 analyses and reviews, AI 3 checks, fixes and writes the report ----------
-  let aiRep = null;
+  let aiRep = null, aiLog = [];
+  const AI_MAX = 4;   // rounds of fix -> review -> check before the report is written anyway
+  const logRows = () => aiLog.map(h => [`รอบ ${h.round}`, h.approved ? "ผ่าน" : "สั่งแก้", h.approved ? (h.summary || "ไม่มีสิ่งที่ต้องแก้") : h.issues.join("\n")]);
   const ROLES = '<div class="who3"><span>🤖 AI 1 ผู้เสนอวิธีแก้</span><span>🤖 AI 2 ผู้วิเคราะห์ ทบทวน</span><span>🤖 AI 3 ผู้ตรวจสอบ แก้ไข และนำเสนอ</span></div>';
   $("#kAI").onclick = guard(async () => {
     const F = failed(); if (!F.length) return toast("ยังไม่มีข้อที่ตก จึงไม่ต้องทำ Action plan", true);
     const [y, m] = ym(), H = hosp(), t = r1(total()), box = $("#aiBox"); box.hidden = false;
-    box.innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2>${ROLES}<p>กำลังทำ RCA ก้างปลา 4M และ Action plan ต่อกัน 3 ขั้น ใช้เวลาประมาณ 1–3 นาที อย่าเพิ่งปิดหน้านี้…</p>`;
+    box.innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2>${ROLES}<p>AI 1 เสนอ → AI 2 ทบทวน → AI 3 ตรวจ ถ้า AI 3 สั่งแก้ AI 1 แก้และ AI 2 ทบทวนใหม่ วนจนผ่าน (ไม่เกิน ${AI_MAX} รอบ) อาจใช้เวลาหลายนาที อย่าเพิ่งปิดหน้านี้</p><ol id="aiSteps"></ol>`;
     box.scrollIntoView({ behavior: "smooth", block: "start" });
     const body = { hospital_id: H.id, year: y, month: m, hospital: H.name, month_name: mName(y, m), total: t, discount: DISC.includes(H.code) ? disc(t) + "%" : "ไม่มีในสัญญา",
       failed: F.map(x => { const a = apOf(x.it.code); return { code: x.it.code, title: x.it.title, target: x.it.target, actual: shown(x), score: x.sc, max: x.it.max, system_note: x.it.sysNote, cause: a.cause, draft_action: a.act, owner: a.owner, due: a.due,
         rca: { man: lines(a.rca.man), machine: lines(a.rca.machine), method: lines(a.rca.method), material: lines(a.rca.material), why5: lines(a.rca.why), project: a.rca.proj, goal: a.rca.goal, budget: a.rca.budget } }; }) };
-    const { data, error } = await sb.functions.invoke("kpi-ai", { body });
-    let msg = error ? (error.context && typeof error.context.json === "function" ? ((await error.context.json().catch(() => ({}))).error || error.message) : error.message) : data && data.error;
-    if (msg) { box.innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2><p class="note bad">ทำไม่สำเร็จ: ${esc(msg)}</p>`; return; }
-    aiRep = data.report; drawAi();
+    const call = async (extra, label) => { const li = document.createElement("li"); li.textContent = label + " …"; $("#aiSteps").appendChild(li);
+      const { data, error } = await sb.functions.invoke("kpi-ai", { body: { ...body, ...extra } });
+      const msg = error ? (error.context && typeof error.context.json === "function" ? ((await error.context.json().catch(() => ({}))).error || error.message) : error.message) : data && data.error;
+      if (msg) { li.innerHTML = `${esc(label)} <b class="bad">ไม่สำเร็จ: ${esc(msg)}</b>`; throw Object.assign(new Error(msg), { shown: 1 }); }
+      li.textContent = label + " ✓"; return { data, li }; };
+    try {
+      let p1 = "", p2 = "", issues = []; const log = [];
+      for (let r = 1; r <= AI_MAX; r++) {
+        p1 = (await call({ step: "propose", p1, p2, issues }, r === 1 ? "รอบ 1: AI 1 เสนอ RCA และวิธีแก้" : `รอบ ${r}: AI 1 แก้ตามที่ AI 3 สั่ง`)).data.text;
+        p2 = (await call({ step: "review", p1, issues }, `รอบ ${r}: AI 2 วิเคราะห์ ทบทวน`)).data.text;
+        const { data, li } = await call({ step: "check", p1, p2, history: log }, `รอบ ${r}: AI 3 ตรวจสอบ`), c = data.check;
+        log.push({ round: r, approved: c.approved, issues: c.issues || [], summary: c.summary || "" });
+        li.innerHTML = `รอบ ${r}: AI 3 ตรวจสอบ ✓ <b class="${c.approved ? "ok" : "bad"}">${c.approved ? "ผ่าน" : `สั่งแก้ ${c.issues.length} เรื่อง`}</b>` + (c.approved ? "" : `<ul>${c.issues.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`);
+        if (c.approved) break; issues = c.issues;
+      }
+      const R = (await call({ step: "report", p1, p2, history: log }, "AI 3 เรียบเรียงรายงานฉบับสุดท้าย")).data.report;
+      aiRep = R; aiLog = log; drawAi();
+    } catch (e) { if (!e.shown) box.insertAdjacentHTML("beforeend", `<p class="note bad">ทำไม่สำเร็จ: ${esc(errText(e))}</p>`); }
   });
   function drawAi() {
     const R = aiRep, w = canWrite();
-    $("#aiBox").innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2>${ROLES}<p class="meta">AI 1 เสนอ → AI 2 วิเคราะห์ทบทวน → AI 3 ตรวจสอบแก้ไขแล้วเรียบเรียง ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
+    $("#aiBox").innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2>${ROLES}<p class="meta">AI 1 เสนอ → AI 2 วิเคราะห์ทบทวน → AI 3 ตรวจ ถ้าสั่งแก้ AI 1 แก้และ AI 2 ทบทวนใหม่ วนจน AI 3 ให้ผ่าน (${aiLog.length} รอบ) แล้ว AI 3 เรียบเรียงรายงาน ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
       `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p><h3>บทวิเคราะห์</h3><ul>${R.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       R.items.map(it => `<h3>ข้อ ${esc(it.code)} ${esc(it.title)}</h3><div class="fish">${fishSvg(it.code, it.title, aiRca(it))}</div>` +
         `<p><b>5 Why:</b></p><ol>${(it.why5 || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><p><b>สาเหตุราก:</b> ${esc(it.root_cause)}</p>` +
         `<p><b>โครงการแก้ไข:</b> ${esc(it.project.name)} · <b>เป้าหมาย:</b> ${esc(it.project.goal)} · <b>งบประมาณ:</b> ${esc(it.project.budget)}</p><div class="tw"><table><thead><tr><th>วิธีการ / ขั้นตอน</th><th>ผู้รับผิดชอบ</th><th>กำหนดเสร็จ</th><th>วัดผล</th></tr></thead><tbody>` +
         it.actions.map(a => `<tr><td>${esc(a.step)}</td><td>${esc(a.owner)}</td><td>${esc(a.due)}</td><td>${esc(a.measure)}</td></tr>`).join("") + `</tbody></table></div><p><b>ผลที่คาดหวัง:</b> ${esc(it.expected_result)}</p>`).join("") +
       `<h3>แผนเวลา</h3><div class="tw"><table><thead><tr><th>ช่วงเวลา</th><th>กิจกรรม</th></tr></thead><tbody>${R.timeline.map(x => `<tr><td>${esc(x.when)}</td><td>${esc(x.activity)}</td></tr>`).join("")}</tbody></table></div>` +
-      `<h3>ความเสี่ยงของแผน</h3><ul>${R.risks.map(x => `<li>${esc(x)}</li>`).join("")}</ul><h3>สิ่งที่ AI 2 ทบทวนและ AI 3 แก้แล้ว</h3><ul>${R.review_notes.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
+      `<h3>ความเสี่ยงของแผน</h3><ul>${R.risks.map(x => `<li>${esc(x)}</li>`).join("")}</ul><h3>การตรวจวนของ AI 3</h3>${aiLog.length ? `<div class="tw"><table><thead><tr><th>รอบ</th><th>ผลตรวจ</th><th>สิ่งที่สั่งแก้ / สรุป</th></tr></thead><tbody>${logRows().map(r => `<tr><td>${esc(r[0])}</td><td><b class="${r[1] === "ผ่าน" ? "ok" : "bad"}">${esc(r[1])}</b></td><td>${esc(r[2]).replace(/\n/g, "<br>")}</td></tr>`).join("")}</tbody></table></div>${aiLog[aiLog.length - 1].approved ? "" : `<p class="note bad">ครบ ${AI_MAX} รอบแล้ว AI 3 ยังมีประเด็นค้าง ตรวจทานข้อที่สั่งแก้ในรอบสุดท้ายก่อนนำเสนอ</p>`}` : ""}<h3>สิ่งที่ AI 2 ทบทวนและ AI 3 แก้แล้ว</h3><ul>${R.review_notes.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       `<h3>การติดตามผล</h3><ul>${R.follow_up.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       `<div class="hsel"><button class="btn" type="button" id="aiP">รายงาน AI (PPT)</button><button class="btn" type="button" id="aiW">รายงาน AI (Word)</button><button class="btn" type="button" id="aiF">รายงาน AI (PDF)</button><button class="btn" type="button" id="aiX">รายงาน AI (Excel)</button>` +
       (w ? `<button class="btn" type="button" id="aiUse">ใส่แผนของ AI ลงในช่อง Action plan</button>` : "") + `</div>`;
@@ -407,6 +423,7 @@
       Office.xlsx(aiName(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes }), { name: "Action plan", rows, header: 0 },
         { name: "RCA ก้างปลา 4M", rows: [["ข้อ", "ตัวชี้วัด", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก", "ชื่อโครงการ", "เป้าหมายโครงการ", "งบประมาณ"],
           ...aiRep.items.map(it => [it.code, it.title, ...M4.map(m => (it.m4[m[0]] || []).join("\n")), (it.why5 || []).join("\n"), it.root_cause, it.project.name, it.project.goal, it.project.budget])], header: 0 },
+        { name: "การตรวจวน AI 3", rows: [["รอบ", "ผลตรวจ", "สิ่งที่สั่งแก้ / สรุป"], ...logRows()], header: 0 },
         { name: "แผนเวลา", rows: [["ช่วงเวลา", "กิจกรรม"], ...aiRep.timeline.map(x => [x.when, x.activity])], header: 0 }, { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...aiRep.analysis.map(x => [x]), [], ["ความเสี่ยง"], ...aiRep.risks.map(x => [x]), [], ["AI 2 ทบทวน / AI 3 แก้แล้ว"], ...aiRep.review_notes.map(x => [x])], header: 0 }]); });
     if ($("#aiUse")) $("#aiUse").onclick = () => { aiRep.items.forEach(it => { const c = it.code; if (!vals[c]) return;
         vals[c].act = it.actions.map((a, i) => `${i + 1}. ${a.step} (${a.owner} · ${a.due} · วัดผล: ${a.measure})`).join("\n"); if (!vals[c].cause) vals[c].cause = it.root_cause;
@@ -425,6 +442,7 @@
         { title: `ข้อ ${it.code} ${it.title}`.slice(0, 70), head: ["วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล"], chart: false, left: true, colW: [5.6, 2.4, 1.7, 2.6], fs: 12,
           rows: [...it.actions.map(a => [a.step, a.owner, a.due, a.measure]), ["ผลที่คาดหวัง: " + it.expected_result, "", "", ""]] }]),
         { title: "แผนเวลา", head: ["ช่วงเวลา", "กิจกรรม"], chart: false, left: true, colW: [2.8, 9.5], fs: 13, rows: R.timeline.map(x => [x.when, x.activity]) },
+        ...(aiLog.length ? [{ title: "การตรวจวนของ AI 3 (แก้จนผ่าน)", head: ["รอบ", "ผลตรวจ", "สิ่งที่สั่งแก้ / สรุป"], chart: false, left: true, colW: [1.3, 1.5, 9.5], fs: 12, rows: logRows() }] : []),
         { title: "ความเสี่ยงและการทบทวน", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.8, 9.5], fs: 12, rows: [...R.risks.map((x, i) => [i ? "" : "ความเสี่ยง", x]), ...R.review_notes.map((x, i) => [i ? "" : "AI 2 ทบทวน / AI 3 แก้", x])] }],
       notes: R.follow_up.slice(0, 9) }; }
 

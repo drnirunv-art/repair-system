@@ -1,7 +1,9 @@
 // Action plan for KPI items that lost points, written by three AI roles in turn (Gemini when GEMINI_API_KEY is set, else Claude):
 //   AI 1 (ผู้เสนอ) proposes corrective methods and a plan,
 //   AI 2 (ผู้วิเคราะห์ทบทวน) analyses causes and reviews the proposal,
-//   AI 3 (ผู้ตรวจสอบแก้ไข) fixes what AI 2 found and writes the final report as structured JSON.
+//   AI 3 (ผู้ตรวจสอบแก้ไข) checks both; when it asks for changes AI 1 revises and AI 2 reviews again, round after round,
+//   until AI 3 passes the work, then AI 3 writes the final report as structured JSON.
+// The page drives the rounds one step per call (body.step = propose | review | check | report), so no call runs long.
 // Each item gets an RCA: fishbone 4M (man, machine, method, material), 5 Why, root cause, and a corrective project.
 // Secret: GEMINI_API_KEY (optional GEMINI_MODEL) or ANTHROPIC_API_KEY (set by the owner in Supabase > Edge Functions > Secrets). The caller must be signed in and allowed to see the hospital.
 // Only KPI figures, targets and the head's notes are sent; no patient or staff personal data.
@@ -37,6 +39,9 @@ const CONTEXT = `บริบท: บริษัทผู้รับจ้า�
 อย่าแต่งตัวเลขที่ไม่มีในข้อมูล ถ้าข้อมูลไม่พอ ให้บอกว่าต้องเก็บข้อมูลอะไรเพิ่ม
 ใช้หลัก RCA ทุกข้อที่ตก: ก้างปลา (Ishikawa) แยกสาเหตุตาม 4M คือ คน (Man) เครื่องจักร (Machine) วิธีการ (Method) วัสดุ/อะไหล่ (Material) แล้วถาม 5 Why จนถึงสาเหตุราก และตั้งเป็นโครงการแก้ไขที่มีชื่อ เป้าหมาย และงบประมาณ
 ข้อมูลแต่ละข้อมี rca ที่หัวหน้าร่างไว้ (4M, 5 Why, โครงการ) ให้ใช้เป็นจุดเริ่ม`;
+const Check = z.object({ approved: z.boolean(), issues: z.array(z.string()), summary: z.string() });
+const CHECK_SHAPE = `ตอบเป็น JSON อย่างเดียว รูปแบบ: {"approved":true,"issues":["สิ่งที่ต้องแก้ 1"],"summary":"สรุปผลการตรวจ 1-2 ประโยค"}
+approved = true เมื่อไม่มีสิ่งที่ต้องแก้แล้วเท่านั้น ถ้า approved = false ต้องมี issues อย่างน้อย 1 ข้อ เขียนแต่ละข้อให้ AI 1 แก้ได้ทันที`;
 const SHAPE = `ตอบเป็น JSON อย่างเดียว ไม่มีข้อความอื่น รูปแบบ:
 {"summary":"","analysis":[""],"items":[{"code":"","title":"","m4":{"man":[""],"machine":[""],"method":[""],"material":[""]},"why5":["ทำไม 1: ...","ทำไม 2: ..."],"root_cause":"","project":{"name":"","goal":"","budget":""},"actions":[{"step":"","owner":"","due":"","measure":""}],"expected_result":""}],"timeline":[{"when":"","activity":""}],"risks":[""],"review_notes":[""],"follow_up":[""]}
 m4 แต่ละด้านไม่เกิน 4 สาเหตุ แต่ละสาเหตุสั้นไม่เกิน 25 ตัวอักษร`;
@@ -105,6 +110,47 @@ Deno.serve(async (req) => {
     const U2 = (p1: string) => `ข้อมูล KPI (JSON):\n${data}\n\nข้อเสนอของ AI 1:\n${p1}\n\nวิเคราะห์: สาเหตุใน 4M ครบหรือขาดด้านใด 5 Why หยุดเร็วเกินไปหรือไม่ ข้อใดเกี่ยวโยงกัน โครงการและวิธีแก้ใดยังไม่ตรงสาเหตุราก ทำไม่ได้จริง ขาดผู้รับผิดชอบ กำหนดเวลาไม่สมเหตุผล หรือวัดผลไม่ได้ ความเสี่ยงของแผน และสิ่งที่ควรเพิ่มหรือตัดออก`;
     const S3 = `${CONTEXT}\nบทบาทของคุณ: AI 3 ผู้ตรวจสอบแก้ไขและนำเสนอ ให้แก้ข้อเสนอของ AI 1 ตามผลทบทวนของ AI 2 ตรวจว่าครบทุกข้อที่ตก แล้วเรียบเรียงเป็นรายงาน Action plan ฉบับสุดท้าย`;
     const U3 = (p1: string, p2: string) => `ข้อมูล KPI (JSON):\n${data}\n\nข้อเสนอของ AI 1:\n${p1}\n\nผลวิเคราะห์และทบทวนของ AI 2:\n${p2}\n\nเขียนรายงานฉบับสุดท้าย: summary = บทสรุปผู้บริหาร 3-5 ประโยค, analysis = บทวิเคราะห์, items = ทุกข้อที่ตกพร้อมก้างปลา 4M, 5 Why, สาเหตุราก, โครงการแก้ไข และขั้นตอนแก้ไข (due เป็นวันที่ เช่น 15 ธ.ค. 2569), timeline = แผนรายสัปดาห์, risks = ความเสี่ยงของแผน, review_notes = สิ่งที่ AI 2 พบและ AI 3 แก้แล้ว, follow_up = วิธีติดตามผล`;
+
+    // ---- one step per call; the page loops: propose -> review -> check, again until check passes, then report ----
+    if (body.step) {
+      const txt = (sys: string, user: string) => gkey ? gem(gkey, sys, user) : ask(new Anthropic({ apiKey: key }), sys, user);
+      // deno-lint-ignore no-explicit-any
+      const obj = async (sys: string, shape: string, user: string, schema: any) => {
+        if (!gkey) {
+          const r = await new Anthropic({ apiKey: key }).messages.parse({ model: MODEL, max_tokens: 16000, system: sys, messages: [{ role: "user", content: user }], output_config: { format: zodOutputFormat(schema), effort: "medium" } });
+          if (r.stop_reason === "refusal" || !r.parsed_output) throw new Error("AI ตอบไม่สำเร็จ ลองใหม่อีกครั้ง");
+          return r.parsed_output;
+        }
+        for (let i = 0; i < 2; i++) {
+          const t = await gem(gkey, `${sys}\n${shape}`, user, true);
+          try { const v = schema.safeParse(JSON.parse(t.replace(/^```(?:json)?\s*|\s*```$/g, ""))); if (v.success) return v.data; } catch (_) { /* try once more */ }
+        }
+        throw new Error("AI ตอบไม่ตรงรูปแบบ ลองใหม่อีกครั้ง");
+      };
+      const p1 = String(body.p1 ?? ""), p2 = String(body.p2 ?? ""), fb = (body.issues ?? []).map((x: string, i: number) => `${i + 1}. ${x}`).join("\n");
+      const hist = (body.history ?? []).map((h: { round: number; approved: boolean; issues: string[] }) => `รอบ ${h.round}: ${h.approved ? "ผ่าน" : "สั่งแก้ " + h.issues.join(" / ")}`).join("\n");
+      const model = gkey ? GEMINI : MODEL;
+      if (body.step === "propose") {
+        const t = !p1 ? await txt(S1, U1)
+          : await txt(`${S1}\nตอนนี้เป็นการแก้ไขตามคำสั่งของ AI 3 ผู้ตรวจสอบ ให้แก้ครบทุกข้อที่สั่ง แล้วเขียนข้อเสนอฉบับเต็มใหม่ทั้งหมด`,
+            `ข้อมูล KPI (JSON):\n${data}\n\nข้อเสนอเดิมของคุณ:\n${p1}\n\nผลทบทวนเดิมของ AI 2:\n${p2}\n\nสิ่งที่ AI 3 สั่งให้แก้:\n${fb}\n\nเขียนข้อเสนอฉบับแก้ไขเต็ม (ก้างปลา 4M, 5 Why, สาเหตุราก, โครงการ, ขั้นตอน ผู้รับผิดชอบ กำหนดเสร็จ ตัวชี้วัด และแผนเวลา) และบอกท้ายเรื่องว่าแก้อะไรไปบ้าง`);
+        return out({ text: t, model });
+      }
+      if (body.step === "review") {
+        const t = await txt(S2, fb ? `${U2(p1)}\n\nข้อเสนอนี้เป็นฉบับแก้ไขตามที่ AI 3 สั่ง:\n${fb}\nตรวจด้วยว่าแก้ครบและถูกต้องหรือไม่` : U2(p1));
+        return out({ text: t, model });
+      }
+      if (body.step === "check") {
+        const c = await obj(`${CONTEXT}\nบทบาทของคุณ: AI 3 ผู้ตรวจสอบ ตรวจข้อเสนอของ AI 1 และผลทบทวนของ AI 2 อย่างเข้มงวด ว่าพร้อมเสนอผู้บริหารหรือยัง: ครบทุกข้อที่ตก ก้างปลา 4M ครบ 4 ด้าน 5 Why ถึงสาเหตุรากจริง ทุกขั้นตอนมีผู้รับผิดชอบ วันที่ และตัวชี้วัด ทำได้จริง และประเด็นที่ AI 2 ทักได้รับการแก้แล้ว`,
+          CHECK_SHAPE, `ข้อมูล KPI (JSON):\n${data}\n\nข้อเสนอของ AI 1:\n${p1}\n\nผลทบทวนของ AI 2:\n${p2}${hist ? `\n\nประวัติการตรวจรอบก่อน:\n${hist}\nห้ามสั่งแก้เรื่องเดิมซ้ำถ้าแก้แล้ว` : ""}`, Check);
+        return out({ check: c, model });
+      }
+      if (body.step === "report") {
+        const rep = await obj(S3, SHAPE, `${U3(p1, p2)}\n\nประวัติการตรวจวนของ AI 3:\n${hist}\nใส่ใน review_notes ว่าแต่ละรอบ AI 3 สั่งแก้อะไรและแก้แล้วอย่างไร`, Report);
+        return out({ report: rep, model });
+      }
+      return out({ error: "step ไม่ถูกต้อง" }, 400);
+    }
 
     if (gkey) {
       const p1 = await gem(gkey, S1, U1), p2 = await gem(gkey, S2, U2(p1));
