@@ -30,6 +30,8 @@
   .apc h3{margin:0 0 6px;font-size:15px}.apc h3 small{font-weight:500;color:#4b5563}.apg{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}
   .apc label{font-size:13px;font-weight:600;display:block}.apc textarea,.apc input{font:inherit;width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;color:#17212b;background:#fff}.apc textarea{min-height:130px}
   .apok{padding:10px 12px;border-radius:10px;background:#d5f0df;color:#14532d}
+  .aib{border:1px solid #9cc3ea;border-radius:12px;background:#f4f9ff;padding:12px 14px;margin:16px 0;color:#17212b}.aib h2{font-size:18px;margin:0 0 6px}.aib h3{font-size:15px;margin:12px 0 4px}
+  .aib ol,.aib ul{margin:4px 0 4px 20px;padding:0}.aib table{background:#fff}.aib td,.aib th{padding:5px 7px;vertical-align:top;color:#17212b;font-size:13px;text-align:left}.aib .who3{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.aib .who3 span{background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:13px}
   .lgd{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;margin:8px 0}.lgd span{padding:2px 8px;border-radius:6px}
 </style>
 </head>
@@ -52,7 +54,8 @@
         <button class="btn" type="button" id="auto">ใช้ค่าจากระบบ</button>
         <button class="btn primary" type="button" id="save">บันทึก</button>
         <button class="btn" type="button" id="kX">Excel</button><button class="btn" type="button" id="kP">PPT (บทสรุป + วิเคราะห์)</button>
-        <button class="btn" type="button" id="kA">Action plan แก้ไข (PPT)</button><button class="btn" type="button" id="kAW">Action plan (Word)</button><button class="btn" type="button" id="kAF">Action plan (PDF)</button><button class="btn" type="button" id="kAX">Action plan (Excel)</button></div>
+        <button class="btn" type="button" id="kA">Action plan แก้ไข (PPT)</button><button class="btn" type="button" id="kAW">Action plan (Word)</button><button class="btn" type="button" id="kAF">Action plan (PDF)</button><button class="btn" type="button" id="kAX">Action plan (Excel)</button>
+        <button class="btn primary" type="button" id="kAI">🤖 AI 3 คน ทำรายงาน Action plan</button></div>
       <p class="meta" id="rule"></p>
       <div class="tot" id="tot"></div>
       <div class="tw"><table class="kt" id="kt"></table></div>
@@ -60,6 +63,7 @@
       <h2 class="aph">Action plan แก้ไขข้อที่ตก</h2>
       <p class="sub">ทุกข้อที่ไม่ได้คะแนนเต็มจะขึ้นที่นี่เอง ระบบใส่ข้อเสนอแนะวิธีแก้ไขให้ก่อน หัวหน้าปรับให้ตรงหน้างาน ใส่สาเหตุ ผู้รับผิดชอบ และกำหนดเสร็จ แล้วกด "บันทึก" ด้านบน</p>
       <div id="ap"></div>
+      <section id="aiBox" class="aib" hidden aria-live="polite"></section>
     </section>
     <section id="tab-year" hidden>
       <div class="hsel"><label for="y">ปี พ.ศ.</label><select id="y"></select>

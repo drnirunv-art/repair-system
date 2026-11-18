@@ -258,6 +258,54 @@
     failed().forEach(x => { const a = apOf(x.it.code); rows.push([x.it.code, x.it.title, shown(x), x.it.target, x.sc, x.it.max, a.cause, a.act, a.owner, thd(a.due), "กำลังแก้ไข"]); });
     Office.xlsx(apName(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes, figures: d.kpis }), { name: "Action plan", rows, header: 0 }]); };
 
+  // ---------- AI 3 roles: AI 1 proposes, AI 2 analyses and reviews, AI 3 checks, fixes and writes the report ----------
+  let aiRep = null;
+  const ROLES = '<div class="who3"><span>🤖 AI 1 ผู้เสนอวิธีแก้</span><span>🤖 AI 2 ผู้วิเคราะห์ ทบทวน</span><span>🤖 AI 3 ผู้ตรวจสอบ แก้ไข และนำเสนอ</span></div>';
+  $("#kAI").onclick = guard(async () => {
+    const F = failed(); if (!F.length) return toast("ยังไม่มีข้อที่ตก จึงไม่ต้องทำ Action plan", true);
+    const [y, m] = ym(), H = hosp(), t = r1(total()), box = $("#aiBox"); box.hidden = false;
+    box.innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2>${ROLES}<p>กำลังทำงานต่อกัน 3 ขั้น ใช้เวลาประมาณ 1–3 นาที อย่าเพิ่งปิดหน้านี้…</p>`;
+    box.scrollIntoView({ behavior: "smooth", block: "start" });
+    const body = { hospital_id: H.id, year: y, month: m, hospital: H.name, month_name: mName(y, m), total: t, discount: DISC.includes(H.code) ? disc(t) + "%" : "ไม่มีในสัญญา",
+      failed: F.map(x => { const a = apOf(x.it.code); return { code: x.it.code, title: x.it.title, target: x.it.target, actual: shown(x), score: x.sc, max: x.it.max, system_note: x.it.sysNote, cause: a.cause, draft_action: a.act, owner: a.owner, due: a.due }; }) };
+    const { data, error } = await sb.functions.invoke("kpi-ai", { body });
+    let msg = error ? (error.context && typeof error.context.json === "function" ? ((await error.context.json().catch(() => ({}))).error || error.message) : error.message) : data && data.error;
+    if (msg) { box.innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2><p class="note bad">ทำไม่สำเร็จ: ${esc(msg)}</p>`; return; }
+    aiRep = data.report; drawAi();
+  });
+  function drawAi() {
+    const R = aiRep, w = canWrite();
+    $("#aiBox").innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2>${ROLES}<p class="meta">AI 1 เสนอ → AI 2 วิเคราะห์ทบทวน → AI 3 ตรวจสอบแก้ไขแล้วเรียบเรียง ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
+      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p><h3>บทวิเคราะห์</h3><ul>${R.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
+      R.items.map(it => `<h3>ข้อ ${esc(it.code)} ${esc(it.title)}</h3><p><b>สาเหตุราก:</b> ${esc(it.root_cause)}</p><div class="tw"><table><thead><tr><th>วิธีการ / ขั้นตอน</th><th>ผู้รับผิดชอบ</th><th>กำหนดเสร็จ</th><th>วัดผล</th></tr></thead><tbody>` +
+        it.actions.map(a => `<tr><td>${esc(a.step)}</td><td>${esc(a.owner)}</td><td>${esc(a.due)}</td><td>${esc(a.measure)}</td></tr>`).join("") + `</tbody></table></div><p><b>ผลที่คาดหวัง:</b> ${esc(it.expected_result)}</p>`).join("") +
+      `<h3>แผนเวลา</h3><div class="tw"><table><thead><tr><th>ช่วงเวลา</th><th>กิจกรรม</th></tr></thead><tbody>${R.timeline.map(x => `<tr><td>${esc(x.when)}</td><td>${esc(x.activity)}</td></tr>`).join("")}</tbody></table></div>` +
+      `<h3>ความเสี่ยงของแผน</h3><ul>${R.risks.map(x => `<li>${esc(x)}</li>`).join("")}</ul><h3>สิ่งที่ AI 2 ทบทวนและ AI 3 แก้แล้ว</h3><ul>${R.review_notes.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
+      `<h3>การติดตามผล</h3><ul>${R.follow_up.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
+      `<div class="hsel"><button class="btn" type="button" id="aiP">รายงาน AI (PPT)</button><button class="btn" type="button" id="aiW">รายงาน AI (Word)</button><button class="btn" type="button" id="aiF">รายงาน AI (PDF)</button><button class="btn" type="button" id="aiX">รายงาน AI (Excel)</button>` +
+      (w ? `<button class="btn" type="button" id="aiUse">ใส่แผนของ AI ลงในช่อง Action plan</button>` : "") + `</div>`;
+    $("#aiP").onclick = () => Office.pptx(aiName(), aiDeck()).catch(e => toast(errText(e), true));
+    $("#aiW").onclick = () => { try { Office.docx(aiName(), aiDeck()); } catch (e) { toast(errText(e), true); } };
+    $("#aiF").onclick = () => Promise.resolve(Office.pdf(aiName(), aiDeck())).catch(e => toast(errText(e), true));
+    $("#aiX").onclick = () => { const d = aiDeck(), rows = [["ข้อ", "ตัวชี้วัด", "สาเหตุราก", "วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล", "ผลที่คาดหวัง"]];
+      aiRep.items.forEach(it => it.actions.forEach((a, i) => rows.push([i ? "" : it.code, i ? "" : it.title, i ? "" : it.root_cause, a.step, a.owner, a.due, a.measure, i ? "" : it.expected_result])));
+      Office.xlsx(aiName(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes }), { name: "Action plan", rows, header: 0 },
+        { name: "แผนเวลา", rows: [["ช่วงเวลา", "กิจกรรม"], ...aiRep.timeline.map(x => [x.when, x.activity])], header: 0 }, { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...aiRep.analysis.map(x => [x]), [], ["ความเสี่ยง"], ...aiRep.risks.map(x => [x]), [], ["AI 2 ทบทวน / AI 3 แก้แล้ว"], ...aiRep.review_notes.map(x => [x])], header: 0 }]); };
+    if ($("#aiUse")) $("#aiUse").onclick = () => { aiRep.items.forEach(it => { const c = it.code; if (!vals[c]) return;
+        vals[c].act = it.actions.map((a, i) => `${i + 1}. ${a.step} (${a.owner} · ${a.due} · วัดผล: ${a.measure})`).join("\n"); if (!vals[c].cause) vals[c].cause = it.root_cause; });
+      apSig = ""; drawAp(); toast("ใส่แผนของ AI แล้ว ตรวจทานแล้วกด บันทึก"); $("#ap").scrollIntoView({ behavior: "smooth" }); };
+  }
+  const aiName = () => { const [y, m] = ym(); return `ActionPlan_AI_KPI_${hosp().code}_${y + 543}-${String(m).padStart(2, "0")}`; };
+  function aiDeck() { const [y, m] = ym(), H = hosp(), R = aiRep;
+    return { title: `รายงาน Action plan แก้ไข KPI ${H.code}`, org: H.name, period: mName(y, m) + " · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)",
+      findings: [R.summary], kpis: [["คะแนนรวม", r1(total())], ["ข้อที่ตก", R.items.length], ["ขั้นตอนแก้ไขทั้งหมด", R.items.reduce((s, it) => s + it.actions.length, 0)]],
+      analysis: R.analysis.slice(0, 9),
+      sections: [...R.items.map(it => ({ title: `ข้อ ${it.code} ${it.title}`.slice(0, 70), head: ["วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล"], chart: false, left: true, colW: [5.6, 2.4, 1.7, 2.6], fs: 12,
+          rows: [["สาเหตุราก: " + it.root_cause, "", "", ""], ...it.actions.map(a => [a.step, a.owner, a.due, a.measure]), ["ผลที่คาดหวัง: " + it.expected_result, "", "", ""]] })),
+        { title: "แผนเวลา", head: ["ช่วงเวลา", "กิจกรรม"], chart: false, left: true, colW: [2.8, 9.5], fs: 13, rows: R.timeline.map(x => [x.when, x.activity]) },
+        { title: "ความเสี่ยงและการทบทวน", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.8, 9.5], fs: 12, rows: [...R.risks.map((x, i) => [i ? "" : "ความเสี่ยง", x]), ...R.review_notes.map((x, i) => [i ? "" : "AI 2 ทบทวน / AI 3 แก้", x])] }],
+      notes: R.follow_up.slice(0, 9) }; }
+
   // ---------- 12 hospitals, one year ----------
   let year = [];
   $("#y").onchange = () => loadYear().catch(e => toast(errText(e), true));
