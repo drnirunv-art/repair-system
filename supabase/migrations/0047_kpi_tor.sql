@@ -5,6 +5,11 @@
 
 alter table public.kpi_monthly add column if not exists updated_by uuid references public.profiles(id);
 alter table public.kpi_monthly add column if not exists source text;   -- 'auto' = value from the system, 'manual' = typed by a head
+-- action plan for an item that lost points: cause, corrective steps, owner, due date
+alter table public.kpi_monthly add column if not exists ap_cause text;
+alter table public.kpi_monthly add column if not exists ap_action text;
+alter table public.kpi_monthly add column if not exists ap_owner text;
+alter table public.kpi_monthly add column if not exists ap_due date;
 
 create policy "kpi exec read" on public.kpi_monthly for select to authenticated using (public.am_exec());
 create policy "kpi exec write" on public.kpi_monthly for all to authenticated using (public.am_exec()) with check (public.am_exec());

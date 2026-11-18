@@ -193,9 +193,9 @@ window.Office = (() => {
     if ((d.analysis || []).length) { s = p.addSlide(); head(s, "บทวิเคราะห์"); bullets(s, d.analysis.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
     (d.sections || []).filter(x => x.rows && x.rows.length).forEach(sec => { s = p.addSlide(); head(s, sec.title);
       const rows = sec.rows.slice(0, 12), withChart = sec.chart !== false && rows.length > 1 && rows.every(r => isNum(r[1]));
-      const tw = withChart ? 6.2 : 12.3, cw = sec.head.map((_, i) => i ? (tw * 0.5) / Math.max(1, sec.head.length - 1) : tw * 0.5);
-      s.addTable([sec.head.map(h => ({ text: String(h), options: { bold: true, fill: { color: "DCE9F5" }, color: INK } })), ...rows.map(r => r.map((v, i) => ({ text: String(v ?? ""), options: { align: i ? "right" : "left" } })))],
-        { x: 0.5, y: 1.4, w: tw, colW: cw, fontFace: F, fontSize: rows.length > 10 ? 11 : 13, color: INK, border: { type: "solid", color: "D5DEE9", pt: 0.75 } });
+      const tw = withChart ? 6.2 : 12.3, cw = sec.colW || sec.head.map((_, i) => i ? (tw * 0.5) / Math.max(1, sec.head.length - 1) : tw * 0.5);
+      s.addTable([sec.head.map(h => ({ text: String(h), options: { bold: true, fill: { color: "DCE9F5" }, color: INK } })), ...rows.map(r => r.map((v, i) => ({ text: String(v ?? ""), options: { align: i && !sec.left ? "right" : "left" } })))],
+        { x: 0.5, y: 1.4, w: tw, colW: cw, fontFace: F, fontSize: sec.fs || (rows.length > 10 ? 11 : 13), color: INK, border: { type: "solid", color: "D5DEE9", pt: 0.75 } });
       if (withChart) s.addChart(p.ChartType.bar, [{ name: sec.head[1], labels: rows.map(r => String(r[0])).reverse(), values: rows.map(r => +r[1]).reverse() }],
         { x: 7.0, y: 1.4, w: 5.8, h: 4.6, barDir: "bar", valAxisMinVal: 0, chartColors: [ACC], catAxisLabelFontFace: F, catAxisLabelFontSize: 11, valAxisLabelFontSize: 10, showValue: true, dataLabelFontSize: 10, showLegend: false });
       if (sec.note) s.addText(sec.note, { x: 0.5, y: 6.3, w: 12.3, h: 0.55, fontFace: F, fontSize: 14, color: ACC, italic: true });

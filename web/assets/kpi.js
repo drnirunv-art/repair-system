@@ -62,6 +62,39 @@
       ["8.3.4", "Ext KPI: ประสิทธิภาพการบำบัดน้ำเสีย (ค่าพารามิเตอร์ผ่าน)", 3, "pct", "100%", v => v >= 100 ? 3 : 0, null],
       ["8.3.5", "Ext KPI: อัตราความพร้อมใช้ของระบบสาธารณูปโภค", 2, "pct", "100%", v => v >= 100 ? 2 : 0, null]
     ].map(([code, title, max, kind, target, score, sys, sysNote]) => ({ code, title, max, kind, target, score, sys, sysNote: sysNote || "" })); };
+  // suggested corrective steps for an item that lost points (the head edits them to fit the site)
+  const SUG = {
+    "1.1": ["ส่งแผน PM ประจำปีก่อนเริ่มปีสัญญา และส่งแผนปรับปรุงทุกวันศุกร์แรกของเดือนถัดไป", "ตั้งเตือนในปฏิทินและกำหนดผู้ส่งหลักกับผู้ส่งสำรอง", "หัวหน้าตรวจและลงนามก่อนส่งทุกครั้ง เก็บหลักฐานการส่ง"],
+    "1.2": ["ทำรายชื่อเครื่องที่ยังไม่ทำ PM แล้วจัดทีมทำให้เสร็จภายในสัปดาห์แรกของเดือนถัดไป", "กด \"สร้างงานเดือนนี้\" ตั้งแต่วันแรกของเดือน และแบ่งงาน PM เป็นรายสัปดาห์ (สัปดาห์ 1–4)", "หัวหน้าลงนามใบ PM ที่ค้างรอลงนามภายใน 3 วัน", "ติดตามความคืบหน้าทุกวันศุกร์ใน PM Board"],
+    "1.3": ["ทำรายการเครื่อง PM ที่ค้าง พร้อมวันที่จะทำ แจ้งในแผนปรับปรุงต่อผู้ว่าจ้างวันศุกร์แรก", "จัดคนเพิ่มหรือขอ OT เฉพาะช่วงที่งาน PM ค้าง", "หาสาเหตุที่ทำไม่ได้ (เข้าพื้นที่ไม่ได้ ไม่มีอะไหล่ เครื่องใช้งานอยู่) แล้วนัดวันกับหน่วยงาน"],
+    "2.1": ["กำหนดวันเสร็จทุกงานตั้งแต่ตอนมอบหมาย และใส่วันเสร็จตามแผนสำหรับงานที่ต้องรอ", "หัวหน้ากะตรวจงานใกล้ครบกำหนดทุกเช้า", "Quality Supervisor สุ่มตรวจงานซ่อม 10% ต่อวัน และแก้ทันทีเมื่อพบงานไม่เรียบร้อย"],
+    "2.2": ["ดึงรายการงานซ่อมซ้ำ แล้ววิเคราะห์สาเหตุราก (RCA) รายเครื่อง", "เปลี่ยนอะไหล่ที่เสื่อมแบบถาวร หรือเพิ่มรายการตรวจในแผน PM ของเครื่องนั้น", "หัวหน้าตรวจผลก่อนปิดงานซ่อมของเครื่องที่ซ่อมซ้ำ"],
+    "2.3": ["เปิดเสียงเตือนงานที่ยังไม่มีคนรับในหน้าเจ้าหน้าที่ทุกกะ", "จัดคนรับงานประจำกะและคนสำรองช่วงพักหรือประชุม", "ทบทวนงานที่รับช้าทุกสัปดาห์ แยกตาม Critical / Priority / Non-priority"],
+    "2.4.1": ["ทบทวน Occurrence ทุกเรื่องกับหน่วยงาน หาสาเหตุราก", "อบรมช่างในเรื่องที่เกิดซ้ำ และทำ One point lesson", "คุมผู้รับเหมาด้วย Work Permit และตรวจหน้างานทุกครั้ง"],
+    "2.4.2": ["รายงานผู้บริหารภายใน 24 ชั่วโมง และทำ RCA เต็มรูปแบบ", "กำหนดมาตรการป้องกันไม่ให้เกิดซ้ำ พร้อมผู้รับผิดชอบ", "ติดตามผลมาตรการในการประชุมประจำเดือน"],
+    "3.1": ["ไล่ปิดงานค้างทุกวัน เริ่มจากงานที่เก่าที่สุด", "งานที่ต้องรอ (อะไหล่สั่งพิเศษ เข้าพื้นที่ไม่ได้ รอผู้รับเหมา) ขออนุมัติหยุดงานให้ครบในระบบ", "เร่งเปิดใบขอซื้ออะไหล่และติดตามกับจัดซื้อทุกสัปดาห์"],
+    "3.2": ["ทำรายการงานที่ค้างเกิน 60 วัน และกำหนดวันเสร็จทุกงาน", "งานที่ติดงบหรือผู้รับเหมา ทำ Memo ขออนุมัติกับผู้บริหารโรงพยาบาล", "รายงานความคืบหน้าให้ผู้บริหารทุกสัปดาห์จนเป็นศูนย์"],
+    "4.1.1": ["ทำปฏิทินจดมิเตอร์วันที่ 15 และ 25 พร้อมผู้รับผิดชอบหลักและสำรอง", "ส่งก่อนเที่ยงของวันที่กำหนด"],
+    "4.1.2": ["ทำปฏิทินกำหนดส่งรายงานทุกฉบับ (CEG2 วันที่ 10, คลังวันจันทร์, รายงานประจำวัน, ตารางเวรสัปดาห์แรก)", "กำหนดผู้รับผิดชอบหลักและสำรองต่อรายงาน", "ส่งก่อนเที่ยง ถ้าตรงวันหยุดให้ส่งวันทำงานถัดไป และเก็บหลักฐานการส่ง"],
+    "5": ["ทำ Checklist ข้อมูล ESG ทุกหมวด และส่งตามกำหนด", "ประสานหน่วยงานที่เกี่ยวข้องล่วงหน้า 1 สัปดาห์"],
+    "6": ["วางตารางซ้อม Code ร่วมกับโรงพยาบาลล่วงหน้าทั้งปี", "ส่งรายชื่อผู้เข้าร่วมและเก็บใบลงชื่อเป็นหลักฐาน"],
+    "7": ["ทำแผนอบรมรายเดือน (ลิฟต์ ไฟฟ้าขัดข้อง อัคคีภัย)", "จัดอบรมซ้ำให้คนที่ขาด และเก็บใบลงชื่อ"],
+    "8.1.1": ["ตรวจการใช้ไฟฟ้าที่ผิดปกติ ปิดเครื่องที่ไม่ใช้ ตั้งเวลาเปิดปิด", "ปรับค่าตั้ง Chiller และระบบปรับอากาศให้เหมาะกับภาระ", "เทียบค่าเดือนก่อนและปีก่อน หาพื้นที่ที่ใช้เพิ่ม"],
+    "8.1.2": ["ตรวจหาจุดรั่วของท่อและสุขภัณฑ์", "เทียบมิเตอร์ย่อยหาพื้นที่ที่ใช้น้ำเพิ่ม", "รณรงค์และติดตั้งอุปกรณ์ประหยัดน้ำ"],
+    "8.1.3": ["วิเคราะห์การใช้ไฟต่อหัวผู้ป่วยตามพื้นที่", "ปรับตารางเดินเครื่องตามจำนวนผู้ป่วยจริง"],
+    "8.2.1": ["ติดตามงานใกล้ครบกำหนดทุกวัน", "จัดลำดับงานตามความเร่งด่วน"],
+    "8.2.2": ["เร่งซ่อมเครื่องหลักที่หยุด และสำรองอะไหล่วิกฤต", "ทำ PM ตามแผนให้ครบ"],
+    "8.2.3": ["วิเคราะห์เครื่องที่หยุดนานที่สุด หาสาเหตุ", "สำรองอะไหล่วิกฤตและทำสัญญาซ่อมด่วนกับผู้ขาย"],
+    "8.2.4": ["ล้างฆ่าเชื้อถังเก็บน้ำและท่อ ปรับคลอรีนอิสระให้อยู่ในเกณฑ์", "เก็บตัวอย่างตรวจซ้ำ และบันทึกผลใน Water management plan"],
+    "8.2.5": ["ล้างและฆ่าเชื้อ Cooling Tower ทันที", "ตรวจเชื้อ Legionella ซ้ำ และปรับโปรแกรมเคมีบำบัดน้ำ"],
+    "8.3.1": ["ติดตามงานใกล้ครบกำหนดทุกวัน", "งานที่ต้องรอ ใส่วันเสร็จตามแผนและแจ้งผู้แจ้งล่วงหน้า"],
+    "8.3.2": ["โทรหรือแจ้งผู้แจ้งเมื่องานเสร็จ และขอให้ประเมิน", "อ่านความเห็นที่ได้คะแนนต่ำแล้วแก้ไข", "อบรมช่างเรื่องการสื่อสารและความเรียบร้อยหลังงาน"],
+    "8.3.3": ["วิเคราะห์งานซ่อมซ้ำภายใน 7 วันทุกงาน", "หัวหน้าตรวจผลก่อนปิดงาน"],
+    "8.3.4": ["ตรวจค่าน้ำทิ้งรายวัน ปรับการเติมอากาศและเคมี", "ล้างระบบและซ่อมอุปกรณ์บำบัดที่ชำรุด", "ส่งตรวจซ้ำกับห้องปฏิบัติการ"],
+    "8.3.5": ["ซ่อมระบบที่หยุดให้กลับมาใช้งาน และมีแผนสำรองระหว่างซ่อม", "เพิ่มการตรวจประจำวันของระบบสาธารณูปโภคหลัก"]
+  };
+  const sugText = c => (SUG[c] || ["ระบุวิธีแก้ไข"]).map((t, i) => `${i + 1}. ${t}`).join("\n");
+  const thd = d => d ? new Date(d + "T00:00:00").toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }) : "-";
   const catOf = c => ["5", "6", "7"].includes(c) ? "5" : c[0];
   const has = v => v !== undefined && v !== null && v !== "";
   const scoreOf = (it, v) => has(v) ? it.score(it.kind === "pass" ? v : +v) : null;
@@ -105,7 +138,7 @@
     const [a, s] = await Promise.all([sb.rpc("kpi_auto", { p_hospital: h, p_year: y, p_month: m }), sb.from("kpi_monthly").select("*").eq("hospital_id", h).eq("month", first)]);
     if (a.error) throw a.error; if (s.error) throw s.error;
     auto = a.data || {}; saved = (s.data || []).filter(r => r.hospital_id === h && r.month === first);
-    vals = {}; saved.forEach(r => vals[r.item] = { v: r.note && r.note.startsWith("pass:") ? r.note.slice(5, 9) === "pass" ? "pass" : "fail" : has(r.actual) ? +r.actual : "", n: (r.note || "").replace(/^pass:(pass|fail) ?/, ""), src: r.source });
+    vals = {}; saved.forEach(r => vals[r.item] = { v: r.note && r.note.startsWith("pass:") ? r.note.slice(5, 9) === "pass" ? "pass" : "fail" : has(r.actual) ? +r.actual : "", n: (r.note || "").replace(/^pass:(pass|fail) ?/, ""), src: r.source, cause: r.ap_cause || "", act: r.ap_action || "", owner: r.ap_owner || "", due: r.ap_due || "" });
     if (!saved.length) fillAuto(false);
     draw();
   }
@@ -140,13 +173,33 @@
       `<div class="kpi"><b class="${t >= 90 ? "ok" : "bad"}">${t >= 90 ? "ผ่าน" : "ไม่ผ่าน"}</b><span>เกณฑ์ผ่าน 90 คะแนน</span></div>` +
       `<div class="kpi"><b>${d}</b><span>ส่วนลดค่าบริการตามผล KPI</span></div>` +
       `<div class="kpi"><b>${filled}/${list.length}</b><span>ข้อที่มีค่าแล้ว</span></div>`;
+    drawAp();
+  }
+  // ---------- action plan for every item that lost points ----------
+  const defDue = () => { const [y, m] = ym(); const d = new Date(Date.UTC(y, m + 1, 0)); return d.toISOString().slice(0, 10); };   // end of the month after
+  const failed = () => ITEMS().map(it => ({ it, sc: scoreOf(it, (vals[it.code] || {}).v) })).filter(x => x.sc != null && x.sc < x.it.max);
+  const shown = x => { const v = (vals[x.it.code] || {}).v; return x.it.kind === "pass" ? (v === "pass" ? "ผ่าน" : "ไม่ผ่าน") : v + (x.it.kind === "pct" ? "%" : x.it.kind === "count" ? " " : ""); };
+  const apOf = c => { const x = vals[c] || {}; return { cause: x.cause || "", act: x.act || sugText(c), owner: x.owner || "หัวหน้างานวิศวกรรม (Chief Engineer)", due: x.due || defDue() }; };
+  let apSig = "";
+  function drawAp() {
+    const F = failed(), w = canWrite(), sig = F.map(x => x.it.code).join(",") + "|" + $("#h").value + $("#m").value;
+    if (sig === apSig && $("#ap").childElementCount) return; apSig = sig;   // keep what is being typed while scores change
+    if (!F.length) { $("#ap").innerHTML = `<div class="apok">ไม่มีข้อที่ตกในข้อที่มีค่าแล้ว ยังไม่ต้องทำ Action plan</div>`; return; }
+    $("#ap").innerHTML = F.map(x => { const a = apOf(x.it.code), c = x.it.code, dis = w ? "" : "disabled";
+      return `<div class="apc"><h3>ข้อ ${c} ${esc(x.it.title)} <small>ได้ ${x.sc}/${x.it.max} · ค่าจริง ${esc(shown(x))} · เป้าหมาย ${esc(x.it.target)}</small></h3><div class="apg">` +
+        `<div><label for="apc-${c}">สาเหตุที่ตก</label><textarea id="apc-${c}" data-ap="cause" data-k="${c}" ${dis} placeholder="เช่น ช่างลาป่วย 2 คน งานเข้าพื้นที่ไม่ได้">${esc(a.cause)}</textarea></div>` +
+        `<div style="grid-column:span 2"><label for="apa-${c}">วิธีแก้ไข (ระบบเสนอให้ ปรับได้)</label><textarea id="apa-${c}" data-ap="act" data-k="${c}" ${dis}>${esc(a.act)}</textarea></div>` +
+        `<div><label for="apo-${c}">ผู้รับผิดชอบ</label><input id="apo-${c}" data-ap="owner" data-k="${c}" ${dis} value="${esc(a.owner)}"><label for="apd-${c}" style="margin-top:6px">กำหนดเสร็จ</label><input type="date" id="apd-${c}" data-ap="due" data-k="${c}" ${dis} value="${esc(a.due)}"></div>` +
+        `</div></div>`; }).join("");
+    $("#ap").querySelectorAll("[data-ap]").forEach(el => el.oninput = () => { const c = el.dataset.k; vals[c] = Object.assign(vals[c] || { v: "" }, { [el.dataset.ap]: el.value }); });
   }
   $("#save").onclick = guard(async () => {
     if (!canWrite()) return toast("บัญชีนี้บันทึก KPI ของโรงนี้ไม่ได้", true);
     const [y, m] = ym(), h = $("#h").value, first = `${y}-${String(m).padStart(2, "0")}-01`;
     const rows = ITEMS().filter(it => has((vals[it.code] || {}).v) || (vals[it.code] || {}).n).map(it => { const x = vals[it.code] || {}, sc = scoreOf(it, x.v);
       return { hospital_id: h, month: first, item: it.code, target: it.target, actual: it.kind === "pass" || !has(x.v) ? null : +x.v, score: sc, max_score: it.max,
-        note: (it.kind === "pass" && has(x.v) ? `pass:${x.v} ` : "") + (x.n || "").trim(), source: x.src || "manual", updated_by: me.id, updated_at: new Date().toISOString() }; });
+        note: (it.kind === "pass" && has(x.v) ? `pass:${x.v} ` : "") + (x.n || "").trim(), source: x.src || "manual", updated_by: me.id, updated_at: new Date().toISOString(),
+        ...(sc != null && sc < it.max ? (a => ({ ap_cause: a.cause.trim() || null, ap_action: a.act.trim() || null, ap_owner: a.owner.trim() || null, ap_due: a.due || null }))(apOf(it.code)) : { ap_cause: null, ap_action: null, ap_owner: null, ap_due: null }) }; });
     if (!rows.length) return toast("ยังไม่มีค่าให้บันทึก", true);
     const { error } = await sb.from("kpi_monthly").upsert(rows, { onConflict: "hospital_id,month,item" }); if (error) throw error;
     toast(`บันทึก KPI ${rows.length} ข้อแล้ว`); await loadMonth();
@@ -163,7 +216,7 @@
       lost.length ? `เสียคะแนน ${lost.length} ข้อ มากที่สุดคือ ${lost.slice(0, 3).map(x => `${x.it.code} (${r1(x.it.max - x.sc)} คะแนน)`).join(", ")}` : "ไม่เสียคะแนนในข้อที่กรอกแล้ว"];
     if (blank.length) findings.push(`ยังไม่มีค่า ${blank.length} ข้อ: ${blank.map(it => it.code).join(", ")} คะแนนรวมยังไม่ครบ`);
     const analysis = lost.slice(0, 8).map(x => `${x.it.code} ${x.it.title}: ได้ ${x.sc}/${x.it.max} ค่าจริง ${x.it.kind === "pass" ? (vals[x.it.code].v === "pass" ? "ผ่าน" : "ไม่ผ่าน") : vals[x.it.code].v + (x.it.kind === "pct" ? "%" : "")} เป้าหมาย ${x.it.target}`);
-    const notes = lost.slice(0, 5).map(x => `ข้อ ${x.it.code}: ${(vals[x.it.code] || {}).n || "ระบุสาเหตุและแผนแก้ไขก่อนเดือนถัดไป"}`);
+    const notes = lost.slice(0, 5).map(x => { const a = apOf(x.it.code); return `ข้อ ${x.it.code}: ${a.act.split("\n")[0].replace(/^1\. /, "")} (ผู้รับผิดชอบ ${a.owner} เสร็จ ${thd(a.due)}) ดูรายละเอียดใน Action plan`; });
     if (auto && auto.aging_over60 > 0) notes.push(`มีงานค้างเกิน 60 วัน ${auto.aging_over60} งาน ต้องปิดหรือกำหนดวันเสร็จ`);
     return { title: `KPI ตามสัญญา (แนบ 4) ${H.code}`, org: H.name, period: mName(y, m), findings,
       kpis: [["คะแนนรวม", t], ["ผลประเมิน", t >= 90 ? "ผ่าน" : "ไม่ผ่าน"], ["ส่วนลด", DISC.includes(H.code) ? disc(t) + "%" : "-"], ["ข้อที่เสียคะแนน", lost.length], ["ข้อที่ยังไม่มีค่า", blank.length]],
@@ -175,8 +228,35 @@
     ITEMS().forEach(it => { const x = vals[it.code] || {}; rows.push([it.code, it.title, it.target, it.kind === "pass" ? (x.v === "pass" ? "ผ่าน" : x.v === "fail" ? "ไม่ผ่าน" : "") : has(x.v) ? x.v : "", it.sys == null ? "" : it.sys, scoreOf(it, x.v) ?? "", it.max, x.n || ""]); });
     rows.push(["", "รวม", "", "", "", r1(total()), 100, ""]);
     Office.xlsx(`KPI_${hosp().code}_${y + 543}-${String(m).padStart(2, "0")}`, [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes, figures: d.kpis,
-      groups: [{ title: "คะแนนรายหมวด", head: ["ได้", "เต็ม"], rows: d.sections[0].rows }] }), { name: "KPI รายข้อ", rows, header: 0 }]); };
+      groups: [{ title: "คะแนนรายหมวด", head: ["ได้", "เต็ม"], rows: d.sections[0].rows }] }), { name: "KPI รายข้อ", rows, header: 0 },
+      { name: "Action plan", rows: [["ข้อ", "ได้", "เต็ม", "สาเหตุ", "วิธีแก้ไข", "ผู้รับผิดชอบ", "กำหนดเสร็จ"], ...failed().map(x => { const a = apOf(x.it.code); return [x.it.code, x.sc, x.it.max, a.cause, a.act, a.owner, thd(a.due)]; })], header: 0 }]); };
   $("#kP").onclick = () => { const [y, m] = ym(); return Office.pptx(`KPI_${hosp().code}_${y + 543}-${String(m).padStart(2, "0")}_บทสรุปผู้บริหาร`, monthDeck()).catch(e => toast(errText(e), true)); };
+
+  function apDeck() {
+    const [y, m] = ym(), H = hosp(), F = failed().sort((a, b) => (b.it.max - b.sc) - (a.it.max - a.sc)), t = r1(total());
+    const lostPts = r1(F.reduce((s, x) => s + x.it.max - x.sc, 0));
+    const findings = F.length ? [`KPI ${H.name} เดือน ${mName(y, m)} ได้ ${t} คะแนน มีข้อที่ตก ${F.length} ข้อ เสียรวม ${lostPts} คะแนน`,
+        t >= 90 ? "ยังผ่านเกณฑ์ 90 แต่ต้องแก้ข้อที่ตกเพื่อไม่ให้คะแนนลดลงเดือนถัดไป" : `ไม่ผ่านเกณฑ์ 90 ต้องได้เพิ่มอีก ${r1(90 - t)} คะแนน${DISC.includes(H.code) ? ` (ส่วนลดค่าบริการเดือนนี้ ${disc(t)}%)` : ""}`,
+        `ลำดับความสำคัญ: ${F.slice(0, 4).map(x => `${x.it.code} (เสีย ${r1(x.it.max - x.sc)})`).join(", ")}`,
+        `ทุกข้อมีผู้รับผิดชอบและกำหนดเสร็จ ติดตามผลในการประชุมประจำเดือนและใน KPI เดือนถัดไป`] : ["ไม่มีข้อที่ตก ยังไม่ต้องทำ Action plan"];
+    const sections = F.map(x => { const a = apOf(x.it.code);
+      return { title: `ข้อ ${x.it.code} ${x.it.title}`.slice(0, 70), head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 15,
+        rows: [["ผลเดือนนี้", `ได้ ${x.sc}/${x.it.max} ค่าจริง ${shown(x)} เป้าหมาย ${x.it.target}`], ["สาเหตุ", a.cause || "(ยังไม่ระบุ)"], ...a.act.split("\n").filter(Boolean).map((s, i) => [i ? "" : "วิธีแก้ไข", s]),
+          ["ผู้รับผิดชอบ", a.owner], ["กำหนดเสร็จ", thd(a.due)], ["วัดผล", `KPI ข้อ ${x.it.code} เดือนถัดไปต้องได้ ${x.it.max}/${x.it.max} (${x.it.target})`]] }; });
+    return { title: `Action plan แก้ไข KPI ${H.code}`, org: H.name, period: mName(y, m), findings,
+      kpis: [["คะแนนรวม", t], ["ข้อที่ตก", F.length], ["คะแนนที่เสีย", lostPts], ["เป้าหมาย", "≥ 90"]],
+      analysis: F.map(x => `${x.it.code}: ${apOf(x.it.code).cause || "ยังไม่ระบุสาเหตุ"}`).slice(0, 9),
+      sections: [{ title: "แผนแก้ไขสรุป", head: ["ข้อ", "เสีย", "ผู้รับผิดชอบ", "กำหนดเสร็จ"], chart: false, left: true, colW: [4.3, 1.5, 4.0, 2.5], fs: 15, rows: F.map(x => [x.it.code, r1(x.it.max - x.sc), apOf(x.it.code).owner, thd(apOf(x.it.code).due)]) }, ...sections],
+      notes: F.length ? ["หัวหน้าติดตามความคืบหน้าทุกสัปดาห์ และรายงานผลในการประชุมประจำเดือนกับโรงพยาบาล", "ถ้าข้อใดแก้ไม่ทันกำหนด ให้แจ้งเหตุผลและวันที่ใหม่ล่วงหน้า"] : [] };
+  }
+  const apName = () => { const [y, m] = ym(); return `ActionPlan_KPI_${hosp().code}_${y + 543}-${String(m).padStart(2, "0")}`; };
+  $("#kA").onclick = () => { if (!failed().length) return toast("ยังไม่มีข้อที่ตก จึงไม่มี Action plan", true); return Office.pptx(apName(), apDeck()).catch(e => toast(errText(e), true)); };
+  $("#kAW").onclick = () => { if (!failed().length) return toast("ยังไม่มีข้อที่ตก จึงไม่มี Action plan", true); try { Office.docx(apName(), apDeck()); } catch (e) { toast(errText(e), true); } };
+  $("#kAF").onclick = () => { if (!failed().length) return toast("ยังไม่มีข้อที่ตก จึงไม่มี Action plan", true); return Promise.resolve(Office.pdf(apName(), apDeck())).catch(e => toast(errText(e), true)); };
+  $("#kAX").onclick = () => { if (!failed().length) return toast("ยังไม่มีข้อที่ตก จึงไม่มี Action plan", true); const d = apDeck();
+    const rows = [["ข้อ", "ตัวชี้วัด", "ค่าจริง", "เป้าหมาย", "ได้", "เต็ม", "สาเหตุ", "วิธีแก้ไข", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "สถานะ"]];
+    failed().forEach(x => { const a = apOf(x.it.code); rows.push([x.it.code, x.it.title, shown(x), x.it.target, x.sc, x.it.max, a.cause, a.act, a.owner, thd(a.due), "กำลังแก้ไข"]); });
+    Office.xlsx(apName(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes, figures: d.kpis }), { name: "Action plan", rows, header: 0 }]); };
 
   // ---------- 12 hospitals, one year ----------
   let year = [];
