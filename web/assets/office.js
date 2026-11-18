@@ -104,7 +104,7 @@ window.Office = (() => {
     if ((d.findings || []).length) out.push({ h: "บทสรุปผู้บริหาร", list: d.findings });
     if ((d.kpis || []).length) out.push({ h: "ตัวเลขสำคัญ", head: ["ตัวชี้วัด", "ค่า"], rows: d.kpis });
     if ((d.analysis || []).length) out.push({ h: "บทวิเคราะห์", list: d.analysis });
-    (d.sections || []).filter(x => (x.rows && x.rows.length) || x.img).forEach(x => out.push({ h: x.title, head: x.head, rows: x.rows && x.rows.length ? x.rows : null, note: x.note, img: x.img }));
+    (d.sections || []).filter(x => (x.rows && x.rows.length) || x.img).forEach(x => out.push({ h: x.title, head: x.head, rows: x.rows && x.rows.length ? x.rows : null, note: x.note, img: x.img, imgR: x.imgR }));
     if ((d.notes || []).length) out.push({ h: "ข้อสังเกตและข้อเสนอแนะ", list: d.notes });
     return out; };
   function docx(name, d) {
@@ -115,12 +115,12 @@ window.Office = (() => {
       <w:tblGrid>${head.map((_, i) => `<w:gridCol w:w="${Math.round(head.length < 2 ? 9638 : i ? 9638 * (head.length > 3 ? 0.6 : 0.5) / (head.length - 1) : 9638 * (head.length > 3 ? 0.4 : 0.5))}"/>`).join("")}</w:tblGrid>
       <w:tr><w:trPr><w:tblHeader/></w:trPr>${head.map(h => cell(h, true)).join("")}</w:tr>${rows.map(r => `<w:tr>${head.map((_, i) => cell(r[i] ?? "", false, i && isNum(r[i]) ? "right" : null)).join("")}</w:tr>`).join("")}</w:tbl>${P("", { after: 60 })}`;
     const imgs = [], b64 = u => Uint8Array.from(atob(u.split(",")[1]), ch => ch.charCodeAt(0));
-    const IMG = u => { const n = imgs.push(b64(u)), cx = 6120000, cy = Math.round(cx * 600 / 1400);
+    const IMG = (u, r) => { const n = imgs.push(b64(u)), cx = 6120000, cy = Math.round(cx * (r || 600 / 1400));
       return `<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${n}" name="ภาพ ${n}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${n}" name="img${n}.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rImg${n}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`; };
     let body = P(d.title, { b: 1, sz: 36, after: 60 }) + P([d.org, d.period].filter(Boolean).join(" · "), { sz: 24, c: "0B5CAD", after: 40 }) + P("ออกรายงานเมื่อ " + now(), { sz: 18, c: "5B6776", after: 240 });
     deckParts(d).forEach(s => { body += P(s.h, { b: 1, sz: 28, c: "1F2A37", after: 100 });
       if (s.list) s.list.forEach((t, i) => body += P(`${i + 1}. ${t}`, { ind: 1 }));
-      if (s.img) body += IMG(s.img);
+      if (s.img) body += IMG(s.img, s.imgR);
       if (s.rows) body += T(s.head, s.rows);
       if (s.note) body += P(s.note, { i: 1, c: "0B5CAD" }); });
     const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
@@ -199,7 +199,7 @@ window.Office = (() => {
         s.addText(String(k), { x: cx + 0.15, y: cy + 0.9, w: 2.6, h: 0.5, fontFace: F, fontSize: 12, color: MUT }); }); foot(s, ++n); }
     if ((d.analysis || []).length) { s = p.addSlide(); head(s, "บทวิเคราะห์"); bullets(s, d.analysis.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
     (d.sections || []).filter(x => (x.rows && x.rows.length) || x.img).forEach(sec => { s = p.addSlide(); head(s, sec.title);
-      if (!(sec.rows && sec.rows.length)) { s.addImage({ data: sec.img, x: 0.5, y: 1.35, w: 12.3, h: 5.27 }); if (sec.note) s.addText(sec.note, { x: 0.5, y: 6.62, w: 12.3, h: 0.35, fontFace: F, fontSize: 12, color: ACC, italic: true }); foot(s, ++n); return; }
+      if (!(sec.rows && sec.rows.length)) { { const r = sec.imgR || 600 / 1400, w = Math.min(12.3, 5.27 / r); s.addImage({ data: sec.img, x: 0.5, y: 1.35, w, h: w * r }); } if (sec.note) s.addText(sec.note, { x: 0.5, y: 6.62, w: 12.3, h: 0.35, fontFace: F, fontSize: 12, color: ACC, italic: true }); foot(s, ++n); return; }
       const rows = sec.rows.slice(0, 12), withChart = sec.chart !== false && rows.length > 1 && rows.every(r => isNum(r[1]));
       const tw = withChart ? 6.2 : 12.3, cw = sec.colW || sec.head.map((_, i) => i ? (tw * 0.5) / Math.max(1, sec.head.length - 1) : tw * 0.5);
       s.addTable([sec.head.map(h => ({ text: String(h), options: { bold: true, fill: { color: "DCE9F5" }, color: INK } })), ...rows.map(r => r.map((v, i) => ({ text: String(v ?? ""), options: { align: i && !sec.left ? "right" : "left" } })))],

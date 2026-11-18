@@ -123,9 +123,29 @@
         s += `<line x1="${bx - 24}" y1="${yy}" x2="${bx}" y2="${yy}" stroke="#0B5CAD" stroke-width="2"/><text x="${bx - 30}" y="${yy + 6}" text-anchor="end" font-size="16" fill="#1F2A37">${x(cut(t, 28))}</text>`; }); });
     return s + "</svg>";
   }
-  const fishPng = svg => new Promise(ok => { const img = new Image();
-    img.onload = () => { const cv = document.createElement("canvas"); cv.width = 1400; cv.height = 600; cv.getContext("2d").drawImage(img, 0, 0); try { ok(cv.toDataURL("image/png")); } catch (e) { ok(null); } };
+  // step plan (Gantt): every corrective step has an owner, a start date, a planned finish date (วันวางเสร็จ) and a status
+  const ST = ["ยังไม่เริ่ม", "กำลังทำ", "เสร็จ"];
+  const dAdd = (iso, n) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const dDiff = (a, b) => Math.round((new Date(b + "T00:00:00Z") - new Date(a + "T00:00:00Z")) / 864e5);
+  const dm = iso => new Date(iso + "T00:00:00").toLocaleDateString("th-TH", { day: "numeric", month: "short" });
+  function ganttSvg(rows) {
+    const W = 1400, L = 600, R = 1330, top = 58, rh = 34, H = top + rows.length * rh + 16, x = v => esc(v);
+    const d0 = rows.reduce((m, r) => r.start < m ? r.start : m, rows[0].start), d1 = rows.reduce((m, r) => r.end > m ? r.end : m, rows[0].end);
+    const span = Math.max(7, dDiff(d0, d1) + 1), px = d => L + (R - L) * dDiff(d0, d) / span, t = today();
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>` +
+      `<text x="20" y="34" font-size="17" font-weight="bold" fill="#1F2A37">ข้อ · ขั้นตอน</text><text x="${L - 10}" y="34" text-anchor="end" font-size="15" fill="#5B6776">วางเสร็จ</text>`;
+    for (let k = 0; k <= span; k += 7) { const d = dAdd(d0, k), xx = px(d); s += `<line x1="${xx}" y1="${top - 8}" x2="${xx}" y2="${H - 12}" stroke="#E3E9F1"/><text x="${xx + 3}" y="34" font-size="14" fill="#5B6776">${x(dm(d))}</text>`; }
+    rows.forEach((r, i) => { const y = top + i * rh, late = r.status !== "เสร็จ" && r.end < t, col = r.status === "เสร็จ" ? "#14632F" : late ? "#B42318" : r.status === "กำลังทำ" ? "#0B5CAD" : "#7F9CC0";
+      if (i % 2) s += `<rect x="10" y="${y}" width="${W - 20}" height="${rh}" fill="#F6F8FB"/>`;
+      s += `<text x="20" y="${y + 22}" font-size="15" fill="#1F2A37"><tspan font-weight="bold">${x(r.grp)}</tspan> ${x(cut(r.step, 44))}</text><text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="14" fill="${late ? "#B42318" : "#1F2A37"}">${x(dm(r.end))}</text>` +
+        `<rect x="${px(r.start)}" y="${y + 7}" width="${Math.max(6, px(dAdd(r.end, 1)) - px(r.start))}" height="${rh - 14}" rx="5" fill="${col}"/>`; });
+    if (t >= d0 && t <= d1) s += `<line x1="${px(t)}" y1="${top - 8}" x2="${px(t)}" y2="${H - 12}" stroke="#B42318" stroke-width="2" stroke-dasharray="6 4"/><text x="${px(t) + 4}" y="${top - 12}" font-size="13" fill="#B42318">วันนี้</text>`;
+    return { svg: s + "</svg>", w: W, h: H };
+  }
+  const toPng = (svg, w, h) => new Promise(ok => { const img = new Image();
+    img.onload = () => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0); try { ok(cv.toDataURL("image/png")); } catch (e) { ok(null); } };
     img.onerror = () => ok(null); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
+  const fishPng = svg => toPng(svg, 1400, 600);
   const thd = d => d ? new Date(d + "T00:00:00").toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }) : "-";
   const catOf = c => ["5", "6", "7"].includes(c) ? "5" : c[0];
   const has = v => v !== undefined && v !== null && v !== "";
@@ -208,13 +228,34 @@
     drawAp();
   }
   // ---------- action plan for every item that lost points ----------
+  const defStart = () => { const [y, m] = ym(); return new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10); };   // first day of the month after
+  const planDef = (act, owner, due) => { const st = lines(act), S = defStart(), E = due < S ? dAdd(S, 27) : due, n = Math.max(1, st.length), each = Math.max(1, Math.floor((dDiff(S, E) + 1) / n));
+    return st.map((step, i) => ({ step, owner, start: dAdd(S, Math.min(i * each, dDiff(S, E))), end: i === n - 1 ? E : dAdd(S, Math.min((i + 1) * each - 1, dDiff(S, E))), status: ST[0] })); };
   const defDue = () => { const [y, m] = ym(); const d = new Date(Date.UTC(y, m + 1, 0)); return d.toISOString().slice(0, 10); };   // end of the month after
   const failed = () => ITEMS().map(it => ({ it, sc: scoreOf(it, (vals[it.code] || {}).v) })).filter(x => x.sc != null && x.sc < x.it.max);
   const shown = x => { const v = (vals[x.it.code] || {}).v; return x.it.kind === "pass" ? (v === "pass" ? "ผ่าน" : "ไม่ผ่าน") : v + (x.it.kind === "pct" ? "%" : x.it.kind === "count" ? " " : ""); };
   const rcaDef = c => { const L = RCA4[catOf(c)] || RCA4["2"], it = ITEMS().find(i => i.code === c) || { title: "", max: 0, target: "" };
     return { man: L.man.join("\n"), machine: L.machine.join("\n"), method: L.method.join("\n"), material: L.material.join("\n"), why: "",
       proj: `โครงการแก้ไข KPI ข้อ ${c} ${short(it.title)}`, goal: `ข้อ ${c} กลับมาได้ ${it.max}/${it.max} คะแนน (${it.target}) ภายในเดือนถัดไป และคงไว้ 3 เดือนติด`, budget: "ไม่ใช้งบเพิ่ม" }; };
-  const apOf = c => { const x = vals[c] || {}; return { cause: x.cause || "", act: x.act || sugText(c), owner: x.owner || "หัวหน้างานวิศวกรรม (Chief Engineer)", due: x.due || defDue(), rca: Object.assign(rcaDef(c), x.rca || {}) }; };
+  const apOf = c => { const x = vals[c] || {}, a = { cause: x.cause || "", act: x.act || sugText(c), owner: x.owner || "หัวหน้างานวิศวกรรม (Chief Engineer)", due: x.due || defDue() };
+    a.rca = Object.assign(rcaDef(c), x.rca || {}); a.rca.plan = (x.rca && x.rca.plan && x.rca.plan.length) ? x.rca.plan : planDef(a.act, a.owner, a.due); return a; };
+  const planRows = F => F.flatMap(x => apOf(x.it.code).rca.plan.map(p => ({ grp: x.it.code, ...p })));
+  const planHtml = (c, P, dis) => `<div class="plan" id="plan-${c}"><h4>แผนงานและวันวางเสร็จ <small>แต่ละขั้นตอนมีผู้รับผิดชอบ วันเริ่ม และวันวางเสร็จ แถบสีแดง = เลยวันวางเสร็จแล้วยังไม่เสร็จ</small></h4>` +
+    `<div class="tw"><table class="pt"><thead><tr><th>#</th><th>ขั้นตอน</th><th>ผู้รับผิดชอบ</th><th>เริ่ม</th><th>วางเสร็จ</th><th>สถานะ</th>${dis ? "" : "<th></th>"}</tr></thead><tbody>` +
+    P.map((p, i) => `<tr><td>${i + 1}</td><td><input class="ps" aria-label="ขั้นตอน ${i + 1}" data-pl="step" data-k="${c}" data-i="${i}" ${dis} value="${esc(p.step)}"></td>` +
+      `<td><input aria-label="ผู้รับผิดชอบ ขั้นตอน ${i + 1}" data-pl="owner" data-k="${c}" data-i="${i}" ${dis} value="${esc(p.owner)}"></td>` +
+      `<td><input type="date" aria-label="วันเริ่ม ขั้นตอน ${i + 1}" data-pl="start" data-k="${c}" data-i="${i}" ${dis} value="${esc(p.start)}"></td>` +
+      `<td><input type="date" aria-label="วันวางเสร็จ ขั้นตอน ${i + 1}" data-pl="end" data-k="${c}" data-i="${i}" ${dis} value="${esc(p.end)}"></td>` +
+      `<td><select aria-label="สถานะ ขั้นตอน ${i + 1}" data-pl="status" data-k="${c}" data-i="${i}" ${dis}>${ST.map(t => `<option${t === p.status ? " selected" : ""}>${t}</option>`).join("")}</select></td>` +
+      (dis ? "" : `<td><button class="btn small" type="button" data-pdel="${c}|${i}" aria-label="ลบขั้นตอน ${i + 1}">ลบ</button></td>`) + `</tr>`).join("") + `</tbody></table></div>` +
+    (dis ? "" : `<div class="hsel"><button class="btn small" type="button" data-padd="${c}">+ เพิ่มขั้นตอน</button><button class="btn small" type="button" data-preg="${c}">สร้างแผนใหม่จากวิธีแก้ไข</button></div>`) +
+    `<div class="fish" id="gantt-${c}">${P.length ? ganttSvg(P.map(p => ({ grp: c, ...p }))).svg : ""}</div></div>`;
+  function setPlan(c, P, redraw) {
+    const a = apOf(c); vals[c] = Object.assign(vals[c] || { v: "" }, { rca: Object.assign(a.rca, { plan: P, planSet: !!P }) });
+    if (P && P.length) { const end = P.reduce((m, p) => p.end > m ? p.end : m, P[0].end); vals[c].due = end; const d = $("#apd-" + CSS.escape(c)); if (d) d.value = end; }
+    if (redraw) { apSig = ""; drawAp(); return; }
+    const g = $("#gantt-" + CSS.escape(c)); if (g) g.innerHTML = ganttSvg(apOf(c).rca.plan.map(p => ({ grp: c, ...p }))).svg;
+  }
   let apSig = "";
   function drawAp() {
     const F = failed(), w = canWrite(), sig = F.map(x => x.it.code).join(",") + "|" + $("#h").value + $("#m").value;
@@ -235,8 +276,16 @@
 ทำไม 4: …
 ทำไม 5: …">${esc(a.rca.why)}</textarea></div>` +
         `<div><label for="rproj-${c}">ชื่อโครงการแก้ไข</label><input id="rproj-${c}" data-rca="proj" data-k="${c}" ${dis} value="${esc(a.rca.proj)}"><label for="rgoal-${c}" style="margin-top:6px">เป้าหมายโครงการ</label><textarea id="rgoal-${c}" data-rca="goal" data-k="${c}" ${dis} style="min-height:60px">${esc(a.rca.goal)}</textarea><label for="rbud-${c}" style="margin-top:6px">งบประมาณ</label><input id="rbud-${c}" data-rca="budget" data-k="${c}" ${dis} value="${esc(a.rca.budget)}"></div>` +
-        `</div></details></div>`; }).join("");
+        `</div></details>` + planHtml(c, a.rca.plan, dis) + `</div>`; }).join("");
     $("#ap").querySelectorAll("[data-ap]").forEach(el => el.oninput = () => { const c = el.dataset.k; vals[c] = Object.assign(vals[c] || { v: "" }, { [el.dataset.ap]: el.value }); });
+    $("#ap").querySelectorAll("[data-pl]").forEach(el => el.oninput = el.onchange = () => { const c = el.dataset.k, a = apOf(c), P = a.rca.plan.map(p => ({ ...p }));
+      P[+el.dataset.i][el.dataset.pl] = el.value; setPlan(c, P, false); });
+    $("#ap").querySelectorAll("[data-padd]").forEach(el => el.onclick = () => { const c = el.dataset.padd, a = apOf(c), P = a.rca.plan.map(p => ({ ...p })), last = P[P.length - 1];
+      P.push({ step: "", owner: a.owner, start: last ? last.end : defStart(), end: last ? dAdd(last.end, 7) : dAdd(defStart(), 6), status: ST[0] }); setPlan(c, P, true); });
+    $("#ap").querySelectorAll("[data-pdel]").forEach(el => el.onclick = () => { const [c, i] = el.dataset.pdel.split("|"), P = apOf(c).rca.plan.filter((_, k) => k !== +i); setPlan(c, P.length ? P : null, true); });
+    $("#ap").querySelectorAll("[data-preg]").forEach(el => el.onclick = () => setPlan(el.dataset.preg, null, true));
+    // while the head has not edited the plan, it follows the corrective steps, owner and due date
+    $("#ap").querySelectorAll("[data-ap=act],[data-ap=owner],[data-ap=due]").forEach(el => el.addEventListener("change", () => { const x = vals[el.dataset.k] || {}; if (!(x.rca && x.rca.planSet)) setPlan(el.dataset.k, null, true); }));
     $("#ap").querySelectorAll("[data-rca]").forEach(el => el.oninput = () => { const c = el.dataset.k, a = apOf(c); a.rca[el.dataset.rca] = el.value; vals[c] = Object.assign(vals[c] || { v: "" }, { rca: a.rca });
       if (M4.some(m => m[0] === el.dataset.rca)) { const F = failed().find(f => f.it.code === c); $("#fish-" + CSS.escape(c)).innerHTML = fishSvg(c, F ? F.it.title : "", a.rca); } });
   }
@@ -287,6 +336,8 @@
         `ลำดับความสำคัญ: ${F.slice(0, 4).map(x => `${x.it.code} (เสีย ${r1(x.it.max - x.sc)})`).join(", ")}`,
         `ทุกข้อมีผู้รับผิดชอบและกำหนดเสร็จ ติดตามผลในการประชุมประจำเดือนและใน KPI เดือนถัดไป`] : ["ไม่มีข้อที่ตก ยังไม่ต้องทำ Action plan"];
     const pics = await Promise.all(F.map(x => fishPng(fishSvg(x.it.code, x.it.title, apOf(x.it.code).rca))));
+    const PR = planRows(F), chunks = []; for (let i = 0; i < PR.length; i += 14) chunks.push(PR.slice(i, i + 14));
+    const gpics = await Promise.all(chunks.map(ch => { const g = ganttSvg(ch); return toPng(g.svg, g.w, g.h).then(img => ({ img, r: g.h / g.w })); }));
     const sections = F.flatMap((x, k) => { const a = apOf(x.it.code), r = a.rca, why = lines(r.why);
       return [...(pics[k] ? [{ title: `RCA ก้างปลา 4M ข้อ ${x.it.code}`, img: pics[k], note: `สาเหตุราก: ${a.cause || "(ยังไม่ระบุ)"}` }] : []),
         { title: `ข้อ ${x.it.code} ${x.it.title}`.slice(0, 70), head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 15,
@@ -294,11 +345,15 @@
           ["ผู้รับผิดชอบ", a.owner], ["กำหนดเสร็จ", thd(a.due)], ["วัดผล", `KPI ข้อ ${x.it.code} เดือนถัดไปต้องได้ ${x.it.max}/${x.it.max} (${x.it.target})`]] },
         { title: `โครงการแก้ไข ข้อ ${x.it.code}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 14,
           rows: [["ชื่อโครงการ", r.proj], ["เป้าหมาย", r.goal], ...(why.length ? why.slice(0, 5).map((t, i) => [i ? "" : "5 Why", t]) : [["5 Why", "(ยังไม่ได้ทำ)"]]), ["สาเหตุราก", a.cause || "(ยังไม่ระบุ)"],
-            ["งบประมาณ", r.budget || "-"], ["ผู้รับผิดชอบ", a.owner], ["กำหนดเสร็จ", thd(a.due)]] }]; });
+            ["งบประมาณ", r.budget || "-"], ["ผู้รับผิดชอบ", a.owner], ["กำหนดเสร็จ", thd(a.due)]] },
+        { title: `แผนงานและวันวางเสร็จ ข้อ ${x.it.code}`, head: ["ขั้นตอน", "ผู้รับผิดชอบ", "เริ่ม", "วางเสร็จ", "สถานะ"], chart: false, left: true, colW: [5.4, 2.8, 1.4, 1.4, 1.3], fs: 13,
+          rows: r.plan.map((p, i) => [`${i + 1}. ${p.step}`, p.owner, thd(p.start), thd(p.end), p.status !== "เสร็จ" && p.end < today() ? p.status + " (เลยกำหนด)" : p.status]) }]; });
     return { title: `Action plan แก้ไข KPI ${H.code}`, org: H.name, period: mName(y, m), findings,
       kpis: [["คะแนนรวม", t], ["ข้อที่ตก", F.length], ["คะแนนที่เสีย", lostPts], ["เป้าหมาย", "≥ 90"]],
       analysis: F.map(x => `${x.it.code}: ${apOf(x.it.code).cause || "ยังไม่ระบุสาเหตุ"}`).slice(0, 9),
-      sections: [{ title: "แผนแก้ไขสรุป", head: ["ข้อ", "เสีย", "ผู้รับผิดชอบ", "กำหนดเสร็จ"], chart: false, left: true, colW: [4.3, 1.5, 4.0, 2.5], fs: 15, rows: F.map(x => [x.it.code, r1(x.it.max - x.sc), apOf(x.it.code).owner, thd(apOf(x.it.code).due)]) }, ...sections],
+      sections: [...gpics.filter(g => g.img).map((g, i) => ({ title: `แผนงานรวมและวันวางเสร็จ (Gantt)${gpics.length > 1 ? ` ${i + 1}/${gpics.length}` : ""}`, img: g.img, imgR: g.r,
+          note: `ทั้งหมด ${PR.length} ขั้นตอน เริ่ม ${thd(PR.reduce((m, p) => p.start < m ? p.start : m, PR[0].start))} วางเสร็จทั้งหมด ${thd(PR.reduce((m, p) => p.end > m ? p.end : m, PR[0].end))}` })),
+        { title: "แผนแก้ไขสรุป", head: ["ข้อ", "เสีย", "ผู้รับผิดชอบ", "กำหนดเสร็จ"], chart: false, left: true, colW: [4.3, 1.5, 4.0, 2.5], fs: 15, rows: F.map(x => [x.it.code, r1(x.it.max - x.sc), apOf(x.it.code).owner, thd(apOf(x.it.code).due)]) }, ...sections],
       notes: F.length ? ["หัวหน้าติดตามความคืบหน้าทุกสัปดาห์ และรายงานผลในการประชุมประจำเดือนกับโรงพยาบาล", "ถ้าข้อใดแก้ไม่ทันกำหนด ให้แจ้งเหตุผลและวันที่ใหม่ล่วงหน้า"] : [] };
   }
   const apName = () => { const [y, m] = ym(); return `ActionPlan_KPI_${hosp().code}_${y + 543}-${String(m).padStart(2, "0")}`; };
@@ -311,7 +366,8 @@
     failed().forEach(x => { const a = apOf(x.it.code); rows.push([x.it.code, x.it.title, shown(x), x.it.target, x.sc, x.it.max, a.cause, a.act, a.owner, thd(a.due), "กำลังแก้ไข"]); });
     const rca = [["ข้อ", "ตัวชี้วัด", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก", "ชื่อโครงการ", "เป้าหมายโครงการ", "งบประมาณ"]];
     failed().forEach(x => { const a = apOf(x.it.code), r = a.rca; rca.push([x.it.code, x.it.title, ...M4.map(m => lines(r[m[0]]).join("\n")), lines(r.why).join("\n"), a.cause, r.proj, r.goal, r.budget]); });
-    Office.xlsx(apName(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes, figures: d.kpis }), { name: "Action plan", rows, header: 0 }, { name: "RCA ก้างปลา 4M", rows: rca, header: 0 }]); });
+    Office.xlsx(apName(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes, figures: d.kpis }), { name: "Action plan", rows, header: 0 }, { name: "RCA ก้างปลา 4M", rows: rca, header: 0 },
+      { name: "แผนงาน วันวางเสร็จ", rows: [["ข้อ", "ลำดับ", "ขั้นตอน", "ผู้รับผิดชอบ", "เริ่ม", "วางเสร็จ", "จำนวนวัน", "สถานะ"], ...failed().flatMap(x => apOf(x.it.code).rca.plan.map((p, i) => [x.it.code, i + 1, p.step, p.owner, thd(p.start), thd(p.end), dDiff(p.start, p.end) + 1, p.status !== "เสร็จ" && p.end < today() ? p.status + " (เลยกำหนด)" : p.status]))], header: 0 }]); });
 
   // ---------- AI 3 roles: AI 1 proposes, AI 2 analyses and reviews, AI 3 checks, fixes and writes the report ----------
   let aiRep = null;
@@ -354,7 +410,7 @@
         { name: "แผนเวลา", rows: [["ช่วงเวลา", "กิจกรรม"], ...aiRep.timeline.map(x => [x.when, x.activity])], header: 0 }, { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...aiRep.analysis.map(x => [x]), [], ["ความเสี่ยง"], ...aiRep.risks.map(x => [x]), [], ["AI 2 ทบทวน / AI 3 แก้แล้ว"], ...aiRep.review_notes.map(x => [x])], header: 0 }]); });
     if ($("#aiUse")) $("#aiUse").onclick = () => { aiRep.items.forEach(it => { const c = it.code; if (!vals[c]) return;
         vals[c].act = it.actions.map((a, i) => `${i + 1}. ${a.step} (${a.owner} · ${a.due} · วัดผล: ${a.measure})`).join("\n"); if (!vals[c].cause) vals[c].cause = it.root_cause;
-        vals[c].rca = Object.assign(apOf(c).rca, { ...Object.fromEntries(M4.map(m => [m[0], (it.m4[m[0]] || []).join("\n")])), why: (it.why5 || []).join("\n"), proj: it.project.name, goal: it.project.goal, budget: it.project.budget }); });
+        vals[c].rca = Object.assign(apOf(c).rca, { ...Object.fromEntries(M4.map(m => [m[0], (it.m4[m[0]] || []).join("\n")])), why: (it.why5 || []).join("\n"), proj: it.project.name, goal: it.project.goal, budget: it.project.budget, plan: null, planSet: false }); });
       apSig = ""; drawAp(); toast("ใส่แผนของ AI แล้ว ตรวจทานแล้วกด บันทึก"); $("#ap").scrollIntoView({ behavior: "smooth" }); };
   }
   const aiName = () => { const [y, m] = ym(); return `ActionPlan_AI_KPI_${hosp().code}_${y + 543}-${String(m).padStart(2, "0")}`; };
