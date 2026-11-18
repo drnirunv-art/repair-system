@@ -383,8 +383,14 @@
       failed: F.map(x => { const a = apOf(x.it.code); return { code: x.it.code, title: x.it.title, target: x.it.target, actual: shown(x), score: x.sc, max: x.it.max, system_note: x.it.sysNote, cause: a.cause, draft_action: a.act, owner: a.owner, due: a.due,
         rca: { man: lines(a.rca.man), machine: lines(a.rca.machine), method: lines(a.rca.method), material: lines(a.rca.material), why5: lines(a.rca.why), project: a.rca.proj, goal: a.rca.goal, budget: a.rca.budget } }; }) };
     const call = async (extra, label) => { const li = document.createElement("li"); li.textContent = label + " …"; $("#aiSteps").appendChild(li);
-      const { data, error } = await sb.functions.invoke("kpi-ai", { body: { ...body, ...extra } });
-      const msg = error ? (error.context && typeof error.context.json === "function" ? ((await error.context.json().catch(() => ({}))).error || error.message) : error.message) : data && data.error;
+      let data, error, msg;
+      for (let t = 0; t < 2; t++) {
+        ({ data, error } = await sb.functions.invoke("kpi-ai", { body: { ...body, ...extra } }));
+        const st = error && error.context && error.context.status, j = error && error.context && typeof error.context.json === "function" ? await error.context.json().catch(() => ({})) : {};
+        msg = error ? (j.error || (st === 546 || st === 504 ? "AI ใช้เวลานานเกินที่เซิร์ฟเวอร์อนุญาต (150 วินาที)" : j.message || error.message)) + (st ? ` (รหัส ${st})` : "") : data && data.error;
+        if (!msg || !(st === 546 || st === 504 || /ช้าเกิน/.test(msg)) || t) break;
+        li.textContent = label + " … ช้าเกินเวลา กำลังลองใหม่อัตโนมัติ";
+      }
       if (msg) { li.innerHTML = `${esc(label)} <b class="bad">ไม่สำเร็จ: ${esc(msg)}</b>`; throw Object.assign(new Error(msg), { shown: 1 }); }
       li.textContent = label + " ✓"; return { data, li }; };
     try {

@@ -61,15 +61,29 @@ async function pickModel(key: string) {
   return best;
 }
 
+// The free plan stops a function after 150 s, so each Gemini call gets a 110 s limit and light thinking to answer in time.
+let THINK: Record<string, unknown> | null = { thinkingLevel: "low" };
 async function gem(key: string, system: string, user: string, json = false, again = true): Promise<string> {
-  const r = await fetch(`${G}/models/${GEMINI}:generateContent`, {
-    method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: user }] }],
-      generationConfig: { temperature: 0.4, maxOutputTokens: 32000, ...(json ? { responseMimeType: "application/json" } : {}) } }),
-  });
+  const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 110000);
+  let r: Response;
+  try {
+    r = await fetch(`${G}/models/${GEMINI}:generateContent`, {
+      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, signal: ac.signal,
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: user }] }],
+        generationConfig: { temperature: 0.4, maxOutputTokens: 12000, ...(THINK ? { thinkingConfig: THINK } : {}), ...(json ? { responseMimeType: "application/json" } : {}) } }),
+    });
+  } catch (e) {
+    if (ac.signal.aborted) throw new Error("Gemini ตอบช้าเกิน 110 วินาที กดปุ่ม 🤖 อีกครั้ง");
+    throw e;
+  } finally { clearTimeout(timer); }
   // deno-lint-ignore no-explicit-any
   const j: any = await r.json().catch(() => ({}));
   if (r.status === 404 && again) { GEMINI = await pickModel(key); return gem(key, system, user, json, false); }
+  // Older models reject thinkingLevel; fall back to a small thinking budget, then to none.
+  if (r.status === 400 && THINK && /thinking/i.test(j?.error?.message ?? "")) {
+    THINK = "thinkingLevel" in THINK ? { thinkingBudget: 1024 } : null;
+    return gem(key, system, user, json, again);
+  }
   if (!r.ok) throw new Error(`Gemini ขัดข้อง (${r.status}) ${j?.error?.message ?? ""}`.trim());
   // deno-lint-ignore no-explicit-any
   const t = (j?.candidates?.[0]?.content?.parts ?? []).filter((p: any) => !p.thought).map((p: any) => p.text ?? "").join("").trim();
