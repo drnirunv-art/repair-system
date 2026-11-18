@@ -38,7 +38,8 @@ const CONTEXT = `บริบท: บริษัทผู้รับจ้า�
 เขียนเป็นภาษาไทยที่อ่านง่าย ทุกวิธีแก้ต้องทำได้จริงในงานวิศวกรรมอาคารโรงพยาบาล มีผู้รับผิดชอบระดับตำแหน่ง (ไม่ใส่ชื่อคน) มีกำหนดเสร็จเป็นวันที่ และวัดผลได้ด้วยตัวเลข KPI ข้อนั้น
 อย่าแต่งตัวเลขที่ไม่มีในข้อมูล ถ้าข้อมูลไม่พอ ให้บอกว่าต้องเก็บข้อมูลอะไรเพิ่ม
 ใช้หลัก RCA ทุกข้อที่ตก: ก้างปลา (Ishikawa) แยกสาเหตุตาม 4M คือ คน (Man) เครื่องจักร (Machine) วิธีการ (Method) วัสดุ/อะไหล่ (Material) แล้วถาม 5 Why จนถึงสาเหตุราก และตั้งเป็นโครงการแก้ไขที่มีชื่อ เป้าหมาย และงบประมาณ
-ข้อมูลแต่ละข้อมี rca ที่หัวหน้าร่างไว้ (4M, 5 Why, โครงการ) ให้ใช้เป็นจุดเริ่ม`;
+ข้อมูลแต่ละข้อมี rca ที่หัวหน้าร่างไว้ (4M, 5 Why, โครงการ) ให้ใช้เป็นจุดเริ่ม
+เขียนกระชับ ตรงประเด็น เป็นข้อ ๆ ไม่ต้องเกริ่นหรือทวนข้อมูล`;
 const Check = z.object({ approved: z.boolean(), issues: z.array(z.string()), summary: z.string() });
 const CHECK_SHAPE = `ตอบเป็น JSON อย่างเดียว รูปแบบ: {"approved":true,"issues":["สิ่งที่ต้องแก้ 1"],"summary":"สรุปผลการตรวจ 1-2 ประโยค"}
 approved = true เมื่อไม่มีสิ่งที่ต้องแก้แล้วเท่านั้น ถ้า approved = false ต้องมี issues อย่างน้อย 1 ข้อ เขียนแต่ละข้อให้ AI 1 แก้ได้ทันที`;
@@ -135,7 +136,9 @@ Deno.serve(async (req) => {
           if (r.stop_reason === "refusal" || !r.parsed_output) throw new Error("AI ตอบไม่สำเร็จ ลองใหม่อีกครั้ง");
           return r.parsed_output;
         }
-        for (let i = 0; i < 2; i++) {
+        const t0 = Date.now();
+        // a second try only when the first answer came back fast enough to fit in the 150 s limit
+        for (let i = 0; i < 2 && (i === 0 || Date.now() - t0 < 35000); i++) {
           const t = await gem(gkey, `${sys}\n${shape}`, user, true);
           try { const v = schema.safeParse(JSON.parse(t.replace(/^```(?:json)?\s*|\s*```$/g, ""))); if (v.success) return v.data; } catch (_) { /* try once more */ }
         }
