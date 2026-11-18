@@ -40,19 +40,34 @@ const CONTEXT = `บริบท: บริษัทผู้รับจ้า�
 const SHAPE = `ตอบเป็น JSON อย่างเดียว ไม่มีข้อความอื่น รูปแบบ:
 {"summary":"","analysis":[""],"items":[{"code":"","title":"","m4":{"man":[""],"machine":[""],"method":[""],"material":[""]},"why5":["ทำไม 1: ...","ทำไม 2: ..."],"root_cause":"","project":{"name":"","goal":"","budget":""},"actions":[{"step":"","owner":"","due":"","measure":""}],"expected_result":""}],"timeline":[{"when":"","activity":""}],"risks":[""],"review_notes":[""],"follow_up":[""]}
 m4 แต่ละด้านไม่เกิน 4 สาเหตุ แต่ละสาเหตุสั้นไม่เกิน 25 ตัวอักษร`;
-const GEMINI = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
+// Google retires model names over time, so the model is picked from the key's own model list when the preferred one is gone.
+let GEMINI = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
+const G = "https://generativelanguage.googleapis.com/v1beta";
+async function pickModel(key: string) {
+  const r = await fetch(`${G}/models?pageSize=1000`, { headers: { "x-goog-api-key": key } });
+  // deno-lint-ignore no-explicit-any
+  const j: any = await r.json().catch(() => ({}));
+  // deno-lint-ignore no-explicit-any
+  const names: string[] = (j?.models ?? []).filter((m: any) => (m.supportedGenerationMethods ?? []).includes("generateContent")).map((m: any) => String(m.name).replace(/^models\//, ""));
+  const ok = (n: string) => /flash/.test(n) && !/lite|image|tts|live|audio|embed|thinking|exp|preview/.test(n);
+  const best = names.includes("gemini-flash-latest") ? "gemini-flash-latest"
+    : names.filter(ok).sort((a, b) => b.localeCompare(a, "en", { numeric: true }))[0] ?? names.find((n) => /flash/.test(n)) ?? names.find((n) => /gemini/.test(n));
+  if (!best) throw new Error("ไม่พบรุ่น Gemini ที่ key นี้ใช้ได้");
+  return best;
+}
 
-async function gem(key: string, system: string, user: string, json = false) {
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI}:generateContent`, {
+async function gem(key: string, system: string, user: string, json = false, again = true): Promise<string> {
+  const r = await fetch(`${G}/models/${GEMINI}:generateContent`, {
     method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: user }] }],
-      generationConfig: { temperature: 0.4, maxOutputTokens: 16000, ...(json ? { responseMimeType: "application/json" } : {}) } }),
+      generationConfig: { temperature: 0.4, maxOutputTokens: 32000, ...(json ? { responseMimeType: "application/json" } : {}) } }),
   });
   // deno-lint-ignore no-explicit-any
   const j: any = await r.json().catch(() => ({}));
+  if (r.status === 404 && again) { GEMINI = await pickModel(key); return gem(key, system, user, json, false); }
   if (!r.ok) throw new Error(`Gemini ขัดข้อง (${r.status}) ${j?.error?.message ?? ""}`.trim());
   // deno-lint-ignore no-explicit-any
-  const t = (j?.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("").trim();
+  const t = (j?.candidates?.[0]?.content?.parts ?? []).filter((p: any) => !p.thought).map((p: any) => p.text ?? "").join("").trim();
   if (!t) throw new Error("Gemini ไม่ตอบคำขอนี้ ลองใหม่อีกครั้ง");
   return t;
 }
