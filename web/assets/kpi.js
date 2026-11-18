@@ -389,7 +389,7 @@
         const st = error && error.context && error.context.status, j = error && error.context && typeof error.context.json === "function" ? await error.context.json().catch(() => ({})) : {};
         msg = error ? (j.error || (st === 546 || st === 504 ? "AI ใช้เวลานานเกินที่เซิร์ฟเวอร์อนุญาต (150 วินาที)" : j.message || error.message)) + (st ? ` (รหัส ${st})` : "") : data && data.error;
         // busy or slow AI: wait and try again (up to 3 more times, 10/20/30 s apart)
-        if (!msg || !(st === 546 || st === 504 || /ช้าเกิน|503|429|high demand|overload|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(msg)) || t === 3) break;
+        if (!msg || /โควตา|limit: 0/.test(msg) || !(st === 546 || st === 504 || /ช้าเกิน|503|429|high demand|overload|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(msg)) || t === 3) break;
         li.textContent = `${label} … AI ไม่ว่างหรือช้า กำลังลองใหม่อัตโนมัติ (ครั้งที่ ${t + 1}/3)`;
         await new Promise(ok => setTimeout(ok, 10000 * (t + 1)));
       }

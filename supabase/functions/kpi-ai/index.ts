@@ -62,21 +62,25 @@ async function pickModel(key: string) {
   return best;
 }
 
-// When the model is overloaded (503/429), switch to another Flash model the key can use; lighter "lite" models come last.
+// When a model is busy (503) or has no quota on this key (429, e.g. free tier "limit: 0"), try the next model.
+// Only the standard Flash / Flash-Lite names are tried: special models (omni, image, live, preview...) often have no free quota.
+const BAD = new Set<string>();
 async function altModel(key: string, cur: string) {
+  BAD.add(cur);
   const r = await fetch(`${G}/models?pageSize=1000`, { headers: { "x-goog-api-key": key } });
   // deno-lint-ignore no-explicit-any
   const j: any = await r.json().catch(() => ({}));
   // deno-lint-ignore no-explicit-any
   const names: string[] = (j?.models ?? []).filter((m: any) => (m.supportedGenerationMethods ?? []).includes("generateContent")).map((m: any) => String(m.name).replace(/^models\//, ""));
-  const ok = (n: string) => /flash/.test(n) && n !== cur && !/image|tts|live|audio|embed|thinking|exp|preview/.test(n);
-  const sorted = names.filter(ok).sort((a, b) => Number(/lite/.test(a)) - Number(/lite/.test(b)) || b.localeCompare(a, "en", { numeric: true }));
-  return sorted[0] ?? cur;
+  const std = names.filter((n) => /^gemini-\d+(\.\d+)?-flash(-lite)?$/.test(n)).sort((a, b) => Number(/lite/.test(a)) - Number(/lite/.test(b)) || b.localeCompare(a, "en", { numeric: true }));
+  const order = ["gemini-flash-latest", "gemini-flash-lite-latest", ...std].filter((n) => names.includes(n) && !BAD.has(n));
+  if (!order.length) BAD.clear(); // all tried: start fresh on the next request
+  return order[0] ?? null;
 }
 
 // The free plan stops a function after 150 s, so each Gemini call gets a 110 s limit and light thinking to answer in time.
 let THINK: Record<string, unknown> | null = { thinkingLevel: "low" };
-async function gem(key: string, system: string, user: string, json = false, again = true): Promise<string> {
+async function gem(key: string, system: string, user: string, json = false, again = true, tries = 0): Promise<string> {
   const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 110000);
   let r: Response;
   try {
@@ -92,16 +96,16 @@ async function gem(key: string, system: string, user: string, json = false, agai
   // deno-lint-ignore no-explicit-any
   const j: any = await r.json().catch(() => ({}));
   if (r.status === 404 && again) { GEMINI = await pickModel(key); return gem(key, system, user, json, false); }
-  // Overloaded: wait a moment, then try once on another model.
-  if ((r.status === 503 || r.status === 429) && again) {
-    await new Promise((ok) => setTimeout(ok, 2000));
-    GEMINI = await altModel(key, GEMINI);
-    return gem(key, system, user, json, false);
+  // Busy or no quota: move on to the next standard Flash model (up to 3 switches per call; these errors come back fast).
+  if ((r.status === 503 || r.status === 429) && tries < 3) {
+    const next = await altModel(key, GEMINI);
+    if (next) { GEMINI = next; await new Promise((ok) => setTimeout(ok, 1000)); return gem(key, system, user, json, again, tries + 1); }
   }
+  if (r.status === 429) throw new Error("โควตาฟรีของ Gemini วันนี้หมดแล้วทุกรุ่นที่ลองได้ ลองใหม่พรุ่งนี้ หรือเปิดการชำระเงินใน Google AI Studio");
   // Older models reject thinkingLevel; fall back to a small thinking budget, then to none.
   if (r.status === 400 && THINK && /thinking/i.test(j?.error?.message ?? "")) {
     THINK = "thinkingLevel" in THINK ? { thinkingBudget: 1024 } : null;
-    return gem(key, system, user, json, again);
+    return gem(key, system, user, json, again, tries);
   }
   if (!r.ok) throw new Error(`Gemini ขัดข้อง (${r.status}) ${j?.error?.message ?? ""}`.trim());
   // deno-lint-ignore no-explicit-any
