@@ -62,6 +62,18 @@ async function pickModel(key: string) {
   return best;
 }
 
+// When the model is overloaded (503/429), switch to another Flash model the key can use; lighter "lite" models come last.
+async function altModel(key: string, cur: string) {
+  const r = await fetch(`${G}/models?pageSize=1000`, { headers: { "x-goog-api-key": key } });
+  // deno-lint-ignore no-explicit-any
+  const j: any = await r.json().catch(() => ({}));
+  // deno-lint-ignore no-explicit-any
+  const names: string[] = (j?.models ?? []).filter((m: any) => (m.supportedGenerationMethods ?? []).includes("generateContent")).map((m: any) => String(m.name).replace(/^models\//, ""));
+  const ok = (n: string) => /flash/.test(n) && n !== cur && !/image|tts|live|audio|embed|thinking|exp|preview/.test(n);
+  const sorted = names.filter(ok).sort((a, b) => Number(/lite/.test(a)) - Number(/lite/.test(b)) || b.localeCompare(a, "en", { numeric: true }));
+  return sorted[0] ?? cur;
+}
+
 // The free plan stops a function after 150 s, so each Gemini call gets a 110 s limit and light thinking to answer in time.
 let THINK: Record<string, unknown> | null = { thinkingLevel: "low" };
 async function gem(key: string, system: string, user: string, json = false, again = true): Promise<string> {
@@ -80,6 +92,12 @@ async function gem(key: string, system: string, user: string, json = false, agai
   // deno-lint-ignore no-explicit-any
   const j: any = await r.json().catch(() => ({}));
   if (r.status === 404 && again) { GEMINI = await pickModel(key); return gem(key, system, user, json, false); }
+  // Overloaded: wait a moment, then try once on another model.
+  if ((r.status === 503 || r.status === 429) && again) {
+    await new Promise((ok) => setTimeout(ok, 2000));
+    GEMINI = await altModel(key, GEMINI);
+    return gem(key, system, user, json, false);
+  }
   // Older models reject thinkingLevel; fall back to a small thinking budget, then to none.
   if (r.status === 400 && THINK && /thinking/i.test(j?.error?.message ?? "")) {
     THINK = "thinkingLevel" in THINK ? { thinkingBudget: 1024 } : null;
