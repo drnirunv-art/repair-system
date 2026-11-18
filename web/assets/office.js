@@ -156,7 +156,7 @@ window.Office = (() => {
   // pages whose results so far had only an Excel button: PPT / Word / PDF beside it build an executive summary + analysis
   // from the very same rows the Excel file gets (the button's own handler runs; Office.table calls are collected, not saved)
   let deckBuf = null;
-  const TABLE_DECK = { "op.html": ["#sCsv", "#mCsv"], "ac.html": ["#uCsv", "#cCsv"], "gate.html": ["#x"], "survey.html": ["#vCsv"], "pmboard.html": ["#x", "#rx"] };
+  const TABLE_DECK = { "op.html": ["#sCsv", "#mCsv"], "ac.html": ["#uCsv", "#cCsv"], "gate.html": ["#x"], "survey.html": ["#vCsv"], "pmboard.html": ["#x", "#rx"], "staff.html": ["#dExport", "#qExport"] };
   function tableDeck(list) {
     const first = list[0], o = first.opts || {}, title = o.title || first.name.replace(/-/g, " "), many = list.length > 1;
     const d = { title, org: o.org, period: o.period, findings: [], kpis: [], analysis: [], sections: [], notes: [] };

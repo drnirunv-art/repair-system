@@ -5,7 +5,7 @@
   const MANAGER = ["owner", "admin", "chief_engineer", "supervisor"];
   const APPROVER = ["owner", "admin", "chief_engineer"];
   const HOLD_STATUS = { pending: "รอ Owner อนุมัติ", ack: "รับทราบแล้ว", ack_memo: "รับทราบ + ขอ Memo", rejected: "ไม่อนุมัติ" };
-  let invites = [], access = new Map(), emailOf = new Map(), me = null, H = null, staff = [], prios = [], types = [], locs = [], jobs = [], assignees = [], reasons = [];
+  let invites = [], access = new Map(), emailOf = new Map(), me = null, H = null, staff = [], prios = [], types = [], locs = [], jobs = [], assignees = [], reasons = [], qcs = [];
   const grpOf = name => (reasons.find(r => r.name === name) || {}).grp || "";
   function reasonOptions() {
     const act = reasons.filter(r => r.active), groups = [...new Set(act.map(r => r.grp || "อื่น ๆ"))];
@@ -45,6 +45,14 @@
   const typeOf = id => (types.find(t => t.id === id) || {}).name || "ไม่ระบุ";
   const crewOf = j => { const a = assignees.filter(x => x.job_id === j.id && x.active).sort((x, y) => y.is_lead - x.is_lead).map(x => x.profile_id); return a.length ? a : (j.technician_id ? [j.technician_id] : []); };
   const mine = j => me && crewOf(j).includes(me.id);
+  // QS check of a finished job (contract 3.20: Quality Supervisor checks at least 80% of repair jobs a day)
+  const QC_ITEMS = [["done", "ซ่อมได้ตรงตามที่แจ้ง ใช้งานได้"], ["test", "ทดสอบการทำงานแล้ว"], ["clean", "เก็บกวาดพื้นที่เรียบร้อย"], ["safe", "ไม่มีจุดเสี่ยงอันตรายหลงเหลือ"], ["photo", "มีรูปก่อน / หลังซ่อม"], ["inform", "แจ้งผู้แจ้ง / หน่วยงานแล้ว"]];
+  const QC_DONE = ["clear", "evaluated", "close"], QC_TARGET = 80;
+  const qcOf = j => qcs.find(q => q.job_id === j.id);
+  const dayTH = t => new Date(t).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+  const noQc = j => QC_DONE.includes(j.status) && j.cleared_at && !qcOf(j) && mins(j.cleared_at) <= 7 * 1440;
+  const qcDay = d => { const f = jobs.filter(j => j.status !== "cancel" && j.cleared_at && dayTH(j.cleared_at) === d), c = f.filter(qcOf);
+    return { d, n: f.length, c: c.length, p: c.filter(j => qcOf(j).result === "pass").length, pct: f.length ? Math.round(c.length / f.length * 1000) / 10 : null }; };
   const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
   /* ---------- auth ---------- */
@@ -151,12 +159,12 @@
     store.set("rs-staff-tab", t);
     render();
   }
-  const VIEWS = [["all", "ทั้งหมด"], ["mine", "งานของฉัน"], ["review", "รอตรวจงาน"], ["approve", "รออนุมัติพักงาน"], ["appoint", "นัดหมาย"], ["noplan", "ยังไม่ใส่วันกำหนดเสร็จ"], ["planlate", "เลยวันกำหนดเสร็จ"]];
+  const VIEWS = [["all", "ทั้งหมด"], ["mine", "งานของฉัน"], ["review", "รอตรวจงาน"], ["approve", "รออนุมัติพักงาน"], ["appoint", "นัดหมาย"], ["noplan", "ยังไม่ใส่วันกำหนดเสร็จ"], ["planlate", "เลยวันกำหนดเสร็จ"], ["noqc", "ยังไม่ตรวจคุณภาพ (QS)"]];
   function renderViews() {
     const n = { all: jobs.filter(j => OPEN.includes(j.status)).length, mine: jobs.filter(j => OPEN.includes(j.status) && mine(j)).length,
       review: jobs.filter(j => j.status === "clear").length, approve: jobs.filter(j => j.status === "on_hold" && j.hold_status === "pending").length,
       appoint: jobs.filter(j => OPEN.includes(j.status) && (j.appointment_at || j.hold_until)).length,
-      noplan: jobs.filter(noPlan).length, planlate: jobs.filter(planLate).length };
+      noplan: jobs.filter(noPlan).length, planlate: jobs.filter(planLate).length, noqc: jobs.filter(noQc).length };
     $("#wViews").innerHTML = VIEWS.map(([k, l]) => `<button type="button" class="chip" data-view="${k}" aria-pressed="${view === k}">${l}<b>${n[k]}</b></button>`).join("")
       + `<span style="flex:1"></span><button type="button" class="chip" data-bytech aria-pressed="${byTech}">งานยังไม่ปิด รายช่าง</button>
         <button type="button" class="chip" data-layout="card" aria-pressed="${layout === "card"}">การ์ด</button><button type="button" class="chip" data-layout="table" aria-pressed="${layout === "table"}">ตาราง</button>`;
@@ -192,6 +200,8 @@
       const a = await sb.from("job_assignees").select("job_id,profile_id,is_lead,active").in("job_id", open.slice(i, i + 150));
       if (a.data) assignees.push(...a.data);
     }
+    const qc = await sb.from("job_qc").select("*").eq("hospital_id", H.id).gte("checked_at", since).limit(5000);
+    qcs = qc.error ? [] : qc.data;
     const fresh = jobs.filter(j => j.status === "register").map(j => j.id);
     if (knownNew && can()) { const n = fresh.filter(id => !knownNew.has(id)).length; if (n) newJobPopup(n, fresh.length); }
     knownNew = new Set(fresh);
@@ -270,6 +280,11 @@
     if (a === "pr") return prForm(j.id, ok("pr"));
     if (a === "memo") return memoForm(j, null, ok("memo"));
     if (a === "reopen" || a === "cancel") return `<label class="span2">เหตุผล *<input id="iNote"></label>${ok(a)}`;
+    if (a === "qc") { const q = qcOf(j) || { items: {} };
+      return `<div class="full meta">ตรวจคุณภาพงานซ่อม (Quality Supervisor) ตามสัญญาข้อ 3.20 · ติ๊กข้อที่ผ่าน</div>
+        ${QC_ITEMS.map(([k, l]) => `<label class="ck"><input type="checkbox" name="iQc" value="${k}" ${(q.items || {})[k] ? "checked" : ""}> ${l}</label>`).join("")}
+        <label>ผลตรวจ *<select id="iQcRes"><option value="pass" ${q.result !== "fail" ? "selected" : ""}>ผ่าน</option><option value="fail" ${q.result === "fail" ? "selected" : ""}>ไม่ผ่าน (ต้องแก้)</option></select></label>
+        <label class="span2">หมายเหตุ / สิ่งที่ต้องแก้ (ต้องใส่เมื่อไม่ผ่าน)<input id="iNote" maxlength="500" value="${esc(q.note || "")}" placeholder="เช่น ยังไม่เก็บเศษฝ้า"></label>${ok("qc")}`; }
     if (a === "history") return `<div class="full" id="hist-${j.id}">กำลังโหลด…</div><div class="row"><button class="btn small" type="button" data-cancel>ปิด</button></div>`;
     return "";
   }
@@ -310,6 +325,7 @@
       if (j.status === "on_hold" && j.hold_status === "pending" && isApprover()) acts += b("decide", "พิจารณาพักงาน", 1);
       if (j.status === "work_on") acts += b("clear", "ซ่อมเสร็จ", 1) + b("on_hold", "พักงาน");
       if (j.status === "clear" && isMgr()) acts += b("close", "ตรวจแล้ว ปิดงาน", 1) + b("reopen", "ส่งกลับแก้ไข");
+      if (QC_DONE.includes(j.status) && isMgr()) acts += b("qc", qcOf(j) ? "แก้ผลตรวจคุณภาพ (QS)" : "ตรวจคุณภาพ (QS)", !qcOf(j) && j.status !== "clear");
       if (["register", "assign", "work_on", "on_hold"].includes(j.status)) acts += b("appoint", "นัดหมาย") + b("plan", j.plan_due ? "เลื่อนวันกำหนดเสร็จ" : "ใส่วันกำหนดเสร็จ", noPlan(j));
       if (!["close", "cancel"].includes(j.status)) acts += b("parts", "เบิกอะไหล่");
       if (OPEN.includes(j.status)) acts += b("pr", "ขอซื้อ") + b("memo", "เขียน Memo", j.memo_requested && !memos.some(m => m.job_id === j.id && m.status !== "cancel"));
@@ -332,6 +348,8 @@
           ...memos.filter(x => x.job_id === j.id).map(x => `<a href="doc.html?memo=${x.id}" target="_blank" rel="noopener" class="mono">${esc(x.memo_no)}</a> <span class="st ${x.status}">${MEMO_STATUS[x.status]}</span>`)];
           return d.length ? `<div class="meta">เอกสาร: ${d.join(" ")}</div>` : ""; })()}
         ${j.summary ? `<div class="meta">สรุปการซ่อม: ${esc(j.summary)}${j.uses_parts ? " · ใช้อะไหล่" : ""}</div>` : ""}
+        ${(() => { const q = qcOf(j); if (q) return `<div class="meta"><b style="color:${q.result === "pass" ? "#157a52" : "var(--bad)"}">QS: ${q.result === "pass" ? "✅ ผ่าน" : "❌ ไม่ผ่าน"}</b> · ${QC_ITEMS.filter(([k]) => (q.items || {})[k]).length}/${QC_ITEMS.length} ข้อ · โดย ${esc(nameOf(q.checked_by) || "-")} ${fmt(q.checked_at)}${q.note ? " · " + esc(q.note) : ""}</div>`;
+          return QC_DONE.includes(j.status) && j.cleared_at ? `<div class="meta"><b style="color:var(--bad)">ยังไม่ตรวจคุณภาพ (QS)</b></div>` : ""; })()}
         ${j.rating ? `<div class="meta">ผู้แจ้งให้คะแนน ${"★".repeat(j.rating)}${"☆".repeat(5 - j.rating)}${j.rating_comment ? " · " + esc(j.rating_comment) : ""}</div>` : ""}
         <div class="meta">${photoLinks("ผู้แจ้ง", j.photo_paths)}${photoLinks("ก่อนซ่อม", j.before_photo_paths)}${photoLinks("หลังซ่อม", j.close_photo_paths)}</div></div>
       <div class="side">${pill(j.status, statusLabel(j))}${pr ? `<span class="pr${crit ? " crit" : ""}">${esc(pr.name)}</span>` : ""}
@@ -347,6 +365,7 @@
     if (view === "appoint") return OPEN.includes(j.status) && (j.appointment_at || j.hold_until);
     if (view === "noplan") return noPlan(j);
     if (view === "planlate") return planLate(j);
+    if (view === "noqc") return noQc(j);
     return true;
   }
   // compact one-line-per-job table (like a spreadsheet); "จัดการ" opens the full card under the row
@@ -378,6 +397,8 @@
       : list.sort((a, b) => (isLate(b) - isLate(a)) || (slaOf(a) - slaOf(b)) || b.created_at.localeCompare(a.created_at));
     $("#wStatus").disabled = !useStatus;
     let html = can() ? "" : `<div class="note">บัญชี Observer ดูได้อย่างเดียว</div>`;
+    if (view === "noqc" || view === "review") { const q = qcDay(todayTH());
+      html += `<div class="note${q.pct != null && q.pct < QC_TARGET ? " bad" : ""}">ตรวจคุณภาพ (QS) วันนี้: ซ่อมเสร็จ ${q.n} ใบ ตรวจแล้ว ${q.c} ใบ${q.pct != null ? ` (${q.pct}%)` : ""} · เป้าตามสัญญา อย่างน้อย ${QC_TARGET}% ต่อวัน${q.n && q.pct < QC_TARGET ? ` · ต้องตรวจเพิ่มอีก ${Math.ceil(q.n * QC_TARGET / 100) - q.c} ใบ` : ""}</div>`; }
     if (view === "appoint") {
       let last = "";
       list.slice(0, 300).forEach(j => { const d = fmtDate(apptKey(j).slice(0, 10)); if (d !== last) { html += `<h3 class="day">${d}</h3>`; last = d; } html += card(j); });
@@ -455,6 +476,13 @@
         }
         if (a === "pr") await savePr(id);
         if (a === "memo") await saveMemo(id);
+        if (a === "qc") {
+          const items = Object.fromEntries(QC_ITEMS.map(([k]) => [k, !!document.querySelector(`input[name="iQc"][value="${k}"]:checked`)]));
+          if (v("#iQcRes") === "fail" && !v("#iNote")) throw new Error("ไม่ผ่าน: กรุณาเขียนสิ่งที่ต้องแก้");
+          const { error } = await sb.rpc("qc_save", { p_job_id: id, p_result: v("#iQcRes"), p_items: items, p_note: v("#iNote") || null }); if (error) throw error;
+          const j = jobs.find(x => x.id === id); editing = null; await loadJobs();
+          toast(v("#iQcRes") === "fail" && j && j.status === "clear" ? "บันทึกผล QS แล้ว: ไม่ผ่าน กด “ส่งกลับแก้ไข” เพื่อให้ช่างแก้งาน" : "บันทึกผลตรวจคุณภาพ (QS) แล้ว");
+        }
         if (a === "reopen") { if (!v("#iNote")) throw new Error("ใส่เหตุผล"); await transition(id, "work_on", { p_note: "ส่งกลับ: " + v("#iNote") }); }
         if (a === "cancel") { if (!v("#iNote")) throw new Error("ใส่เหตุผล"); await transition(id, "cancel", { p_note: "ยกเลิก: " + v("#iNote") }); }
       } catch (err) { alertBar(errText(err)); t.disabled = false; t.textContent = "บันทึก"; }
@@ -559,7 +587,29 @@
       const done = inR.filter(j => j.priority_id === p.id && j.cleared_at), ok = done.filter(j => workMins(j, j.cleared_at) <= p.sla_minutes).length;
       return `<tr><td>${esc(p.name)}</td><td>${dur(p.sla_minutes)}</td><td>${done.length}</td><td>${done.length ? Math.round(ok / done.length * 100) + "%" : "-"}</td><td>${open.filter(j => j.priority_id === p.id && isLate(j)).length}</td></tr>`;
     }).join("") + `<tr><td colspan="5" class="meta">เวลา SLA ไม่นับช่วงพักงาน</td></tr>`;
+    const qd = qcDays();
+    $("#dQc").innerHTML = "<tr><th>วันที่ (ซ่อมเสร็จ)</th><th>ซ่อมเสร็จ</th><th>ตรวจ QS แล้ว</th><th>ผ่าน</th><th>% ตรวจ</th><th>ตามเป้า 80%</th></tr>" + (qd.length ? qd.map(q =>
+      `<tr><td>${fmtDate(q.d)}</td><td>${q.n}</td><td>${q.c}</td><td>${q.p}</td><td><b style="color:${q.pct >= QC_TARGET ? "#157a52" : "var(--bad)"}">${q.pct}%</b></td><td>${q.pct >= QC_TARGET ? "ผ่าน" : `ขาด ${Math.ceil(q.n * QC_TARGET / 100) - q.c} ใบ`}</td></tr>`).join("")
+      : `<tr><td colspan="6" class="meta">ยังไม่มีงานที่ซ่อมเสร็จในช่วงนี้</td></tr>`);
   }
+  // days (Bangkok) in the dashboard range that have finished jobs; no range = last 14 days
+  function qcDays() {
+    const f = $("#dFrom").value || dayTH(Date.now() - 13 * 864e5), t = $("#dTo").value || todayTH();
+    return [...new Set(jobs.filter(j => j.status !== "cancel" && j.cleared_at).map(j => dayTH(j.cleared_at)))].filter(d => d >= f && d <= t).sort().reverse().map(qcDay);
+  }
+  $("#qExport").onclick = () => {
+    const qd = qcDays(), set = new Set(qd.map(q => q.d)), all = qd.reduce((a, q) => ({ n: a.n + q.n, c: a.c + q.c, p: a.p + q.p }), { n: 0, c: 0, p: 0 });
+    const list = jobs.filter(j => j.status !== "cancel" && j.cleared_at && set.has(dayTH(j.cleared_at))).sort((a, b) => b.cleared_at.localeCompare(a.cleared_at));
+    const head = ["เลขใบงาน", "วันที่ซ่อมเสร็จ", "อาคาร", "แผนก", "รายละเอียด", "ประเภทงาน", "ช่าง", "สถานะ", "ผลตรวจ QS", ...QC_ITEMS.map(x => x[1]), "หมายเหตุ QS", "ผู้ตรวจ", "เวลาตรวจ"];
+    const body = list.map(j => { const q = qcOf(j); return [j.job_no, fmt(j.cleared_at), j.building, j.department, j.detail, typeOf(j.job_type_id), crewOf(j).map(nameOf).join(", "), statusLabel(j),
+      q ? (q.result === "pass" ? "ผ่าน" : "ไม่ผ่าน") : "ยังไม่ตรวจ", ...QC_ITEMS.map(([k]) => q ? ((q.items || {})[k] ? "ผ่าน" : "ไม่ผ่าน") : ""), q && q.note, q ? nameOf(q.checked_by) : "", q ? fmt(q.checked_at) : ""]; });
+    const pct = all.n ? Math.round(all.c / all.n * 1000) / 10 : 0, low = qd.filter(q => q.pct < QC_TARGET);
+    csv(`ตรวจคุณภาพ-QS-${H.code}-${qd.length ? qd[qd.length - 1].d + "-" + qd[0].d : todayTH()}`, head, body, { title: "ตรวจคุณภาพงานซ่อม (Quality Supervisor) ตามสัญญาข้อ 3.20",
+      period: qd.length ? `${fmtDate(qd[qd.length - 1].d)} ถึง ${fmtDate(qd[0].d)}` : "",
+      findings: [`ซ่อมเสร็จ ${all.n} ใบ ตรวจ QS แล้ว ${all.c} ใบ (${pct}%) ผ่าน ${all.p} ใบ ไม่ผ่าน ${all.c - all.p} ใบ`,
+        `วันที่ตรวจได้ตามเป้า ${QC_TARGET}%: ${qd.length - low.length} จาก ${qd.length} วัน${low.length ? ` · ต่ำกว่าเป้า: ${low.slice(0, 7).map(q => `${fmtDate(q.d)} ${q.pct}%`).join(", ")}${low.length > 7 ? " …" : ""}` : ""}`],
+      notes: ["เป้าตามสัญญาข้อ 3.20: Quality Supervisor ตรวจงานซ่อมไม่น้อยกว่า 80% ของงานที่ซ่อมเสร็จในแต่ละวัน"] });
+  };
   $("#dExport").onclick = () => {
     const f = $("#dFrom").value, t = $("#dTo").value;
     const rows = jobs.filter(j => { const d = day(j.created_at); return (!f || d >= f) && (!t || d <= t); });
