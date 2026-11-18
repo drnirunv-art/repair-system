@@ -1,7 +1,30 @@
 -- KPI ตามสัญญา (เอกสารแนบ 4) รายเดือนต่อโรงพยาบาล.
--- Uses the existing kpi_monthly table (made in 0006, unused until now): one row per hospital, month and item code ('1.2', '8.3.1' ...).
+-- Table kpi_monthly: one row per hospital, month and item code ('1.2', '8.3.1' ...). Same shape as in 0006, which was never applied
+-- to the live database, so it is created here only when missing.
 -- Additive only: two columns, read/write policies for the 12-hospital executives, and one read-only function that counts
 -- the figures the system already holds (PM plan vs done, repair jobs on time, response time, repeat jobs, backlog, aging, ratings).
+
+create table if not exists public.kpi_monthly (
+  id bigint generated always as identity primary key,
+  hospital_id uuid not null references public.hospitals(id),
+  month date not null,                 -- first day of month
+  item text not null,                  -- item code of แนบ 4, e.g. '1.2'
+  target text,
+  actual numeric,
+  score numeric,
+  max_score numeric,
+  note text,
+  updated_at timestamptz not null default now(),
+  unique (hospital_id, month, item)
+);
+alter table public.kpi_monthly enable row level security;
+do $p$ begin
+  if not exists (select 1 from pg_policies where tablename = 'kpi_monthly' and policyname = 'kpi staff read') then
+    create policy "kpi staff read" on public.kpi_monthly for select to authenticated using (hospital_id = public.my_hospital()); end if;
+  if not exists (select 1 from pg_policies where tablename = 'kpi_monthly' and policyname = 'kpi managed') then
+    create policy "kpi managed" on public.kpi_monthly for all to authenticated
+      using (hospital_id = public.my_hospital() and public.is_manager()) with check (hospital_id = public.my_hospital() and public.is_manager()); end if;
+end $p$;
 
 alter table public.kpi_monthly add column if not exists updated_by uuid references public.profiles(id);
 alter table public.kpi_monthly add column if not exists source text;   -- 'auto' = value from the system, 'manual' = typed by a head
@@ -59,8 +82,9 @@ begin
     -- pauses approved by the hospital (waiting for special parts, no access, approved contractor ...) are not backlog
     'open_excl', (select count(*) from op where status = 'on_hold' and hold_status in ('ack','ack_memo')),
     'aging_over60', (select count(*) from op where created_at < me - interval '60 days'),
-    'eval_n', (select count(*) from job_evaluations e join j on j.id = e.job_id where e.created_at >= ms and e.created_at < me),
-    'eval_avg', (select round(avg(e.score)::numeric, 2) from job_evaluations e join j on j.id = e.job_id where e.created_at >= ms and e.created_at < me)
+    -- satisfaction: the 1-5 rating the reporter gives on the intake slip
+    'eval_n', (select count(*) from j where rating is not null and rated_at >= ms and rated_at < me),
+    'eval_avg', (select round(avg(rating)::numeric, 2) from j where rating is not null and rated_at >= ms and rated_at < me)
   ) into r;
   return r;
 end $$;
