@@ -40,7 +40,8 @@ const CONTEXT = `บริบท: บริษัทผู้รับจ้า�
 อย่าแต่งตัวเลขที่ไม่มีในข้อมูล ถ้าข้อมูลไม่พอ ให้บอกว่าต้องเก็บข้อมูลอะไรเพิ่ม
 ใช้หลัก RCA ทุกกลุ่มปัญหา: ก้างปลา (Ishikawa) แยกสาเหตุตาม 4M คือ คน (Man) เครื่องจักร (Machine) วิธีการ (Method) วัสดุ/อะไหล่ (Material) แล้วถาม 5 Why จนถึงสาเหตุราก และตั้งเป็นโครงการแก้ไขที่มีชื่อ เป้าหมาย และงบประมาณ
 แบ่งงานค้างเป็นกลุ่มปัญหาตามสาเหตุที่ค้าง (เช่น คน/เครื่องมือ/งบ, รออะไหล่, รอผู้รับเหมา, รออนุมัติ, เข้าพื้นที่ไม่ได้) และอายุงาน ใส่เลขใบงานที่เกี่ยวข้องใน tickets (ไม่เกิน 10 ใบต่อกลุ่ม เลือกใบที่ค้างนานที่สุด)
-ใช้ร่างและข้อมูลที่ Chief กรอกไว้เป็นจุดเริ่ม`;
+ใช้ร่างและข้อมูลที่ Chief กรอกไว้เป็นจุดเริ่ม
+ต้องตอบให้เสร็จเร็ว: เขียนสั้น ไม่ทวนข้อมูลที่ให้มา ไม่เกิน 5 กลุ่มปัญหา (รวมกลุ่มเล็กเข้าด้วยกัน) แต่ละกลุ่มไม่เกิน 4 ขั้นตอนแก้ไข ข้อความ AI 1 และ AI 2 ไม่เกิน 600 คำ แผนเวลาไม่เกิน 6 แถว`;
 const Check = z.object({ approved: z.boolean(), issues: z.array(z.string()), summary: z.string() });
 const CHECK_SHAPE = `ตอบเป็น JSON อย่างเดียว รูปแบบ: {"approved":true,"issues":["สิ่งที่ต้องแก้ 1"],"summary":"สรุปผลการตรวจ 1-2 ประโยค"}
 approved = true เมื่อไม่มีสิ่งที่ต้องแก้แล้วเท่านั้น ถ้า approved = false ต้องมี issues อย่างน้อย 1 ข้อ เขียนแต่ละข้อให้ AI 1 แก้ได้ทันที`;
@@ -80,15 +81,15 @@ async function altModel(key: string, cur: string) {
 }
 
 // The free plan stops a function after 150 s, so each Gemini call gets a 110 s limit and light thinking to answer in time.
-let THINK: Record<string, unknown> | null = { thinkingLevel: "low" };
-async function gem(key: string, system: string, user: string, json = false, again = true, tries = 0): Promise<string> {
+let THINK: Record<string, unknown> | null = { thinkingLevel: "minimal" };
+async function gem(key: string, system: string, user: string, json = false, again = true, tries = 0, maxTok = json ? 9000 : 5000): Promise<string> {
   const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 110000);
   let r: Response;
   try {
     r = await fetch(`${G}/models/${GEMINI}:generateContent`, {
       method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, signal: ac.signal,
       body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: user }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 12000, ...(THINK ? { thinkingConfig: THINK } : {}), ...(json ? { responseMimeType: "application/json" } : {}) } }),
+        generationConfig: { temperature: 0.4, maxOutputTokens: maxTok, ...(THINK ? { thinkingConfig: THINK } : {}), ...(json ? { responseMimeType: "application/json" } : {}) } }),
     });
   } catch (e) {
     if (ac.signal.aborted) throw new Error("Gemini ตอบช้าเกิน 110 วินาที กดปุ่ม 🤖 อีกครั้ง");
@@ -96,17 +97,17 @@ async function gem(key: string, system: string, user: string, json = false, agai
   } finally { clearTimeout(timer); }
   // deno-lint-ignore no-explicit-any
   const j: any = await r.json().catch(() => ({}));
-  if (r.status === 404 && again) { GEMINI = await pickModel(key); return gem(key, system, user, json, false); }
+  if (r.status === 404 && again) { GEMINI = await pickModel(key); return gem(key, system, user, json, false, tries, maxTok); }
   // Busy or no quota: move on to the next standard Flash model (up to 3 switches per call; these errors come back fast).
   if ((r.status === 503 || r.status === 429) && tries < 3) {
     const next = await altModel(key, GEMINI);
-    if (next) { GEMINI = next; await new Promise((ok) => setTimeout(ok, 1000)); return gem(key, system, user, json, again, tries + 1); }
+    if (next) { GEMINI = next; await new Promise((ok) => setTimeout(ok, 1000)); return gem(key, system, user, json, again, tries + 1, maxTok); }
   }
   if (r.status === 429) throw new Error("โควตาฟรีของ Gemini วันนี้หมดแล้วทุกรุ่นที่ลองได้ ลองใหม่พรุ่งนี้ หรือเปิดการชำระเงินใน Google AI Studio");
   // Older models reject thinkingLevel; fall back to a small thinking budget, then to none.
   if (r.status === 400 && THINK && /thinking/i.test(j?.error?.message ?? "")) {
-    THINK = "thinkingLevel" in THINK ? { thinkingBudget: 1024 } : null;
-    return gem(key, system, user, json, again, tries);
+    THINK = "thinkingLevel" in THINK ? { thinkingBudget: 512 } : null;
+    return gem(key, system, user, json, again, tries, maxTok);
   }
   if (!r.ok) throw new Error(`Gemini ขัดข้อง (${r.status}) ${j?.error?.message ?? ""}`.trim());
   // deno-lint-ignore no-explicit-any

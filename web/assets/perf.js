@@ -337,16 +337,20 @@
   $("#aiGo").onclick = guard(async () => {
     if (!BL.rows.length && !tbl("sum").some(r => String(r[3]).trim())) return toast("อัปโหลดไฟล์ Backlog หรือกรอกรายงานก่อน แล้วค่อยให้ AI วิเคราะห์", true);
     const box = $("#aiBox"); box.hidden = false;
-    box.innerHTML = `<h3>Action plan โดย AI 3 คน</h3>${ROLES}<p>อาจใช้เวลาหลายนาที อย่าเพิ่งปิดหน้านี้</p><ol id="aiSteps"></ol>`;
+    box.innerHTML = `<h3>Action plan โดย AI 3 คน</h3>${ROLES}<p>ใช้เวลาประมาณ 2–6 นาที ระหว่างนี้อย่าปิดหน้า อย่าสลับแอป และอย่าให้จอมือถือดับ</p><ol id="aiSteps"></ol>`;
     const body = aiInput();
     const call = async (extra, label) => { const li = document.createElement("li"); li.textContent = label + " …"; $("#aiSteps").appendChild(li);
+      // show the seconds ticking so people see the page is still working (each step can take 1-2 minutes)
+      const t0 = Date.now(), tick = setInterval(() => { if (/…/.test(li.textContent)) li.textContent = `${label} … กำลังทำงาน ${Math.round((Date.now() - t0) / 1000)} วินาที${li.dataset.retry ? ` · AI ไม่ว่างหรือช้า ลองใหม่อัตโนมัติครั้งที่ ${li.dataset.retry}/3` : ""}`; }, 1000);
+      try { return await callOnce(extra, label, li); } finally { clearInterval(tick); } };
+    const callOnce = async (extra, label, li) => {
       let data, error, msg;
       for (let t = 0; t < 4; t++) {
         ({ data, error } = await sb.functions.invoke("perf-ai", { body: { ...body, ...extra } }));
         const st = error && error.context && error.context.status, j = error && error.context && typeof error.context.json === "function" ? await error.context.json().catch(() => ({})) : {};
         msg = error ? (j.error || (st === 546 || st === 504 ? "AI ใช้เวลานานเกินที่เซิร์ฟเวอร์อนุญาต (150 วินาที)" : j.message || error.message)) + (st ? ` (รหัส ${st})` : "") : data && data.error;
         if (!msg || /โควตา|limit: 0/.test(msg) || !(st === 546 || st === 504 || /ช้าเกิน|503|429|high demand|overload|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(msg)) || t === 3) break;
-        li.textContent = `${label} … AI ไม่ว่างหรือช้า กำลังลองใหม่อัตโนมัติ (ครั้งที่ ${t + 1}/3)`;
+        li.textContent = `${label} … AI ไม่ว่างหรือช้า กำลังลองใหม่อัตโนมัติ (ครั้งที่ ${t + 1}/3)`; li.dataset.retry = t + 1;
         await new Promise(ok => setTimeout(ok, 10000 * (t + 1)));
       }
       if (msg) { li.innerHTML = `${esc(label)} <b class="bad">ไม่สำเร็จ: ${esc(msg)}</b>`; throw Object.assign(new Error(msg), { shown: 1 }); }

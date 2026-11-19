@@ -67,11 +67,11 @@
         <div class="sub">ใช้ไฟล์ "backlog_โรงพยาบาล_วันที่.xlsx" (แผ่นงาน รายการงานค้าง) หรือไฟล์ภาพรวมทั้งเครือ (ระบบเลือกแผ่นงานของโรงนี้ให้เอง) ต้องมีหัวตาราง เลขใบงาน · อายุ (วัน) · สถานะค้าง · เหตุผล</div>
         <input type="file" id="blFile" accept=".xlsx"> <button class="btn small" type="button" id="blSys">หรือใช้งานค้างในระบบ RS</button>
         <div id="blMsg"></div></div>
-      <div id="blSum"></div>
       <div class="sec"><h2>Action plan โดย AI 3 คน (RCA ก้างปลา 4M + 5 Why)</h2>
         <p class="sub">AI 1 เสนอ → AI 2 วิเคราะห์ ทบทวน → AI 3 ตรวจสอบ ถ้า AI 3 สั่งแก้ AI 1 แก้และ AI 2 ทบทวนใหม่ วนจนผ่าน (ไม่เกิน 4 รอบ) แล้ว AI 3 เรียบเรียงรายงาน ใช้ข้อมูลงานค้างที่อัปโหลด และตัวเลขในรายงาน Chief (ไม่ส่งชื่อผู้รับผิดชอบไปให้ AI)</p>
         <div class="acts"><button class="btn primary" type="button" id="aiGo">🤖 ให้ AI 3 คนวิเคราะห์และทำ Action plan</button></div>
         <div class="aib" id="aiBox" hidden></div></div>
+      <div id="blSum"></div>
       <div id="blList"></div>
     </section>
 
