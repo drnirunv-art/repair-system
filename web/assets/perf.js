@@ -398,6 +398,16 @@
         s += `<line x1="${bx - 24}" y1="${yy}" x2="${bx}" y2="${yy}" stroke="#0B5CAD" stroke-width="2"/><text x="${bx - 30}" y="${yy + 6}" text-anchor="end" font-size="16" fill="#1F2A37">${x(cut(t, 28))}</text>`; }); });
     return s + "</svg>";
   }
+  // SWOT 2x2: strengths / weaknesses (inside the team), opportunities / threats (outside)
+  const SW = [["strengths", "S จุดแข็ง", "14632F", "E3F3E8"], ["weaknesses", "W จุดอ่อน", "B42318", "FDE8E6"], ["opportunities", "O โอกาส", "0B5CAD", "E3EEFA"], ["threats", "T อุปสรรค", "8A5A00", "FCEFD2"]];
+  function swotSvg(sw) {
+    const W = 1400, H = 700, x = v => esc(v);
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
+    SW.forEach(([k, lab, ink, bg], i) => { const X = 20 + (i % 2) * 690, Y = 20 + Math.floor(i / 2) * 340;
+      s += `<rect x="${X}" y="${Y}" width="670" height="320" rx="12" fill="#${bg}" stroke="#${ink}" stroke-width="3"/><text x="${X + 24}" y="${Y + 44}" font-size="26" font-weight="bold" fill="#${ink}">${lab}</text>`;
+      ((sw && sw[k]) || []).slice(0, 5).forEach((t, j) => { s += `<text x="${X + 30}" y="${Y + 98 + j * 48}" font-size="23" fill="#1F2A37">${x("• " + cut(t, 44))}</text>`; }); });
+    return s + "</svg>";
+  }
   const toPng = (svg, w, h) => new Promise(ok => { const img = new Image();
     img.onload = () => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0); try { ok(cv.toDataURL("image/png")); } catch (e) { ok(null); } };
     img.onerror = () => ok(null); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
@@ -445,6 +455,7 @@
         `<p><b>5 Why:</b></p><ol>${(it.why5 || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><p><b>สาเหตุราก:</b> ${esc(it.root_cause)}</p>` +
         `<p><b>โครงการแก้ไข:</b> ${esc(it.project.name)} · <b>เป้าหมาย:</b> ${esc(it.project.goal)} · <b>งบประมาณ:</b> ${esc(it.project.budget)}</p><div class="tw"><table><thead><tr><th>วิธีการ / ขั้นตอน</th><th>ผู้รับผิดชอบ</th><th>กำหนดเสร็จ</th><th>วัดผล</th></tr></thead><tbody>` +
         it.actions.map(a => `<tr><td>${esc(a.step)}</td><td>${esc(a.owner)}</td><td>${esc(a.due)}</td><td>${esc(a.measure)}</td></tr>`).join("") + `</tbody></table></div><p><b>ผลที่คาดหวัง:</b> ${esc(it.expected_result)}</p>`).join("") +
+      (R.swot ? `<h3>SWOT ของงานวิศวกรรมรอบนี้</h3><div class="fish">${swotSvg(R.swot)}</div>` : "") +
       `<h3>แผนเวลา</h3><div class="tw"><table><thead><tr><th>ช่วงเวลา</th><th>กิจกรรม</th></tr></thead><tbody>${R.timeline.map(x => `<tr><td>${esc(x.when)}</td><td>${esc(x.activity)}</td></tr>`).join("")}</tbody></table></div>` +
       `<h3>ความเสี่ยงของแผน</h3><ul>${R.risks.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       `<h3>การตรวจวนของ AI 3</h3><div class="tw"><table><thead><tr><th>รอบ</th><th>ผลตรวจ</th><th>สิ่งที่สั่งแก้ / สรุป</th></tr></thead><tbody>${logRows().map(r => `<tr><td>${esc(r[0])}</td><td><b class="${r[1] === "ผ่าน" ? "ok" : "bad"}">${esc(r[1])}</b></td><td>${esc(r[2]).replace(/\n/g, "<br>")}</td></tr>`).join("")}</tbody></table></div>` +
@@ -453,7 +464,7 @@
       (canWrite ? `<button class="btn" type="button" id="aiUse">ใส่แผนของ AI ลงข้อ 13 คำมั่นรอบหน้า</button>` : "") + `</div>`;
     const run = fn => () => aiDeck().then(fn).catch(e => toast(errText(e), true));
     $("#aiP").onclick = run(d => Office.pptx(fname("ActionPlanAI"), d)); $("#aiW").onclick = run(d => Office.docx(fname("ActionPlanAI"), d)); $("#aiF").onclick = run(d => Office.pdf(fname("ActionPlanAI"), d));
-    $("#aiX").onclick = run(d => Office.xlsx(fname("ActionPlanAI"), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes }), ...aiSheets()]));
+    $("#aiX").onclick = run(d => Office.xlsx(fname("ActionPlanAI"), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes }), ...aiSheets(), ...Office.drawSheets(d)]));
     if ($("#aiUse")) $("#aiUse").onclick = () => { const T = tbl("next"); let k = T.filter(r => r.slice(1).some(v => String(v).trim())).length;
       const keep = T.filter(r => r.slice(1).some(v => String(v).trim()));
       R.items.forEach(it => it.actions.forEach(a => { k++; keep.push([`ACT-${String(k).padStart(2, "0")} / ${it.code} ${a.step}`, a.measure, a.owner, a.due, "", it.project.name]); }));
@@ -463,16 +474,18 @@
     R.items.forEach(it => it.actions.forEach((a, i) => rows.push([i ? "" : it.code, i ? "" : it.title, i ? "" : (it.tickets || []).join(", "), i ? "" : it.root_cause, a.step, a.owner, a.due, a.measure, i ? "" : it.expected_result])));
     return [{ name: "Action plan AI", rows, header: 0 },
       { name: "RCA ก้างปลา 4M", rows: [["กลุ่ม", "ปัญหา", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก", "ชื่อโครงการ", "เป้าหมาย", "งบประมาณ"], ...R.items.map(it => [it.code, it.title, ...M4.map(m => ((it.m4 || {})[m[0]] || []).join("\n")), (it.why5 || []).join("\n"), it.root_cause, it.project.name, it.project.goal, it.project.budget])], header: 0 },
+      ...(R.swot ? [{ name: "SWOT", rows: [["หัวข้อ", "รายการ"], ...SW.flatMap(([k, lab]) => (R.swot[k] || []).map((t, i) => [i ? "" : lab, t]))], header: 0 }] : []),
       { name: "แผนเวลา", rows: [["ช่วงเวลา", "กิจกรรม"], ...R.timeline.map(x => [x.when, x.activity])], header: 0 },
       { name: "การตรวจวน AI 3", rows: [["รอบ", "ผลตรวจ", "สิ่งที่สั่งแก้ / สรุป"], ...logRows()], header: 0 }]; }
   async function aiSlides() { const R = AI.report; if (!R) return [];
-    const pics = await Promise.all(R.items.map(it => toPng(fishSvg(it.code, it.title, it.m4), 1400, 600)));
+    const pics = await Promise.all(R.items.map(it => toPng(fishSvg(it.code, it.title, it.m4), 1400, 600))), swPic = R.swot ? await toPng(swotSvg(R.swot), 1400, 700) : null;
     return [{ title: "Action plan โดย AI 3 คน: บทสรุป", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 13, rows: [["บทสรุปผู้บริหาร", R.summary], ...R.analysis.slice(0, 6).map((x, i) => [i ? "" : "บทวิเคราะห์", x])] },
-      ...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M · ${it.code} ${it.title}`.slice(0, 80), img: pics[k], note: "สาเหตุราก: " + it.root_cause }] : []),
+      ...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M · ${it.code} ${it.title}`.slice(0, 80), img: pics[k], svg: fishSvg(it.code, it.title, it.m4), note: "สาเหตุราก: " + it.root_cause }] : []),
         { title: `5 Why และโครงการแก้ไข · ${it.code}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 13,
           rows: [...(it.why5 || []).slice(0, 5).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", it.root_cause], ["โครงการ", it.project.name], ["เป้าหมาย", it.project.goal], ["งบประมาณ", it.project.budget], ...((it.tickets || []).length ? [["ใบงาน", it.tickets.join(", ")]] : [])] },
         { title: `Action plan · ${it.code} ${it.title}`.slice(0, 80), head: ["วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล"], chart: false, left: true, colW: [5.6, 2.4, 1.7, 2.6], fs: 12,
           rows: [...it.actions.map(a => [a.step, a.owner, a.due, a.measure]), ["ผลที่คาดหวัง: " + it.expected_result, "", "", ""]] }]),
+      ...(R.swot ? [{ title: "SWOT ของงานวิศวกรรมรอบนี้", img: swPic, imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : []),
       { title: "แผนเวลาถึงสิ้นเดือนธันวาคม", head: ["ช่วงเวลา", "กิจกรรม"], chart: false, left: true, colW: [2.8, 9.5], fs: 13, rows: R.timeline.map(x => [x.when, x.activity]) },
       { title: "การตรวจวนของ AI 3 และความเสี่ยง", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 12, rows: [...logRows().map(r => [r[0] + " " + r[1], r[2]]), ...R.risks.map((x, i) => [i ? "" : "ความเสี่ยง", x])] }]; }
   async function aiDeck() { const H = hosp(), R = AI.report;

@@ -339,7 +339,7 @@
     const PR = planRows(F), chunks = []; for (let i = 0; i < PR.length; i += 14) chunks.push(PR.slice(i, i + 14));
     const gpics = await Promise.all(chunks.map(ch => { const g = ganttSvg(ch); return toPng(g.svg, g.w, g.h).then(img => ({ img, r: g.h / g.w })); }));
     const sections = F.flatMap((x, k) => { const a = apOf(x.it.code), r = a.rca, why = lines(r.why);
-      return [...(pics[k] ? [{ title: `RCA ก้างปลา 4M ข้อ ${x.it.code}`, img: pics[k], note: `สาเหตุราก: ${a.cause || "(ยังไม่ระบุ)"}` }] : []),
+      return [...(pics[k] ? [{ title: `RCA ก้างปลา 4M ข้อ ${x.it.code}`, img: pics[k], svg: fishSvg(x.it.code, x.it.title, a.rca), note: `สาเหตุราก: ${a.cause || "(ยังไม่ระบุ)"}` }] : []),
         { title: `ข้อ ${x.it.code} ${x.it.title}`.slice(0, 70), head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 15,
         rows: [["ผลเดือนนี้", `ได้ ${x.sc}/${x.it.max} ค่าจริง ${shown(x)} เป้าหมาย ${x.it.target}`], ["สาเหตุ", a.cause || "(ยังไม่ระบุ)"], ...a.act.split("\n").filter(Boolean).map((s, i) => [i ? "" : "วิธีแก้ไข", s]),
           ["ผู้รับผิดชอบ", a.owner], ["กำหนดเสร็จ", thd(a.due)], ["วัดผล", `KPI ข้อ ${x.it.code} เดือนถัดไปต้องได้ ${x.it.max}/${x.it.max} (${x.it.target})`]] },
@@ -367,7 +367,7 @@
     const rca = [["ข้อ", "ตัวชี้วัด", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก", "ชื่อโครงการ", "เป้าหมายโครงการ", "งบประมาณ"]];
     failed().forEach(x => { const a = apOf(x.it.code), r = a.rca; rca.push([x.it.code, x.it.title, ...M4.map(m => lines(r[m[0]]).join("\n")), lines(r.why).join("\n"), a.cause, r.proj, r.goal, r.budget]); });
     Office.xlsx(apName(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes, figures: d.kpis }), { name: "Action plan", rows, header: 0 }, { name: "RCA ก้างปลา 4M", rows: rca, header: 0 },
-      { name: "แผนงาน วันวางเสร็จ", rows: [["ข้อ", "ลำดับ", "ขั้นตอน", "ผู้รับผิดชอบ", "เริ่ม", "วางเสร็จ", "จำนวนวัน", "สถานะ"], ...failed().flatMap(x => apOf(x.it.code).rca.plan.map((p, i) => [x.it.code, i + 1, p.step, p.owner, thd(p.start), thd(p.end), dDiff(p.start, p.end) + 1, p.status !== "เสร็จ" && p.end < today() ? p.status + " (เลยกำหนด)" : p.status]))], header: 0 }]); });
+      { name: "แผนงาน วันวางเสร็จ", rows: [["ข้อ", "ลำดับ", "ขั้นตอน", "ผู้รับผิดชอบ", "เริ่ม", "วางเสร็จ", "จำนวนวัน", "สถานะ"], ...failed().flatMap(x => apOf(x.it.code).rca.plan.map((p, i) => [x.it.code, i + 1, p.step, p.owner, thd(p.start), thd(p.end), dDiff(p.start, p.end) + 1, p.status !== "เสร็จ" && p.end < today() ? p.status + " (เลยกำหนด)" : p.status]))], header: 0 }, ...Office.drawSheets(d)]); });
 
   // ---------- AI 3 roles: AI 1 proposes, AI 2 analyses and reviews, AI 3 checks, fixes and writes the report ----------
   let aiRep = null, aiLog = [];
@@ -432,7 +432,7 @@
         { name: "RCA ก้างปลา 4M", rows: [["ข้อ", "ตัวชี้วัด", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก", "ชื่อโครงการ", "เป้าหมายโครงการ", "งบประมาณ"],
           ...aiRep.items.map(it => [it.code, it.title, ...M4.map(m => (it.m4[m[0]] || []).join("\n")), (it.why5 || []).join("\n"), it.root_cause, it.project.name, it.project.goal, it.project.budget])], header: 0 },
         { name: "การตรวจวน AI 3", rows: [["รอบ", "ผลตรวจ", "สิ่งที่สั่งแก้ / สรุป"], ...logRows()], header: 0 },
-        { name: "แผนเวลา", rows: [["ช่วงเวลา", "กิจกรรม"], ...aiRep.timeline.map(x => [x.when, x.activity])], header: 0 }, { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...aiRep.analysis.map(x => [x]), [], ["ความเสี่ยง"], ...aiRep.risks.map(x => [x]), [], ["AI 2 ทบทวน / AI 3 แก้แล้ว"], ...aiRep.review_notes.map(x => [x])], header: 0 }]); });
+        { name: "แผนเวลา", rows: [["ช่วงเวลา", "กิจกรรม"], ...aiRep.timeline.map(x => [x.when, x.activity])], header: 0 }, { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...aiRep.analysis.map(x => [x]), [], ["ความเสี่ยง"], ...aiRep.risks.map(x => [x]), [], ["AI 2 ทบทวน / AI 3 แก้แล้ว"], ...aiRep.review_notes.map(x => [x])], header: 0 }, ...Office.drawSheets(d)]); });
     if ($("#aiUse")) $("#aiUse").onclick = () => { aiRep.items.forEach(it => { const c = it.code; if (!vals[c]) return;
         vals[c].act = it.actions.map((a, i) => `${i + 1}. ${a.step} (${a.owner} · ${a.due} · วัดผล: ${a.measure})`).join("\n"); if (!vals[c].cause) vals[c].cause = it.root_cause;
         vals[c].rca = Object.assign(apOf(c).rca, { ...Object.fromEntries(M4.map(m => [m[0], (it.m4[m[0]] || []).join("\n")])), why: (it.why5 || []).join("\n"), proj: it.project.name, goal: it.project.goal, budget: it.project.budget, plan: null, planSet: false }); });
@@ -444,7 +444,7 @@
     return { title: `รายงาน Action plan แก้ไข KPI ${H.code}`, org: H.name, period: mName(y, m) + " · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)",
       findings: [R.summary], kpis: [["คะแนนรวม", r1(total())], ["ข้อที่ตก", R.items.length], ["ขั้นตอนแก้ไขทั้งหมด", R.items.reduce((s, it) => s + it.actions.length, 0)]],
       analysis: R.analysis.slice(0, 9),
-      sections: [...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M ข้อ ${it.code}`, img: pics[k], note: "สาเหตุราก: " + it.root_cause }] : []),
+      sections: [...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M ข้อ ${it.code}`, img: pics[k], svg: fishSvg(it.code, it.title, aiRca(it)), note: "สาเหตุราก: " + it.root_cause }] : []),
         { title: `5 Why และโครงการแก้ไข ข้อ ${it.code}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 14,
           rows: [...(it.why5 || []).slice(0, 5).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", it.root_cause], ["ชื่อโครงการ", it.project.name], ["เป้าหมาย", it.project.goal], ["งบประมาณ", it.project.budget]] },
         { title: `ข้อ ${it.code} ${it.title}`.slice(0, 70), head: ["วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล"], chart: false, left: true, colW: [5.6, 2.4, 1.7, 2.6], fs: 12,
