@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>อบรม · แฟ้มสมรรถนะ | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .hsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+  .hsel select,.hsel input,form.tf select,form.tf input,form.tf textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:#17212b;background:#fff}
+  .hsel select,.hsel input{width:auto}
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#fff;margin:8px 0}
+  table.tt td,table.tt th{padding:6px 8px;color:#17212b;text-align:left;vertical-align:top}
+  table.tt th{background:#eef3f8;font-size:13px;white-space:nowrap}
+  table.tt td.n{text-align:right;white-space:nowrap}
+  table.mx th.c{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:12px;padding:6px 4px;max-height:220px}
+  table.mx td.c{text-align:center;font-size:12px;white-space:nowrap;padding:4px}
+  .ok{background:#d5f0df}.soon{background:#fcefd2}.exp{background:#f8d7d3}.none{background:#f3f4f6;color:#6b7280}
+  .tot{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+  .kpi b.ok,.kpi b.good{color:#14632f;background:none}.kpi b.bad{color:#9b1c13}.kpi b.mid{color:#8a5a00}
+  form.tf{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;align-items:end;margin:8px 0}
+  form.tf label{font-size:13px;font-weight:600;display:flex;flex-direction:column;gap:4px;color:#17212b}
+  form.tf .wide{grid-column:1/-1}
+  .att{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px;margin:6px 0}
+  .att label{display:flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:#fff;font-weight:500}
+  .att select{padding:3px 6px;font-size:13px;margin-left:auto}
+  .lgd{display:flex;gap:8px;flex-wrap:wrap;font-size:13px;margin:6px 0}.lgd span{padding:2px 8px;border-radius:6px;color:#17212b}
+  .note{border-left:4px solid #0b5cad;background:#f4f9ff;padding:8px 12px;border-radius:8px;color:#17212b;margin:8px 0}
+  .pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:12px;border:1px solid var(--line);background:#fff;color:#17212b}
+  .acts{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  @media print{header,nav,.hsel,.acts,form,.noprint{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">อบรม</span><h1>อบรม · แฟ้มสมรรถนะบุคลากร</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าเจ้าหน้าที่</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="sum" aria-selected="true">ภาพรวม</button>
+    <button role="tab" data-tab="mx" aria-selected="false">ตารางสมรรถนะ (Matrix)</button>
+    <button role="tab" data-tab="ses" aria-selected="false">บันทึกการอบรม</button>
+    <button role="tab" data-tab="ppl" aria-selected="false">รายชื่อบุคลากร</button>
+    <button role="tab" data-tab="crs" aria-selected="false">หลักสูตร</button>
+    <button role="tab" data-tab="file" aria-selected="false">แฟ้มรายบุคคล</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="home.html">หน้าหลัก</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <div id="body" hidden>
+    <div class="hsel"><label for="h">โรงพยาบาล</label><select id="h"></select>
+      <label for="g">กลุ่ม</label><select id="g"><option value="">ทุกกลุ่ม</option><option>ช่าง</option><option>แม่บ้าน</option><option>รปภ.</option><option>ผู้รับเหมา</option><option>อื่น ๆ</option></select>
+      <span class="sub" id="ro"></span></div>
+
+    <section id="tab-sum">
+      <p class="sub">หลักสูตรภาคบังคับของแต่ละกลุ่มต้อง "ยังไม่หมดอายุ" ทุกคน ผลอบรมหมดอายุตามรอบของหลักสูตร (เช่น ทุก 12 เดือน) สีส้มคือจะหมดอายุภายใน 30 วัน ควรนัดอบรมซ้ำ</p>
+      <div class="kpis" id="tot"></div>
+      <div class="note" id="k7"></div>
+      <h2>ผ่านตามหลักสูตร</h2>
+      <div class="tw"><table class="tt" id="byCourse"></table></div>
+      <h2>ผ่านตามกลุ่มบุคลากร</h2>
+      <div class="tw"><table class="tt" id="byGroup"></table></div>
+      <h2>ต้องนัดอบรม (หมดอายุ / จะหมด / ยังไม่เคยอบรม)</h2>
+      <div class="tw"><table class="tt" id="due"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="oX">ดาวน์โหลด Excel (บทสรุป + รายชื่อที่ต้องอบรม)</button></div>
+    </section>
+
+    <section id="tab-mx" hidden>
+      <p class="sub">แถว = บุคลากร · คอลัมน์ = หลักสูตรภาคบังคับ ช่องแสดงวันที่ผ่านอบรมครั้งล่าสุด ช่องว่างสีขาว = หลักสูตรนั้นไม่ใช่ของกลุ่มนี้</p>
+      <div class="lgd"><span class="ok">✓ ยังไม่หมดอายุ</span><span class="soon">⚠ หมดใน 30 วัน</span><span class="exp">✗ หมดอายุแล้ว</span><span class="none">– ยังไม่เคยอบรม</span></div>
+      <div class="tw"><table class="tt mx" id="mx"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="mX">ดาวน์โหลด Excel (Matrix)</button></div>
+    </section>
+
+    <section id="tab-ses" hidden>
+      <div class="panel" id="sesForm">
+        <h2>บันทึกการอบรมครั้งใหม่</h2>
+        <form class="tf" id="fS">
+          <label>หลักสูตร<select id="sC" required></select></label>
+          <label>วันที่อบรม<input type="date" id="sD" required></label>
+          <label>ชั่วโมง<input type="number" id="sH" min="0" step="0.5"></label>
+          <label>วิทยากร<input id="sT" placeholder="ชื่อวิทยากร / หน่วยงาน"></label>
+          <label>สถานที่<input id="sP"></label>
+          <label class="wide">หมายเหตุ<input id="sN" placeholder="เช่น ซ้อมจริงที่อาคาร 1 กะดึก"></label>
+          <div class="wide"><b>ผู้เข้าอบรม</b> <span class="sub">ติ๊กคนที่เข้า แล้วเลือกผล (ผ่าน / ไม่ผ่าน / เข้าร่วม)</span>
+            <div class="acts"><button class="btn small" type="button" id="sAll">ติ๊กทุกคนในกลุ่มที่เลือก</button><button class="btn small" type="button" id="sNone">ล้าง</button></div>
+            <div class="att" id="sPeople"></div></div>
+          <div class="wide"><button class="btn primary" type="submit">บันทึกการอบรม</button> <span class="sub" id="sMsg" role="status"></span></div>
+        </form>
+      </div>
+      <h2>ประวัติการอบรม</h2>
+      <div class="hsel"><label for="sy">ปี</label><select id="sy"></select></div>
+      <div class="tw"><table class="tt" id="sList"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="sX">ดาวน์โหลด Excel (ประวัติการอบรม)</button></div>
+    </section>
+
+    <section id="tab-ppl" hidden>
+      <div class="panel" id="pplForm">
+        <h2>เพิ่มบุคลากร</h2>
+        <form class="tf" id="fP">
+          <label>ชื่อ-นามสกุล<input id="pN" required></label>
+          <label>กลุ่ม<select id="pG"><option>ช่าง</option><option>แม่บ้าน</option><option>รปภ.</option><option>ผู้รับเหมา</option><option>อื่น ๆ</option></select></label>
+          <label>ตำแหน่ง<input id="pPos"></label>
+          <label>บริษัท / สังกัด<input id="pCo" placeholder="เช่น TW หรือชื่อผู้รับเหมา"></label>
+          <label>วันเริ่มงาน<input type="date" id="pSt"></label>
+          <div><button class="btn primary" type="submit">เพิ่ม</button></div>
+        </form>
+        <div class="acts"><button class="btn" type="button" id="pImp">ดึงรายชื่อจากบัญชีเจ้าหน้าที่ของโรงนี้</button><span class="sub" id="pMsg" role="status"></span></div>
+      </div>
+      <div class="tw"><table class="tt" id="pList"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="pX">ดาวน์โหลด Excel (รายชื่อบุคลากร)</button></div>
+    </section>
+
+    <section id="tab-crs" hidden>
+      <p class="sub">หลักสูตรกลาง (ใช้ทั้ง 12 โรง) ตั้งตาม JCI 8th (FMS / SQE) และ KPI ข้อ 7 ของสัญญา หัวหน้าเพิ่มหลักสูตรของโรงตัวเองได้ เจ้าของระบบเพิ่มหลักสูตรกลางได้</p>
+      <div class="panel" id="crsForm">
+        <h2>เพิ่มหลักสูตร</h2>
+        <form class="tf" id="fC">
+          <label>รหัส<input id="cCode" required placeholder="เช่น L01"></label>
+          <label class="wide">ชื่อหลักสูตร<input id="cName" required></label>
+          <label>หมวด<input id="cCat" list="cats" value="อื่น ๆ"></label>
+          <label>รอบอบรมซ้ำ (เดือน, 0 = ครั้งเดียว)<input type="number" id="cVm" min="0" max="120" value="12"></label>
+          <label>ชั่วโมง<input type="number" id="cHr" min="0" step="0.5" value="1"></label>
+          <label>อ้างอิงมาตรฐาน<input id="cRef" placeholder="เช่น FMS.06.01"></label>
+          <label>ใช้กับ<select id="cScope"></select></label>
+          <div class="wide" id="cGrp">กลุ่มที่ต้องอบรม (ไม่ติ๊ก = ทุกกลุ่ม):
+            <label style="display:inline-flex;flex-direction:row"><input type="checkbox" value="ช่าง"> ช่าง</label>
+            <label style="display:inline-flex;flex-direction:row"><input type="checkbox" value="แม่บ้าน"> แม่บ้าน</label>
+            <label style="display:inline-flex;flex-direction:row"><input type="checkbox" value="รปภ."> รปภ.</label>
+            <label style="display:inline-flex;flex-direction:row"><input type="checkbox" value="ผู้รับเหมา"> ผู้รับเหมา</label>
+            <label style="display:inline-flex;flex-direction:row"><input type="checkbox" value="อื่น ๆ"> อื่น ๆ</label></div>
+          <label style="flex-direction:row;align-items:center"><input type="checkbox" id="cMand" checked> ภาคบังคับ</label>
+          <label style="flex-direction:row;align-items:center"><input type="checkbox" id="cK7"> นับใน KPI ข้อ 7 (อบรมรับเหตุฉุกเฉิน)</label>
+          <div><button class="btn primary" type="submit">เพิ่มหลักสูตร</button> <span class="sub" id="cMsg" role="status"></span></div>
+        </form>
+        <datalist id="cats"><option>ปฐมนิเทศ</option><option>อัคคีภัย</option><option>ภาวะฉุกเฉิน</option><option>ความปลอดภัย</option><option>สารเคมี</option><option>ควบคุมการติดเชื้อ</option><option>การรักษาความปลอดภัย</option><option>เทคนิคงานช่าง</option><option>อื่น ๆ</option></datalist>
+      </div>
+      <div class="tw"><table class="tt" id="cList"></table></div>
+    </section>
+
+    <section id="tab-file" hidden>
+      <div class="hsel"><label for="fp">บุคลากร</label><select id="fp"></select><button class="btn" type="button" id="fPrint">พิมพ์แฟ้ม</button></div>
+      <div id="fBody"></div>
+    </section>
+  </div>
+</main>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+<script src="assets/training.js"></script>
+</body>
+</html>
