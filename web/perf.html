@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>ประชุม Bi-Weekly Performance | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .hsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+  .hsel select,.hsel input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;width:auto;color:#17212b;background:#fff}
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#fff;margin:8px 0}
+  table.pt td,table.pt th{padding:5px 7px;color:#17212b;vertical-align:top;text-align:left}
+  table.pt th{background:#eef3f8;font-size:13px;white-space:nowrap}
+  table.pt td.lab{font-weight:600;white-space:nowrap;background:#fafbfd}
+  table.pt input,table.pt textarea{font:inherit;width:100%;min-width:90px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;color:#17212b;background:#fff}
+  table.pt textarea{min-width:180px;min-height:34px;resize:vertical}
+  table.pt tr.sum td{background:#f4f7fb;font-weight:700}
+  table.pt td.num{text-align:right;white-space:nowrap}
+  table.bl td{font-size:13px}table.bl td.d{min-width:260px;max-width:460px;white-space:normal}
+  .note{border-left:4px solid #0b5cad;background:#f4f9ff;padding:8px 12px;border-radius:8px;color:#17212b;margin:8px 0}
+  .acts{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  .sec{border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 14px;margin:12px 0}
+  .sec>h2{margin:2px 0 6px;font-size:17px}.sec .sub{margin:0 0 6px}
+  .site{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 12px}
+  .site label{font-size:13px;font-weight:600;display:flex;flex-direction:column;gap:4px;color:#17212b}
+  .site input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:#17212b;background:#fff}
+  .st{display:inline-block;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:600}.st.ok{background:#d5f0df;color:#14532d}.st.late{background:#f8d7d3;color:#7f1d1d}.st.draft{background:#fcefd2;color:#713f12}.st.none{background:#f3f4f6;color:#374151}
+  .c-ok{background:#d5f0df}.c-mid{background:#fcefd2}.c-bad{background:#f8d7d3}
+  .drop{border:2px dashed #9cc3ea;border-radius:12px;background:#f4f9ff;padding:14px;color:#17212b;margin:8px 0}
+  .drop input[type=file]{font:inherit;margin-top:6px}
+  .aib{border:1px solid #9cc3ea;border-radius:10px;background:#f4f9ff;padding:10px 14px;margin:10px 0;color:#17212b}.aib h3{margin:12px 0 4px;font-size:15px}
+  .aib ol,.aib ul{margin:4px 0 4px 20px;padding:0}.aib table{background:#fff;border-collapse:collapse}.aib td,.aib th{padding:5px 7px;vertical-align:top;white-space:pre-line;color:#17212b;font-size:13px;text-align:left;border-bottom:1px solid var(--line)}
+  .aib .who3{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.aib .who3 span{background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:13px}
+  .aib b.ok{color:#14632f}.aib b.bad{color:#9b1c13}#aiSteps li{margin:3px 0}
+  .fish{overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:10px;margin:6px 0}.fish svg{width:100%;min-width:760px;height:auto;display:block}
+  .bad{color:#9b1c13}.ok{color:#14632f}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">Performance</span><h1>ประชุม Bi-Weekly Performance (Chief Engineer)</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="home.html">🏠 หน้าหลัก</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="rep" aria-selected="true">รายงาน Chief 13 หัวข้อ</button>
+    <button role="tab" data-tab="bl" aria-selected="false">Backlog · Action plan AI</button>
+    <button role="tab" data-tab="all" aria-selected="false" id="tAll" hidden>ภาพรวม 12 โรง</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="home.html">หน้าหลัก</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <div id="body" hidden>
+    <div class="hsel"><label for="h">โรงพยาบาล</label><select id="h"></select>
+      <label for="md">ประชุมวันเสาร์ที่</label><select id="md"></select><span id="stat"></span><span class="sub" id="ro"></span></div>
+    <div class="note">Chief ทุกโรงส่งรายงานภายใน <b>วันเสาร์ 10:00 น.</b> · QC ประจำกลุ่มตรวจ 10:00–12:00 น. · ประชุมกับ GM <b>14:00–16:00 น.</b> · รอบข้อมูล 14 วัน ตัดยอดวันศุกร์ 23:59 น. ก่อนวันประชุม <span id="per"></span></div>
+
+    <section id="tab-rep">
+      <div class="acts"><button class="btn" type="button" id="fill">ดึงตัวเลขจากระบบ RS ใส่ช่องที่ยังว่าง</button>
+        <button class="btn" type="button" id="save">บันทึกร่าง</button><button class="btn primary" type="button" id="send">ส่งรายงาน</button></div>
+      <div id="secs"></div>
+      <div class="acts"><button class="btn primary" type="button" id="xP">PPT ตามแบบฟอร์ม Chief</button><button class="btn" type="button" id="xW">Word</button><button class="btn" type="button" id="xF">PDF</button><button class="btn" type="button" id="xX">Excel</button></div>
+    </section>
+
+    <section id="tab-bl" hidden>
+      <div class="drop"><b>อัปโหลดไฟล์ Backlog งานค้าง (.xlsx)</b>
+        <div class="sub">ใช้ไฟล์ "backlog_โรงพยาบาล_วันที่.xlsx" (แผ่นงาน รายการงานค้าง) หรือไฟล์ภาพรวมทั้งเครือ (ระบบเลือกแผ่นงานของโรงนี้ให้เอง) ต้องมีหัวตาราง เลขใบงาน · อายุ (วัน) · สถานะค้าง · เหตุผล</div>
+        <input type="file" id="blFile" accept=".xlsx"> <button class="btn small" type="button" id="blSys">หรือใช้งานค้างในระบบ RS</button>
+        <div id="blMsg"></div></div>
+      <div id="blSum"></div>
+      <div class="sec"><h2>Action plan โดย AI 3 คน (RCA ก้างปลา 4M + 5 Why)</h2>
+        <p class="sub">AI 1 เสนอ → AI 2 วิเคราะห์ ทบทวน → AI 3 ตรวจสอบ ถ้า AI 3 สั่งแก้ AI 1 แก้และ AI 2 ทบทวนใหม่ วนจนผ่าน (ไม่เกิน 4 รอบ) แล้ว AI 3 เรียบเรียงรายงาน ใช้ข้อมูลงานค้างที่อัปโหลด และตัวเลขในรายงาน Chief (ไม่ส่งชื่อผู้รับผิดชอบไปให้ AI)</p>
+        <div class="acts"><button class="btn primary" type="button" id="aiGo">🤖 ให้ AI 3 คนวิเคราะห์และทำ Action plan</button></div>
+        <div class="aib" id="aiBox" hidden></div></div>
+      <div id="blList"></div>
+    </section>
+
+    <section id="tab-all" hidden>
+      <h2>การส่งรายงานของ 12 โรง</h2>
+      <div class="tw"><table class="pt" id="aTable"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="aP">PPT</button><button class="btn" type="button" id="aW">Word</button><button class="btn" type="button" id="aF">PDF</button><button class="btn" type="button" id="aX">Excel</button></div>
+    </section>
+  </div>
+</main>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+<script src="assets/perf.js"></script>
+</body>
+</html>
