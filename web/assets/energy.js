@@ -211,7 +211,7 @@
     wData = JSON.parse(JSON.stringify((wk && wk.data) || {})); wData.prev = wData.prev || []; wData.meas = wData.meas || []; wData.roles = wData.roles || {};
     const st = status(wk); $("#wStat").innerHTML = `<span class="st ${st[0]}">${esc(st[1])}</span> <span class="sub">กำหนดส่ง ${dTH(sat)} 10.00 น.</span>`;
     document.querySelectorAll("[data-w]").forEach(i => i.value = wData[i.dataset.w] || "");
-    await wNumbers(); rows2("prev"); rows2("meas");
+    await wNumbers(); rows2("prev"); rows2("meas"); drawChk(); drawAi();
     $("#wMsg").textContent = wk ? `บันทึกล่าสุด ${new Date(wk.updated_at).toLocaleString("th-TH")}` : "";
   }
 
@@ -242,6 +242,7 @@
       wCalc = { month: `${TH_M[mo - 1]} ${y + 543}`, from: m0, to: endD, nDays: mDays.length, mtd, avg, bDay, bMonth: base ? +base.elec_kwh : null, tgt, cost, area,
         tDay: bDay != null ? bDay * (1 - tgt / 100) : null, saveMonth: base ? base.elec_kwh * tgt / 100 : null, mx: mx ? [mx, days[mx].in] : null, mn: mn ? [mn, days[mn].in] : null,
         ytd: ytdMonths.length ? ytd : null, ytdL: ytdL || null, ytdN: ytdMonths.length, solar, wk7, wkN: wDays.length,
+        expDays: endD >= m0 ? +endD.slice(8) : 0, lastBill: !!E.find(x => x.month === (mo === 1 ? `${y - 1}-12-01` : `${y}-${String(mo - 1).padStart(2, "0")}-01`) && x.elec_kwh != null),
         days: Object.keys(days).filter(d => d >= m0 && d <= endD).sort().map(d => [d, days[d].in, days[d].solar, days[d].out]),
         pts: pts.map(p => { const v = mDays.map(d => days[d].n[p.id]).filter(x => x != null); return { id: p.id, name: p.name, no: p.no, code: p.code, role: p.role, avg: v.length ? v.reduce((a, b) => a + b, 0) / v.length : null }; }) };
     }
@@ -263,6 +264,7 @@
       ["ค่าไฟฟ้าโดยประมาณ (บาท/วัน)", nf(C.avg != null && C.cost ? C.avg * C.cost : null), `ต้นทุน ${C.cost} บาท/หน่วย`]]
       .map(([l, v, s2]) => `<div class="kpi"><b>${esc(v)}</b><span>${esc(l)}${s2 ? "<br>" + esc(s2) : ""}</span></div>`).join("");
     document.querySelectorAll("[data-role]").forEach(sel => sel.onchange = () => { wData.roles[sel.dataset.role] = sel.value; wNumbers().catch(e => toast(errText(e), true)); });
+    drawChk();
   }
   ["#wCost", "#wTgt", "#wArea"].forEach(k => $(k).onchange = () => { wData.snap = null; wNumbers().catch(e => toast(errText(e), true)); });
   function dayChart(C) {
@@ -296,8 +298,9 @@
   $("#wCopy").onclick = () => { const p = wkPrevRow && wkPrevRow.data; if (!p) { toast("สัปดาห์ก่อนยังไม่มีรายงาน", true); return; }
     const add = [...(p.prev || []).filter(r => !/เสร็จ|ปิด/.test(r.r || "")), ...(p.meas || []).map(m => ({ t: m.n, g: m.b != null && m.a != null ? `ลด ${m.b - m.a} kWh/วัน` : "", p: m.note || "", r: "" }))];
     wData.prev = [...wData.prev, ...add.map(r => ({ ...r }))]; rows2("prev"); toast(`ดึงมา ${add.length} เรื่อง`); };
+  const wSync = () => document.querySelectorAll("[data-w]").forEach(i => wData[i.dataset.w] = i.value.trim());
   async function wSave(send) {
-    document.querySelectorAll("[data-w]").forEach(i => wData[i.dataset.w] = i.value.trim());
+    wSync();
     wData.cost = +$("#wCost").value || null; wData.tgt = +$("#wTgt").value || 0; wData.area = +$("#wArea").value || null;
     if ($("#h").value === me.hospital_id || !wData.snap) wData.snap = wCalc;
     const row = { hospital_id: $("#h").value, week_date: $("#wk").value, data: wData, updated_by: me.id, updated_at: new Date().toISOString() };
@@ -319,7 +322,7 @@
     const sv = (wData.meas || []).reduce((s, m) => s + (m.b != null && m.a != null && m.b !== "" && m.a !== "" ? m.b - m.a : 0), 0); if (sv) out.push(`มาตรการที่ดำเนินการประหยัดรวม ${nf(sv)} kWh/วัน ≈ ${nf(sv * 30 * (C.cost || 0))} บาท/เดือน`);
     return out.length ? out : ["ยังไม่มีตัวเลขพลังงานในสัปดาห์นี้"]; }
   $("#wP").onclick = () => {   // must call Office.pptx synchronously so the Word / PDF buttons beside it keep their mode
-    document.querySelectorAll("[data-w]").forEach(i => wData[i.dataset.w] = i.value.trim());
+    wSync();
     const C = wCalc || { days: [], pts: [] }, H = hosp(), img = wImg;
     const txt = (t, v) => v ? [[t, v]] : [];
     const d = { title: `ประชุม Energy รายสัปดาห์ · ${H.code}`, org: H.name, period: `ประชุมวันเสาร์ที่ ${dTH($("#wk").value)} 14.00–16.00 น.`,
@@ -330,7 +333,9 @@
         { title: "2.2 ไฟเข้า (INCOME) / ไฟออก (OUTCOME)", head: ["มิเตอร์", "นับเป็น", "เฉลี่ย kWh/วัน"], rows: (C.pts || []).filter(p => p.role !== "skip").map(p => [p.name, ROLE[p.role], nf(p.avg)]) },
         { title: "2.3 ปัจจัยที่มีผลต่อการใช้พลังงาน", head: ["ปัจจัย", "รายละเอียด"], rows: [...txt("ผู้รับเหมา", wData.f_contractor), ...txt("ห้องประชุม", wData.f_meeting), ...txt("ระบบวิศวกรรม", wData.f_eng), ...txt("อุณหภูมิภายนอก", wData.f_weather)] },
         { title: "2.4 มาตรการดำเนินการ", head: ["มาตรการ", "ระยะเวลา", "ก่อน kWh/วัน", "หลัง kWh/วัน", "ประหยัด kWh/วัน", "บาท/เดือน"], rows: wData.meas.map(m => [m.n || "", m.per || "", nf(m.b), nf(m.a), nf(m.b != null && m.a != null ? m.b - m.a : null), nf(m.b != null && m.a != null ? (m.b - m.a) * 30 * (C.cost || 0) : null)]) },
-        { title: "2.5 – 5. มาตรการเชิงรุก · กิจกรรมส่วนกลาง · ขอสนับสนุน · ข้อเสนอแนะ", head: ["หัวข้อ", "รายละเอียด"], rows: [...txt("2.5 มาตรการเชิงรุกภายในพื้นที่", wData.proactive), ...txt("3. กิจกรรมส่วนกลาง", wData.central), ...txt("4. ขอสนับสนุนทางโรงพยาบาล", wData.support), ...txt("5. ข้อเสนอแนะ", wData.suggest)] }],
+        { title: "2.5 – 5. มาตรการเชิงรุก · กิจกรรมส่วนกลาง · ขอสนับสนุน · ข้อเสนอแนะ", head: ["หัวข้อ", "รายละเอียด"], rows: [...txt("2.5 มาตรการเชิงรุกภายในพื้นที่", wData.proactive), ...txt("3. กิจกรรมส่วนกลาง", wData.central), ...txt("4. ขอสนับสนุนทางโรงพยาบาล", wData.support), ...txt("5. ข้อเสนอแนะ", wData.suggest)] },
+        { title: `รายการข้อมูลที่โรงต้องใส่ · ครบ ${wScore(wData, C).pct}%`, head: ["ข้อมูล", "ใครใส่", "สถานะ"], rows: wItems(wData, C).map(i => [i.t, i.who, i.ok ? "ครบ" : i.req ? "ยังไม่มี" : "-"]) },
+        ...(wData.ai && wData.ai.report ? [{ title: "บทสรุปโดย AI 3 คน", head: ["บทสรุปผู้บริหาร"], rows: [[wData.ai.report.summary]] }, ...aiSections(wData.ai)] : [])],
       notes: ["ตัวเลขรายวันรวมจากมิเตอร์ที่ตั้งเป็น \"ไฟเข้า\" ในบันทึก OP · ค่าเดือนเดียวกันปีก่อนจากบิลค่าไฟ (บันทึกรายเดือน)"] };
     return Office.pptx(`ประชุมEnergy_${H.code}_${$("#wk").value}`, d).catch(e => toast(errText(e), true));
   };
@@ -338,12 +343,149 @@
     img.onload = () => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0, w, h); try { ok(cv.toDataURL("image/png")); } catch (e) { ok(null); } };
     img.onerror = () => ok(null); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
 
+  // ---------- รายการข้อมูลที่แต่ละโรงต้องใส่ (checklist of what each hospital must enter before Saturday 10:00) ----------
+  // req 1 = needed for the report, 0 = optional. The same list scores every hospital in the 12-hospital table.
+  function wItems(D, C) {
+    D = D || {}; C = C || {}; const has = v => !!(v && String(v).trim()), num = v => v != null && v !== "";
+    const exp = C.expDays != null ? C.expDays : (C.to && C.from && C.to >= C.from ? +C.to.slice(8) : 0);
+    return [
+      { g: "ตัวเลข (ระบบรวมให้)", t: "มิเตอร์ไฟฟ้ารายวันใน \"บันทึก OP\" ครบทุกวันของเดือน", who: "ช่างทุกกะ", ok: exp > 0 && (C.nDays || 0) >= exp, v: `${C.nDays || 0}/${exp} วัน`, req: 1, fix: "ให้ช่างจดเลขมิเตอร์ OP-01 (MDB) หรือ OP-22E ทุกวันในหน้า บันทึก OP" },
+      { g: "ตัวเลข (ระบบรวมให้)", t: "ตั้งมิเตอร์ที่เป็น \"ไฟเข้า\" (INCOME) อย่างน้อย 1 จุด", who: "Chief · ข้อ 2.2", ok: (C.pts || []).some(p => p.role === "in"), req: 1, fix: "ในตารางข้อ 2.2 เลือก นับเป็น = ไฟเข้า" },
+      { g: "บิลรายเดือน", t: "บิลค่าไฟเดือนเดียวกันของปีก่อน (ใช้เป็นฐานเทียบ)", who: "Chief · แท็บ บันทึกรายเดือน", ok: C.bMonth != null, v: C.bMonth != null ? nf(C.bMonth) + " kWh" : "", req: 1, fix: "แท็บ บันทึกรายเดือน (บิล) เลือกปีก่อน เดือนเดียวกัน ใส่ kWh และบาท" },
+      { g: "บิลรายเดือน", t: "บิลค่าไฟเดือนที่แล้ว", who: "Chief · แท็บ บันทึกรายเดือน", ok: !!C.lastBill, req: 1, fix: "ใส่บิลเดือนที่แล้วในแท็บ บันทึกรายเดือน (บิล)" },
+      { g: "ตั้งค่า", t: "ต้นทุนไฟฟ้า (บาท/หน่วย)", who: "Chief · ข้อ 2.1", ok: C.cost > 0, v: C.cost ? nf(C.cost, 2) : "", req: 1, fix: "ใส่ในช่อง ต้นทุนไฟฟ้า ข้อ 2.1 (ค่าไฟ ÷ หน่วย จากบิล)" },
+      { g: "ตั้งค่า", t: "พื้นที่อาคาร (ตร.ม.)", who: "Chief · ข้อ 2.1", ok: C.area > 0, v: C.area ? nf(C.area) : "", req: 1, fix: "ใส่ในช่อง พื้นที่ ข้อ 2.1" },
+      { g: "Chief พิมพ์", t: "1. วาระครั้งก่อน อย่างน้อย 1 เรื่อง พร้อมความก้าวหน้า", who: "Chief", ok: (D.prev || []).some(r => has(r.t) && has(r.p)), req: 1, fix: "กด ดึงเรื่องจากสัปดาห์ก่อน หรือ + เพิ่มเรื่อง แล้วเขียนความก้าวหน้า" },
+      { g: "Chief พิมพ์", t: "2.3 อุณหภูมิภายนอก", who: "Chief", ok: has(D.f_weather), req: 1, fix: "เช่น สูงสุด 35 °C ร้อนกว่าปีก่อน 1.5 °C" },
+      { g: "Chief พิมพ์", t: "2.3 ปัจจัยอื่น (ผู้รับเหมา · ห้องประชุม · ระบบวิศวกรรม) อย่างน้อย 1 ข้อ", who: "Chief", ok: has(D.f_contractor) || has(D.f_meeting) || has(D.f_eng), req: 1, fix: "เขียนสิ่งที่ทำให้ไฟขึ้นหรือลงในสัปดาห์นี้" },
+      { g: "Chief พิมพ์", t: "2.4 มาตรการ อย่างน้อย 1 เรื่อง มีค่าก่อนทำและหลังทำ (kWh/วัน)", who: "Chief", ok: (D.meas || []).some(m => has(m.n) && num(m.b) && num(m.a)), req: 1, fix: "+ เพิ่มมาตรการ ใส่ชื่อ ระยะเวลา ก่อน/หลังทำ" },
+      { g: "Chief พิมพ์", t: "2.5 มาตรการเชิงรุกภายในพื้นที่", who: "Chief", ok: has(D.proactive), req: 1, fix: "เช่น ตั้งเวลาปิด AHU ห้องประชุม, เดินตรวจปิดไฟ" },
+      { g: "Chief พิมพ์", t: "3. กิจกรรมส่วนกลาง", who: "Chief", ok: has(D.central), req: 0, fix: "ถ้ามี" },
+      { g: "Chief พิมพ์", t: "4. ขอสนับสนุนทางโรงพยาบาล", who: "Chief", ok: has(D.support), req: 0, fix: "ถ้ามี" },
+      { g: "Chief พิมพ์", t: "5. ข้อเสนอแนะ", who: "Chief", ok: has(D.suggest), req: 0, fix: "ถ้ามี" }];
+  }
+  const wScore = (D, C) => { const L = wItems(D, C).filter(i => i.req), k = L.filter(i => i.ok).length; return { k, n: L.length, pct: Math.round(k * 100 / L.length) }; };
+  function drawChk() {
+    wSync(); const L = wItems(wData, wCalc), S = wScore(wData, wCalc), open = $("#wChk").open;
+    $("#wChk").innerHTML = `<summary>รายการข้อมูลที่โรงต้องใส่ก่อนส่ง · ครบ ${S.k}/${S.n} ข้อ (${S.pct}%)</summary><div class="bar"><i style="width:${S.pct}%"></i></div>
+      <table><tr><th>#</th><th>ข้อมูล</th><th>ใครใส่ / ที่ไหน</th><th>สถานะ</th><th>วิธีใส่</th></tr>${L.map((i, x) => `<tr><td>${x + 1}</td><td>${esc(i.t)}${i.req ? "" : ' <span class="o">(ถ้ามี)</span>'}</td><td>${esc(i.who)}</td>
+      <td class="${i.ok ? "y" : i.req ? "n" : "o"}">${i.ok ? "✓ ครบ" : i.req ? "✗ ยังไม่มี" : "–"}${i.v ? ` <span class="o">${esc(i.v)}</span>` : ""}</td><td>${i.ok ? "" : esc(i.fix)}</td></tr>`).join("")}</table>`;
+    $("#wChk").open = open;
+  }
+  let chkT = 0; document.addEventListener("input", ev => { if (!ev.target.closest("#tab-week")) return; clearTimeout(chkT); chkT = setTimeout(drawChk, 300); });
+  document.addEventListener("click", ev => { if (ev.target.closest("[data-add],[data-del],#wCopy")) setTimeout(drawChk, 0); });
+
+  // ---------- AI 3 คน: AI 1 นำเสนอ, AI 2 วิเคราะห์ทบทวน, AI 3 ตรวจสอบ; if AI 3 asks for changes, AI 1 and AI 2 revise ONE more round ----------
+  const r0 = v => v == null || isNaN(v) ? null : Math.round(v * 10) / 10;
+  function aiInput() {
+    wSync(); const C = wCalc || {}, H = hosp(), ch = C.avg != null && C.bDay ? (C.avg - C.bDay) * 100 / C.bDay : null, has = v => v != null && v !== "";
+    return { hospital: `${H.code} ${H.name}`, meeting: `วันเสาร์ ${dTH($("#wk").value)} 14.00-16.00 น.`, month: C.month, period: `${C.from || ""} ถึง ${C.to || ""}`,
+      figures: { kwh_month_to_date: r0(C.mtd), days_logged: C.nDays, days_elapsed: C.expDays, avg_kwh_per_day: r0(C.avg), last_year_same_month_kwh_per_day: r0(C.bDay), last_year_same_month_kwh: r0(C.bMonth),
+        change_vs_last_year_pct: r0(ch), saving_target_pct: C.tgt, target_kwh_per_day: r0(C.tDay), target_saving_kwh_month: r0(C.saveMonth), max_day: C.mx ? { date: C.mx[0], kwh: r0(C.mx[1]) } : null, min_day: C.mn ? { date: C.mn[0], kwh: r0(C.mn[1]) } : null,
+        this_week_kwh: r0(C.wk7), this_week_days: C.wkN, ytd_kwh_from_bills: r0(C.ytd), ytd_last_year_kwh: r0(C.ytdL), ytd_months: C.ytdN, solar_kwh_month: r0(C.solar), cost_baht_per_kwh: C.cost, area_m2: C.area,
+        kwh_per_m2_day: C.avg != null && C.area ? Math.round(C.avg / C.area * 1000) / 1000 : null },
+      daily_kwh: (C.days || []).map(d => ({ date: d[0], in: r0(d[1]), solar: r0(d[2]), out: r0(d[3]), over_target: C.tDay != null && d[1] > C.tDay })),
+      meters: (C.pts || []).map(p => ({ name: p.name, role: ROLE[p.role], avg_kwh_per_day: r0(p.avg) })),
+      previous_agenda: (wData.prev || []).map(r => ({ topic: r.t || "", target: r.g || "", progress: r.p || "", result_plan: r.r || "" })),
+      factors: { contractor: wData.f_contractor || "", meeting_rooms: wData.f_meeting || "", engineering: wData.f_eng || "", outside_temperature: wData.f_weather || "" },
+      measures: (wData.meas || []).map(m => { const ok = has(m.b) && has(m.a); return { name: m.n || "", period: m.per || "", before_kwh_day: m.b ?? null, after_kwh_day: m.a ?? null, saving_kwh_day: ok ? r0(m.b - m.a) : null, saving_baht_month: ok ? Math.round((m.b - m.a) * 30 * (C.cost || 0)) : null, note: m.note || "" }; }),
+      proactive: wData.proactive || "", central: wData.central || "", support_requested: wData.support || "", suggestions: wData.suggest || "",
+      missing_data: wItems(wData, C).filter(i => i.req && !i.ok).map(i => i.t) };
+  }
+  const AI_ROLES = '<div class="who3"><span>🤖 AI 1 ผู้นำเสนอ</span><span>🤖 AI 2 ผู้วิเคราะห์ ทบทวน</span><span>🤖 AI 3 ผู้ตรวจสอบ</span></div>';
+  $("#wAI").onclick = guard(async () => {
+    if (!wCalc) return toast("ยังโหลดตัวเลขไม่เสร็จ", true);
+    const H = hosp(), box = $("#aiBox"), input = aiInput(); box.hidden = false;
+    box.innerHTML = `<h3>AI 3 คน กำลังทำรายงาน ${esc(H.code)}</h3>${AI_ROLES}<p>รอบ 1: AI 1 นำเสนอ → AI 2 วิเคราะห์ทบทวน → AI 3 ตรวจสอบ · ถ้า AI 3 สั่งแก้ รอบ 2: AI 1 และ AI 2 แก้ไขอีก 1 รอบ → AI 3 ตรวจอีกครั้งและเรียบเรียงรายงาน ใช้เวลาหลายนาที อย่าเพิ่งปิดหน้านี้</p><ol id="aiSteps"></ol>`;
+    box.scrollIntoView({ behavior: "smooth", block: "start" });
+    const body = { hospital_id: H.id, input };
+    let model = "";
+    const call = async (extra, label) => { const li = document.createElement("li"); li.textContent = label + " …"; $("#aiSteps").appendChild(li);
+      let data, error, msg;
+      for (let t = 0; t < 4; t++) {
+        ({ data, error } = await sb.functions.invoke("energy-ai", { body: { ...body, ...extra } }));
+        const st = error && error.context && error.context.status, j = error && error.context && typeof error.context.json === "function" ? await error.context.json().catch(() => ({})) : {};
+        msg = error ? (j.error || (st === 546 || st === 504 ? "AI ใช้เวลานานเกินที่เซิร์ฟเวอร์อนุญาต (150 วินาที)" : j.message || error.message)) + (st ? ` (รหัส ${st})` : "") : data && data.error;
+        if (!msg || /โควตา|limit: 0/.test(msg) || !(st === 546 || st === 504 || /ช้าเกิน|503|429|high demand|overload|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(msg)) || t === 3) break;
+        li.textContent = `${label} … AI ไม่ว่างหรือช้า กำลังลองใหม่อัตโนมัติ (ครั้งที่ ${t + 1}/3)`;
+        await new Promise(ok => setTimeout(ok, 10000 * (t + 1)));
+      }
+      if (msg) { li.innerHTML = `${esc(label)} <b class="bad">ไม่สำเร็จ: ${esc(msg)}</b>`; throw Object.assign(new Error(msg), { shown: 1 }); }
+      if (data.model) model = data.model; li.textContent = label + " ✓"; return { data, li }; };
+    const log = [];
+    try {
+      let p1 = (await call({ step: "propose" }, "รอบ 1: AI 1 เตรียมเนื้อหานำเสนอ")).data.text;
+      log.push({ r: 1, who: "AI 1 ผู้นำเสนอ", what: "เตรียมเนื้อหานำเสนอตามวาระ", text: p1 });
+      let p2 = (await call({ step: "review", p1 }, "รอบ 1: AI 2 วิเคราะห์ ทบทวน")).data.text;
+      log.push({ r: 1, who: "AI 2 ผู้วิเคราะห์ ทบทวน", what: "วิเคราะห์สาเหตุและทบทวนข้อเสนอ", text: p2 });
+      const ckLi = async (r, extra) => { const { data, li } = await call({ step: "check", p1, p2, ...extra }, `รอบ ${r}: AI 3 ตรวจสอบ`), c = data.check;
+        li.innerHTML = `รอบ ${r}: AI 3 ตรวจสอบ ✓ <b class="${c.approved ? "ok" : "bad"}">${c.approved ? "ผ่าน" : `สั่งแก้ ${c.issues.length} เรื่อง`}</b>` + (c.approved ? "" : `<ul>${c.issues.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`);
+        log.push({ r, who: "AI 3 ผู้ตรวจสอบ", what: c.approved ? "ผ่าน" : `สั่งแก้ ${c.issues.length} เรื่อง`, approved: c.approved, issues: c.issues || [], text: c.summary || "" }); return c; };
+      let c = await ckLi(1);
+      if (!c.approved) {   // one more round only, as asked: AI 1 and AI 2 fix what AI 3 listed
+        const issues = c.issues;
+        p1 = (await call({ step: "propose", p1, p2, issues }, "รอบ 2: AI 1 แก้ไขตามที่ AI 3 สั่ง")).data.text;
+        log.push({ r: 2, who: "AI 1 ผู้นำเสนอ", what: "แก้ไขตามที่ AI 3 สั่ง", text: p1 });
+        p2 = (await call({ step: "review", p1, issues }, "รอบ 2: AI 2 ทบทวนฉบับแก้ไข")).data.text;
+        log.push({ r: 2, who: "AI 2 ผู้วิเคราะห์ ทบทวน", what: "ทบทวนฉบับแก้ไข", text: p2 });
+        c = await ckLi(2);
+      }
+      const logTxt = log.filter(x => x.who.startsWith("AI 3")).map(x => `รอบ ${x.r}: ${x.what}${x.issues && x.issues.length ? " - " + x.issues.join("; ") : ""} ${x.text}`).join("\n");
+      const R = (await call({ step: "report", p1, p2, log: logTxt }, "AI 3 เรียบเรียงรายงานฉบับสุดท้าย")).data.report;
+      wData.ai = { at: new Date().toISOString(), by: me.id, model, rounds: Math.max(...log.map(x => x.r)), approved: !!c.approved, report: R, log };
+      drawAi();
+      if (canWrite) { await wSave(false); toast("เก็บผล AI ไว้กับรายงานสัปดาห์นี้แล้ว (บันทึกร่าง)"); } else toast("AI ทำรายงานเสร็จแล้ว");
+    } catch (e) { if (!e.shown) box.insertAdjacentHTML("beforeend", `<p class="note bad">ทำไม่สำเร็จ: ${esc(errText(e))}</p>`); }
+  });
+  const aiLogRows = A => A.log.map(x => [`รอบ ${x.r}`, x.who, x.what, x.issues && x.issues.length ? x.issues.join("\n") : (x.who.startsWith("AI 3") ? x.text : "")]);
+  function drawAi() {
+    const A = wData.ai, box = $("#aiBox"); if (!A || !A.report) { box.hidden = true; box.innerHTML = ""; return; }
+    const R = A.report, li = a => `<ul>${(a || []).map(x => `<li>${esc(x)}</li>`).join("") || "<li>-</li>"}</ul>`, tb = (h, rows) => `<div class="tw"><table><tr>${h.map(x => `<th>${esc(x)}</th>`).join("")}</tr>${rows.map(r => `<tr>${r.map(x => `<td>${esc(x)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${h.length}">-</td></tr>`}</table></div>`;
+    box.hidden = false;
+    box.innerHTML = `<h3>รายงานโดย AI 3 คน</h3>${AI_ROLES}<p class="sub">ทำเมื่อ ${new Date(A.at).toLocaleString("th-TH")} · ${A.rounds} รอบ · AI 3 ${A.approved ? "ให้ผ่าน" : "ยังมีข้อสังเกต (ดูตารางการตรวจ)"}${A.model ? ` · ${esc(A.model)}` : ""} · ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
+      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p><h3>บทวิเคราะห์ตัวเลข</h3>${li(R.analysis)}` +
+      `<h3>ปัจจัยที่มีผล</h3>${tb(["ปัจจัย", "ผลต่อการใช้ไฟ"], R.factors.map(f => [f.factor, f.impact]))}` +
+      `<h3>มาตรการที่เสนอ</h3>${tb(["มาตรการ", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "ผลประหยัด"], R.actions.map(a => [a.action, a.owner, a.due, a.saving]))}` +
+      `<h3>วาระติดตามครั้งหน้า</h3>${tb(["เรื่อง", "เป้าหมาย"], R.next_agenda.map(a => [a.topic, a.target]))}` +
+      `<h3>ขอสนับสนุนจากโรงพยาบาล</h3>${li(R.support)}<h3>ข้อมูลที่ยังขาด</h3>${li(R.data_gaps)}` +
+      `<h3>การทำงานของ AI 3 คน</h3>${tb(["รอบ", "AI", "ทำอะไร", "สิ่งที่สั่งแก้ / สรุปผลตรวจ"], aiLogRows(A))}<h3>สิ่งที่ AI 2 และ AI 3 ทักและแก้แล้ว</h3>${li(R.review_notes)}` +
+      `<details><summary>ดูเนื้อหาเต็มของ AI 1 และ AI 2 แต่ละรอบ</summary>${A.log.filter(x => !x.who.startsWith("AI 3")).map(x => `<p><b>รอบ ${x.r} · ${esc(x.who)}</b></p><div style="white-space:pre-wrap;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px">${esc(x.text)}</div>`).join("")}</details>` +
+      `<div class="acts"><button class="btn" type="button" id="aiP">รายงาน AI (PPT)</button><button class="btn" type="button" id="aiW">รายงาน AI (Word)</button><button class="btn" type="button" id="aiF">รายงาน AI (PDF)</button><button class="btn" type="button" id="aiX">รายงาน AI (Excel)</button>` +
+      (canWrite ? `<button class="btn" type="button" id="aiUse">เพิ่มมาตรการของ AI ลงข้อ 2.4</button>` : "") + `</div>`;
+    const go = fn => () => { try { const r = fn(aiDeck()); if (r && r.catch) r.catch(e => toast(errText(e), true)); } catch (e) { toast(errText(e), true); } };
+    $("#aiP").onclick = go(d => Office.pptx(aiName(), d));
+    $("#aiW").onclick = go(d => Office.docx(aiName(), d));
+    $("#aiF").onclick = go(d => Office.pdf(aiName(), d));
+    $("#aiX").onclick = go(d => Office.xlsx(aiName(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes }),
+      { name: "มาตรการ", rows: [["มาตรการ", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "ผลประหยัด"], ...R.actions.map(a => [a.action, a.owner, a.due, a.saving])], header: 0 },
+      { name: "ปัจจัย", rows: [["ปัจจัย", "ผลต่อการใช้ไฟ"], ...R.factors.map(f => [f.factor, f.impact])], header: 0 },
+      { name: "วาระครั้งหน้า", rows: [["เรื่อง", "เป้าหมาย"], ...R.next_agenda.map(a => [a.topic, a.target])], header: 0 },
+      { name: "การทำงานของ AI", rows: [["รอบ", "AI", "ทำอะไร", "สิ่งที่สั่งแก้ / สรุปผลตรวจ"], ...aiLogRows(A)], header: 0 },
+      { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...R.analysis.map(x => [x]), [], ["ขอสนับสนุน"], ...R.support.map(x => [x]), [], ["ข้อมูลที่ยังขาด"], ...R.data_gaps.map(x => [x]), [], ["AI 2 / AI 3 ทักและแก้แล้ว"], ...R.review_notes.map(x => [x])], header: 0 }]));
+    if ($("#aiUse")) $("#aiUse").onclick = () => { R.actions.forEach(a => wData.meas.push({ n: a.action, per: a.due, note: `${a.owner} · คาดประหยัด ${a.saving} (เสนอโดย AI)` }));
+      rows2("meas"); drawChk(); toast(`เพิ่ม ${R.actions.length} มาตรการแล้ว ใส่ค่าก่อน/หลังทำ แล้วกด บันทึกร่าง`); $("#wMeas").scrollIntoView({ behavior: "smooth", block: "center" }); };
+  }
+  const aiName = () => `ประชุมEnergy_AI_${hosp().code || ""}_${$("#wk").value}`;
+  const aiSections = A => { const R = A.report; return [
+    { title: "บทวิเคราะห์ตัวเลข (AI)", head: ["บทวิเคราะห์"], rows: R.analysis.map(x => [x]) },
+    { title: "ปัจจัยที่มีผล (AI)", head: ["ปัจจัย", "ผลต่อการใช้ไฟ"], rows: R.factors.map(f => [f.factor, f.impact]) },
+    { title: "มาตรการที่เสนอ (AI)", head: ["มาตรการ", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "ผลประหยัด"], rows: R.actions.map(a => [a.action, a.owner, a.due, a.saving]) },
+    { title: "วาระติดตามครั้งหน้า · ขอสนับสนุน (AI)", head: ["หัวข้อ", "รายละเอียด"], rows: [...R.next_agenda.map(a => ["ติดตาม: " + a.topic, a.target]), ...R.support.map(x => ["ขอสนับสนุน", x]), ...R.data_gaps.map(x => ["ข้อมูลที่ยังขาด", x])] },
+    { title: "การทำงานของ AI 3 คน", head: ["รอบ", "AI", "ทำอะไร", "สิ่งที่สั่งแก้ / สรุปผลตรวจ"], rows: aiLogRows(A) }]; };
+  function aiDeck() {
+    const A = wData.ai, R = A.report, H = hosp(), C = wCalc || {};
+    return { title: `รายงานพลังงานโดย AI 3 คน · ${H.code}`, org: H.name, period: `ประชุมวันเสาร์ที่ ${dTH($("#wk").value)} · ${C.month || ""}`,
+      findings: [R.summary, ...R.analysis.slice(0, 4)], kpis: [["kWh เดือนนี้", nf(C.mtd)], ["เฉลี่ย kWh/วัน", nf(C.avg)], ["เป้าหมาย kWh/วัน", nf(C.tDay)], ["ปีก่อน kWh/วัน", nf(C.bDay)], ["ข้อมูลครบ", wScore(wData, C).pct + "%"], ["รอบที่ AI ตรวจ", String(A.rounds)]],
+      analysis: R.review_notes.map(x => "ทบทวนแล้ว: " + x), sections: aiSections(A),
+      notes: ["AI 1 นำเสนอ · AI 2 วิเคราะห์ทบทวน · AI 3 ตรวจสอบ ถ้า AI 3 สั่งแก้ AI 1 และ AI 2 แก้อีก 1 รอบ", "ตัวเลขทั้งหมดมาจากรายงานของโรงในหน้านี้ ผู้นำเสนอต้องตรวจทานก่อนใช้"] };
+  }
+
   // exec: who sent this week's report
   async function rAllWeek() {
     const sat = $("#awk").value, r = await sb.from("energy_weekly").select("*").eq("week_date", sat); if (r.error) throw r.error;
     const H = await sb.from("hospitals").select("id,code,name").order("code"), list = r.data || [];
-    $("#aWeek").innerHTML = `<tr><th>โรง</th><th>สถานะ</th><th>เฉลี่ย kWh/วัน</th><th>เทียบปีก่อน</th><th>เป้าหมาย kWh/วัน</th><th>ขอสนับสนุน</th></tr>` +
+    $("#aWeek").innerHTML = `<tr><th>โรง</th><th>สถานะ</th><th>เฉลี่ย kWh/วัน</th><th>เทียบปีก่อน</th><th>เป้าหมาย kWh/วัน</th><th>ข้อมูลครบ</th><th>AI 3 คน</th><th>ขอสนับสนุน</th></tr>` +
       (H.data || []).map(h => { const x = list.find(q => q.hospital_id === h.id), st = status(x), C = (x && x.data && x.data.snap) || {}, ch = C.avg != null && C.bDay ? (C.avg - C.bDay) * 100 / C.bDay : null;
-        return `<tr><td>${esc(h.code)} · ${esc(h.name)}</td><td><span class="st ${st[0]}">${esc(st[1])}</span></td><td>${nf(C.avg)}</td><td class="${ch == null ? "" : ch > 0 ? "up" : "down"}">${ch == null ? "-" : (ch > 0 ? "+" : "") + nf(ch, 1) + "%"}</td><td>${nf(C.tDay)}</td><td style="white-space:normal;text-align:left">${esc((x && x.data && x.data.support) || "")}</td></tr>`; }).join("");
+        return `<tr><td>${esc(h.code)} · ${esc(h.name)}</td><td><span class="st ${st[0]}">${esc(st[1])}</span></td><td>${nf(C.avg)}</td><td class="${ch == null ? "" : ch > 0 ? "up" : "down"}">${ch == null ? "-" : (ch > 0 ? "+" : "") + nf(ch, 1) + "%"}</td><td>${nf(C.tDay)}</td><td>${x ? (sc => `<span class="st ${sc.pct >= 100 ? "ok" : sc.pct >= 70 ? "draft" : "late"}">${sc.k}/${sc.n} (${sc.pct}%)</span>`)(wScore(x.data || {}, C)) : "-"}</td><td>${x && x.data && x.data.ai ? (x.data.ai.approved ? "✓ ผ่าน" : "✓ มีข้อสังเกต") : "-"}</td><td style="white-space:normal;text-align:left">${esc((x && x.data && x.data.support) || "")}</td></tr>`; }).join("");
   }
 })();

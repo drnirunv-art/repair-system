@@ -32,6 +32,13 @@
   form.ef textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:#17212b;background:#fff}
   .st{display:inline-block;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:600}.st.ok{background:#d5f0df;color:#14532d}.st.late{background:#f8d7d3;color:#7f1d1d}.st.draft{background:#fcefd2;color:#713f12}.st.none{background:#f3f4f6;color:#374151}
   .efc{display:flex;gap:10px;flex-wrap:wrap;align-items:end;font-size:13px;color:#17212b}.efc label{display:flex;flex-direction:column;gap:3px}.efc input{width:110px;padding:5px 8px}
+  .chk{border:1px solid var(--line);border-radius:10px;background:#fff;margin:8px 0 14px;padding:8px 12px;color:#17212b}.chk summary{cursor:pointer;font-weight:700}
+  .chk table td,.chk table th{padding:5px 8px;text-align:left;vertical-align:top;color:#17212b;font-size:13px;white-space:normal}.chk .y{color:#14632f;font-weight:700}.chk .n{color:#9b1c13;font-weight:700}.chk .o{color:#6b7280}
+  .bar{height:10px;border-radius:999px;background:#e5e9f0;overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:#15803d}
+  .aib{border:1px solid #9cc3ea;border-radius:10px;background:#f4f9ff;padding:10px 14px;margin:10px 0;color:#17212b}.aib h3{margin:12px 0 4px;font-size:15px}
+  .aib ol,.aib ul{margin:4px 0 4px 20px;padding:0}.aib table{background:#fff;border-collapse:collapse}.aib td,.aib th{padding:5px 7px;vertical-align:top;white-space:pre-line;color:#17212b;font-size:13px;text-align:left;border-bottom:1px solid var(--line)}
+  .aib .who3{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.aib .who3 span{background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:13px}
+  .aib b.ok{background:none;color:#14632f}.aib b.bad{background:none;color:#9b1c13}#aiSteps li{margin:3px 0}
 </style>
 </head>
 <body>
@@ -55,6 +62,7 @@
     <section id="tab-week">
       <div class="note">Chief ทุกโรงส่งรายงานภายใน <b>วันเสาร์ 10.00 น.</b> · ประชุม 14.00–16.00 น. ตัวเลขข้อ 2.1–2.2 ระบบรวมจากมิเตอร์ไฟฟ้าใน "บันทึก OP" และบิลรายเดือนให้ ส่วนข้อ 1, 2.3–5 Chief พิมพ์เอง กด "บันทึกร่าง" ได้หลายครั้ง แล้วกด "ส่งรายงาน" เมื่อพร้อม</div>
       <div class="hsel"><label for="wk">ประชุมวันเสาร์ที่</label><select id="wk"></select><span id="wStat"></span></div>
+      <details class="chk" id="wChk" open></details>
       <h2>1. วาระครั้งก่อน (ติดตามผล)</h2>
       <div class="tw"><table class="et ed" id="wPrev"></table></div>
       <div class="acts"><button class="btn small" type="button" data-add="prev">+ เพิ่มเรื่อง</button><button class="btn small" type="button" id="wCopy">ดึงเรื่องจากสัปดาห์ก่อน</button></div>
@@ -84,6 +92,10 @@
         <label class="wide">4. ขอสนับสนุนทางโรงพยาบาล<textarea rows="3" data-w="support"></textarea></label>
         <label class="wide">5. ข้อเสนอแนะ<textarea rows="3" data-w="suggest"></textarea></label>
       </form>
+      <h2>🤖 AI 3 คน ช่วยนำเสนอ วิเคราะห์ ทบทวน และตรวจสอบ</h2>
+      <p class="sub">AI 1 เตรียมเนื้อหานำเสนอตามวาระ → AI 2 วิเคราะห์สาเหตุและทบทวน → AI 3 ตรวจสอบ ถ้า AI 3 สั่งแก้ AI 1 และ AI 2 แก้ไขอีก 1 รอบ แล้ว AI 3 เรียบเรียงรายงานฉบับสุดท้าย ใช้ตัวเลขและข้อความในหน้านี้เท่านั้น (ไม่ส่งข้อมูลผู้ป่วยหรือชื่อพนักงาน) ใส่ข้อมูลตามรายการด้านบนให้ครบก่อน ผลจะแม่นขึ้น</p>
+      <div class="acts"><button class="btn primary" type="button" id="wAI">🤖 ให้ AI 3 คนวิเคราะห์รายงานนี้</button></div>
+      <div class="aib" id="aiBox" hidden></div>
       <div class="acts"><button class="btn" type="button" id="wSave">บันทึกร่าง</button><button class="btn primary" type="button" id="wSend">ส่งรายงาน</button>
         <button class="btn" type="button" id="wP">PPT ตามวาระประชุม</button><button class="btn" type="button" id="wX">Excel (ไฟฟ้ารายวัน)</button><span class="sub" id="wMsg" role="status"></span></div>
     </section>
