@@ -254,6 +254,36 @@
   let moJobs = [], moRep = null;
   const unesc = v => String(v).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
   const busy = async (btn, f) => { const t = btn.textContent; btn.disabled = true; btn.textContent = "กำลังสร้างไฟล์…"; try { await f(); } catch (e) { alert(errText(e)); } btn.disabled = false; btn.textContent = t; };
+  // section 13: electricity and water from energy_monthly; target = 5% less kWh than the same month last year (weekly energy meeting rule)
+  function energySection(cur, last, ytd, ytdLast, yr, mo) {
+    const head = ["รายการ", "เดือนนี้", "เดือนเดียวกันปีก่อน", "เปลี่ยนแปลง", `สะสม ม.ค.–เดือนนี้ ปี ${yr + 543}`, `สะสม ปี ${yr + 542}`, "เปลี่ยนแปลง"];
+    const num = v => v == null || v === "" ? null : +v, f0 = v => v == null ? "-" : Math.round(v).toLocaleString("th-TH"), f2 = v => v == null ? "-" : v.toLocaleString("th-TH", { maximumFractionDigits: 2 });
+    const sum = (l, k) => { const v = l.map(r => num(r[k])).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) : null; };
+    const chg = (a, b) => a == null || b == null || !b ? "-" : `${a >= b ? "+" : ""}${((a - b) / b * 100).toFixed(1)}%`;
+    const ratio = (a, b) => a == null || b == null || !b ? null : a / b;
+    const g = (r, k) => r ? num(r[k]) : null;
+    const items = [["ไฟฟ้า (kWh)", "elec_kwh", f0], ["ค่าไฟ (บาท)", "elec_cost", f0], ["น้ำประปา (ลบ.ม.)", "water_m3", f0], ["ค่าน้ำ (บาท)", "water_cost", f0], ["ไฟฟ้าชิลเลอร์ (kWh)", "chiller_kwh", f0]];
+    const rows = items.map(([t, k, f]) => [t, f(g(cur, k)), f(g(last, k)), chg(g(cur, k), g(last, k)), f(sum(ytd, k)), f(sum(ytdLast, k)), chg(sum(ytd, k), sum(ytdLast, k))]);
+    const unit = (r, a, b) => r ? ratio(g(r, a), g(r, b)) : null;
+    rows.push(["ค่าไฟเฉลี่ย (บาท/kWh)", f2(unit(cur, "elec_cost", "elec_kwh")), f2(unit(last, "elec_cost", "elec_kwh")), "-", f2(ratio(sum(ytd, "elec_cost"), sum(ytd, "elec_kwh"))), f2(ratio(sum(ytdLast, "elec_cost"), sum(ytdLast, "elec_kwh"))), "-"]);
+    rows.push(["kWh ต่อ ตร.ม.", f2(unit(cur, "elec_kwh", "area_m2")), f2(unit(last, "elec_kwh", "area_m2")), "-", "-", "-", "-"]);
+    rows.push(["kWh ต่อวันนอนผู้ป่วย", f2(unit(cur, "elec_kwh", "patient_days")), f2(unit(last, "elec_kwh", "patient_days")), "-", "-", "-", "-"]);
+    rows.push(["Peak demand (kW)", f0(g(cur, "peak_kw")), f0(g(last, "peak_kw")), chg(g(cur, "peak_kw"), g(last, "peak_kw")), "-", "-", "-"]);
+    const find = [], rec = [], k = g(cur, "elec_kwh"), kl = g(last, "elec_kwh");
+    if (!cur) { find.push("ยังไม่มีบิลค่าไฟค่าน้ำของเดือนนี้ในหน้า Energy"); rec.push("ให้หัวหน้างานกรอกบิลค่าไฟค่าน้ำของเดือนนี้ในหน้า Energy แท็บบิลรายเดือน เพื่อให้รายงานข้อ 13 ครบ"); }
+    else if (k != null) {
+      if (kl) {
+        const p = (k - kl) / kl * 100;
+        find.push(`ใช้ไฟฟ้า ${f0(k)} kWh ${p >= 0 ? "มากกว่า" : "น้อยกว่า"}เดือนเดียวกันปีก่อน ${Math.abs(p).toFixed(1)}% (เป้าหมายลดลง 5%)`);
+        if (p > -5) rec.push(`ไฟฟ้ายังไม่ถึงเป้าลด 5% เทียบปีก่อน (ต่างอยู่ ${(p + 5).toFixed(1)} จุด) ควรนำเข้าวาระประชุม Energy รายสัปดาห์ ทบทวนชิลเลอร์ เวลาเปิดปิดระบบปรับอากาศ และพื้นที่ที่ใช้ไฟเพิ่ม`);
+      } else find.push(`ใช้ไฟฟ้า ${f0(k)} kWh (ยังไม่มีข้อมูลเดือนเดียวกันปีก่อนให้เทียบ)`);
+    }
+    if (cur && cur.note && /ตรวจ:/.test(cur.note)) rec.push("ตัวเลขพลังงานของเดือนนี้มีจุดที่ต้องยืนยัน ดูหมายเหตุในหน้า Energy แท็บบิลรายเดือน");
+    const tr = rows.map(r => `<tr>${r.map((v, i) => `<td${i ? ' class="num"' : ""}>${esc(v)}</td>`).join("")}</tr>`).join("");
+    const html = `<div class="scroll"><table><tr>${head.map((h, i) => `<th${i ? ' class="num"' : ""}>${esc(h)}</th>`).join("")}</tr>${tr}</table></div>
+      <p class="meta">ที่มา: บิลรายเดือนในหน้า <a href="energy.html">Energy</a>${cur && cur.note ? ` · ${esc(cur.note)}` : ""}</p>`;
+    return { head, rows, find, rec, html };
+  }
   async function renderMonth() {
     const m = $("#moMonth").value || today().slice(0, 7), d0 = m + "-01", d1 = addDays(addDays(d0, 32).slice(0, 8) + "01", 0), s = bkk(d0), e = bkk(d1);
     $("#moBody").innerHTML = `<div class="empty">กำลังโหลด…</div>`;
@@ -267,6 +297,11 @@
       sb.from("monthly_notes").select("*").eq("hospital_id", H.id).eq("month", m).maybeSingle(),
       sb.from("kb_articles").select("id").eq("hospital_id", H.id).gte("created_at", s).lt("created_at", e)]);
     if (a.error) return fail("#moBody", a.error);
+    // energy and water for this month, the same month last year and year to date (from the Energy page bills)
+    const yr = +m.slice(0, 4), mo = +m.slice(5, 7), ly = `${yr - 1}-${m.slice(5)}`;
+    const enQ = await sb.from("energy_monthly").select("*").eq("hospital_id", H.id).gte("month", `${yr - 1}-01-01`).lte("month", d0);
+    const enRows = enQ.error ? [] : (enQ.data || []), enOf = k => enRows.find(r => r.month.slice(0, 7) === k) || null;
+    const en = energySection(enOf(m), enOf(ly), enRows.filter(r => r.month.slice(0, 4) == yr && +r.month.slice(5, 7) <= mo), enRows.filter(r => r.month.slice(0, 4) == yr - 1 && +r.month.slice(5, 7) <= mo), yr, mo);
     const jobs = moJobs = a.data || [], openEnd = (b.data || []).filter(j => j.status !== "close" || !j.closed_at || j.closed_at >= e), moves = c.data || [];
     const pids = [...new Set(moves.map(x => x.part_id))], parts = pids.length ? ((await sb.from("parts").select("id,code,name,unit").in("id", pids)).data || []) : [];
     const cleared = jobs.filter(j => j.cleared_at), closed = jobs.filter(j => j.status === "close" && j.closed_at);
@@ -310,6 +345,7 @@
       if (shiftDue && shiftSent < shiftDue * 0.9) rec.push(`ส่งรายงานกะ ${shiftSent} จาก ${shiftDue} กะ ควรกำชับให้ส่งครบทุกกะ`);
       if (!rec.length) rec.push("ตัวเลขของเดือนนี้อยู่ในเกณฑ์ ไม่พบประเด็นที่ต้องเร่งแก้จากข้อมูลในระบบ");
     }
+    find.push(...en.find); rec.push(...en.rec);
     moRep = { title: `รายงานประจำเดือน ${monthTh}`, org: `งานวิศวกรรมอาคาร ${H.name}`, period: monthTh, file: `รายงานประจำเดือน-${H.code}-${m}`, findings: find, notes: rec, manager: [notes.summary && `บทสรุปของหัวหน้างาน: ${notes.summary}`, notes.plan && `แผนเดือนถัดไป: ${notes.plan}`].filter(Boolean),
       kpis: [["รับแจ้งทั้งเดือน", jobs.length], ["ซ่อมเสร็จ", cleared.length], ["ปิดงาน", closed.length], ["ค้าง ณ สิ้นเดือน", openEnd.length], ["ซ่อมเสร็จทัน SLA", pct(slaOk, cleared.length)], ["เวลาปิดงานเฉลี่ย", avg(closed)],
         ["ความพึงพอใจเฉลี่ย", ratingAvg != null ? ratingAvg.toFixed(2) + " / 5" : "-"], ["ผู้แจ้งประเมิน", rated.length], ["ค่าอะไหล่ที่เบิกใช้ (บาท)", baht(cost)], ["ใบขอซื้อ", prs.length], ["Memo", memos.length], ["รายงานกะที่ส่ง", `${shiftSent} / ${shiftDue}`]],
@@ -317,7 +353,8 @@
         { title: "งานตามประเภท", head: ["ประเภทงาน", "จำนวนใบ", "ซ่อมเสร็จ", "เวลาเฉลี่ย"], rows: byType.map(r => [unesc(r[0]), ...r.slice(1)]) },
         { title: "อาคารที่แจ้งมากที่สุด", head: ["อาคาร", "จำนวนใบ"], rows: topB }, { title: "แผนกที่แจ้งมากที่สุด", head: ["แผนก", "จำนวนใบ"], rows: topD },
         { title: "เครื่อง / อุปกรณ์ที่แจ้งซ่อมซ้ำ", head: ["เครื่อง / อุปกรณ์", "จำนวนใบ"], rows: repeat }, { title: "ผลงานช่าง", head: ["ช่าง", "จำนวนใบ", "ซ่อมเสร็จ", "เวลาเฉลี่ย", "คะแนนเฉลี่ย"], rows: techRows },
-        { title: "เหตุผลพักงาน", head: ["เหตุผล", "จำนวนใบ"], rows: holds }, { title: "อะไหล่ที่ใช้มากที่สุด", head: ["อะไหล่", "จำนวน", "บาท"], rows: partRows.map(x => [x.name, `${x.q} ${x.unit}`, baht(x.c)]), chart: false }] };
+        { title: "เหตุผลพักงาน", head: ["เหตุผล", "จำนวนใบ"], rows: holds }, { title: "อะไหล่ที่ใช้มากที่สุด", head: ["อะไหล่", "จำนวน", "บาท"], rows: partRows.map(x => [x.name, `${x.q} ${x.unit}`, baht(x.c)]), chart: false },
+        { title: "พลังงานไฟฟ้าและน้ำ", head: en.head, rows: en.rows, chart: false }] };
     const li = l => l.map(t => `<li>${esc(t)}</li>`).join("");
     $("#moBody").innerHTML = `<div class="panel" style="text-align:center;margin-bottom:16px"><h2 style="margin:0">รายงานประจำเดือน ${esc(monthTh)}</h2><div class="sub" style="margin:4px 0 0">งานวิศวกรรมอาคาร ${esc(H.name)} · พิมพ์เมื่อ ${fmt(new Date().toISOString())}</div></div>
       <div class="panel" style="margin-bottom:16px"><h3 style="margin-top:0">บทสรุปผู้บริหาร</h3><ol style="margin:0 0 12px;padding-left:22px">${li(find)}</ol>${rec.length ? `<h3>บทวิเคราะห์และข้อเสนอแนะ</h3><ol style="margin:0;padding-left:22px">${li(rec)}</ol>` : ""}<p class="meta" style="margin:10px 0 0">ระบบสรุปจากตัวเลขในรายงานนี้โดยอัตโนมัติ บทสรุปของหัวหน้างานอยู่ในข้อ 12</p></div>
@@ -339,6 +376,7 @@
       <h3 class="grp">12. บทสรุปของหัวหน้างาน และแผนเดือนถัดไป</h3>
       ${isMgr() ? `<div class="noprint" style="display:grid;gap:10px"><label>บทสรุป ปัญหาสำคัญ และสิ่งที่ปรับปรุง<textarea id="moSum" rows="4">${esc(notes.summary || "")}</textarea></label><label>แผนเดือนถัดไป<textarea id="moPlan" rows="3">${esc(notes.plan || "")}</textarea></label><div class="row"><button class="btn primary small" type="button" id="moSave">บันทึกบทสรุป</button></div></div>` : ""}
       <div class="${isMgr() ? "printonly" : ""}"><p style="white-space:pre-wrap"><b>บทสรุป:</b> ${esc(notes.summary || "-")}</p><p style="white-space:pre-wrap"><b>แผนเดือนถัดไป:</b> ${esc(notes.plan || "-")}</p></div>
+      <h3 class="grp">13. พลังงานไฟฟ้าและน้ำ</h3>${en.html}
       <div class="row" style="justify-content:space-around;margin-top:48px;text-align:center"><div>ลงชื่อ ........................................<br>หัวหน้างานวิศวกรรมอาคาร</div><div>ลงชื่อ ........................................<br>ผู้บริหาร</div></div>`;
     if ($("#moSave")) $("#moSave").onclick = async () => {
       const { error } = await sb.from("monthly_notes").upsert({ hospital_id: H.id, month: m, summary: $("#moSum").value.trim() || null, plan: $("#moPlan").value.trim() || null, updated_by: me.id, updated_at: new Date().toISOString() });
