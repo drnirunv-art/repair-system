@@ -13,6 +13,7 @@ import { zodOutputFormat } from "npm:@anthropic-ai/sdk/helpers/zod";
 import { z } from "npm:zod";
 
 const MODEL = "claude-opus-5-5";
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const out = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
@@ -142,7 +143,22 @@ Deno.serve(async (req) => {
     const ex = await db.rpc("am_exec"), mh = await db.rpc("my_hospitals");
     // deno-lint-ignore no-explicit-any
     if (!ex.data && !((mh.data ?? []) as any[]).some((h) => h.id === hospital_id)) return out({ error: "ไม่มีสิทธิ์ดูข้อมูลของโรงพยาบาลนี้" }, 403);
-    const data = JSON.stringify({ hospital: body.hospital, meeting: body.meeting, period: body.period, figures: body.figures, backlog: body.backlog, chief_notes: body.notes }).slice(0, 40000);
+    // Background mode (body.job): the work runs on the server one step per call, each call starts the next one,
+    // and the state lives in perf_weekly.ai.job, so the person can close the page and come back for the result.
+    // deno-lint-ignore no-explicit-any
+    let J: any = null, base: any = {};
+    if (body.job === "run" || body.job === "start") {
+      const r = await db.from("perf_weekly").select("ai").eq("hospital_id", hospital_id).eq("meet_date", body.meet_date).maybeSingle();
+      // keep the last finished Action plan visible until the new one is done
+      base = { ...(r.data?.ai ?? {}) }; delete base.job;
+    }
+    if (body.job === "run") {
+      const r = await db.from("perf_weekly").select("ai").eq("hospital_id", hospital_id).eq("meet_date", body.meet_date).maybeSingle();
+      J = r.data?.ai?.job;
+      if (!J || J.status !== "running" || J.id !== body.id) return out({ skipped: true });
+    }
+    const src = J ? J.input : body;
+    const data = JSON.stringify({ hospital: src.hospital, meeting: src.meeting, period: src.period, figures: src.figures, backlog: src.backlog, chief_notes: src.notes }).slice(0, 40000);
     const S1 = `${CONTEXT}\nบทบาทของคุณ: AI 1 ผู้เสนอ ให้ทำ RCA และเสนอวิธีแก้ไข โครงการ และแผนงาน สำหรับทุกกลุ่มปัญหาของโรงนี้`;
     const U1 = `ข้อมูลรายงานของโรงนี้ (JSON):\n${data}\n\nแบ่งปัญหาเป็นกลุ่ม (งานค้างแยกตามสาเหตุและอายุ, KPI 24 ชม. ที่ไม่ถึง 100%, ข้อ TOR ที่เสี่ยงถูกหักคะแนน, PM/MA/QC ที่ต่ำกว่าเป้า) ทีละกลุ่ม: ทำก้างปลา 4M ถาม 5 Why จนถึงสาเหตุราก ตั้งโครงการแก้ไข (ชื่อ เป้าหมาย งบประมาณ) แล้วเสนอขั้นตอน ผู้รับผิดชอบ กำหนดเสร็จ และตัวชี้วัดผล ให้เคลียร์งานค้างเกิน 60 วันก่อน และทั้งหมดเป็นศูนย์ภายในสิ้นเดือนธันวาคม สุดท้ายเสนอแผนเวลาเป็นรายสัปดาห์จนถึงสิ้นเดือนธันวาคม`;
     const S2 = `${CONTEXT}\nบทบาทของคุณ: AI 2 ผู้วิเคราะห์และทบทวน ให้ตรวจ RCA ก้างปลา 4M และ 5 Why ว่าถึงสาเหตุรากจริง และทบทวนข้อเสนอของ AI 1 อย่างตรงไปตรงมา`;
@@ -151,7 +167,8 @@ Deno.serve(async (req) => {
     const U3 = (p1: string, p2: string) => `ข้อมูลรายงาน (JSON):\n${data}\n\nข้อเสนอของ AI 1:\n${p1}\n\nผลวิเคราะห์และทบทวนของ AI 2:\n${p2}\n\nเขียนรายงานฉบับสุดท้าย: summary = บทสรุปผู้บริหาร 3-5 ประโยค, analysis = บทวิเคราะห์ (รวมเรื่องที่ต้องขอ GM ตัดสินใจ), items = ทุกกลุ่มปัญหา (code เช่น B1, B2, K1) พร้อม tickets, ก้างปลา 4M, 5 Why, สาเหตุราก, โครงการแก้ไข และขั้นตอนแก้ไข (due เป็นวันที่ เช่น 15 ธ.ค. 2569), timeline = แผนรายสัปดาห์ถึงสิ้นเดือนธันวาคม, risks = ความเสี่ยงของแผน, review_notes = สิ่งที่ AI 2 พบและ AI 3 แก้แล้ว, follow_up = วิธีติดตามผลในการประชุมครั้งถัดไป`;
 
     // ---- one step per call; the page loops: propose -> review -> check, again until check passes, then report ----
-    if (body.step) {
+    // deno-lint-ignore no-explicit-any
+    const doStep = async (body: any): Promise<any> => {
       const txt = (sys: string, user: string) => gkey ? gem(gkey, sys, user) : ask(new Anthropic({ apiKey: key }), sys, user);
       // deno-lint-ignore no-explicit-any
       const obj = async (sys: string, shape: string, user: string, schema: any) => {
@@ -175,22 +192,70 @@ Deno.serve(async (req) => {
         const t = !p1 ? await txt(S1, U1)
           : await txt(`${S1}\nตอนนี้เป็นการแก้ไขตามคำสั่งของ AI 3 ผู้ตรวจสอบ ให้แก้ครบทุกข้อที่สั่ง แล้วเขียนข้อเสนอฉบับเต็มใหม่ทั้งหมด`,
             `ข้อมูลรายงาน (JSON):\n${data}\n\nข้อเสนอเดิมของคุณ:\n${p1}\n\nผลทบทวนเดิมของ AI 2:\n${p2}\n\nสิ่งที่ AI 3 สั่งให้แก้:\n${fb}\n\nเขียนข้อเสนอฉบับแก้ไขเต็ม (กลุ่มปัญหา ก้างปลา 4M, 5 Why, สาเหตุราก, โครงการ, ขั้นตอน ผู้รับผิดชอบ กำหนดเสร็จ ตัวชี้วัด และแผนเวลา) และบอกท้ายเรื่องว่าแก้อะไรไปบ้าง`);
-        return out({ text: t, model });
+        return { text: t, model };
       }
       if (body.step === "review") {
         const t = await txt(S2, fb ? `${U2(p1)}\n\nข้อเสนอนี้เป็นฉบับแก้ไขตามที่ AI 3 สั่ง:\n${fb}\nตรวจด้วยว่าแก้ครบและถูกต้องหรือไม่` : U2(p1));
-        return out({ text: t, model });
+        return { text: t, model };
       }
       if (body.step === "check") {
         const c = await obj(`${CONTEXT}\nบทบาทของคุณ: AI 3 ผู้ตรวจสอบ ตรวจข้อเสนอของ AI 1 และผลทบทวนของ AI 2 อย่างเข้มงวด ว่าพร้อมเสนอผู้บริหารหรือยัง: ครบทุกกลุ่มปัญหา ก้างปลา 4M ครบ 4 ด้าน 5 Why ถึงสาเหตุรากจริง ทุกขั้นตอนมีผู้รับผิดชอบ วันที่ และตัวชี้วัด ทำได้จริง และประเด็นที่ AI 2 ทักได้รับการแก้แล้ว`,
           CHECK_SHAPE, `ข้อมูลรายงาน (JSON):\n${data}\n\nข้อเสนอของ AI 1:\n${p1}\n\nผลทบทวนของ AI 2:\n${p2}${hist ? `\n\nประวัติการตรวจรอบก่อน:\n${hist}\nห้ามสั่งแก้เรื่องเดิมซ้ำถ้าแก้แล้ว` : ""}`, Check);
-        return out({ check: c, model });
+        return { check: c, model };
       }
       if (body.step === "report") {
         const rep = await obj(S3, SHAPE, `${U3(p1, p2)}\n\nประวัติการตรวจวนของ AI 3:\n${hist}\nใส่ใน review_notes ว่าแต่ละรอบ AI 3 สั่งแก้อะไรและแก้แล้วอย่างไร`, Report);
-        return out({ report: rep, model });
+        return { report: rep, model };
       }
-      return out({ error: "step ไม่ถูกต้อง" }, 400);
+      throw new Error("step ไม่ถูกต้อง");
+    };
+    if (body.step) return out(await doStep(body));
+
+    const self = `${Deno.env.get("SUPABASE_URL")}/functions/v1/perf-ai`;
+    const chain = (b: unknown) => fetch(self, { method: "POST", headers: { Authorization: auth, apikey: Deno.env.get("SUPABASE_ANON_KEY")!, "Content-Type": "application/json" }, body: JSON.stringify(b) })
+      .then((r) => r.text()).catch((e) => console.error("chain", e));
+    const now = () => new Date().toISOString();
+    // deno-lint-ignore no-explicit-any
+    const save = (ai: any) => db.from("perf_weekly").update({ ai: ai.report ? ai : { ...base, ...ai }, updated_at: now() }).eq("hospital_id", hospital_id).eq("meet_date", body.meet_date);
+    if (body.job === "start") {
+      const id = crypto.randomUUID(), input = { hospital: body.hospital, meeting: body.meeting, period: body.period, figures: body.figures, backlog: body.backlog, notes: body.notes };
+      const job = { id, status: "running", round: 1, step: "propose", p1: "", p2: "", issues: [], log: [], tries: 0, n: 0, input, events: [], started_at: now(), updated_at: now(), by: u.user.id };
+      const { error } = await db.from("perf_weekly").upsert({ hospital_id, meet_date: body.meet_date, ai: { ...base, job }, updated_by: u.user.id, updated_at: now() }, { onConflict: "hospital_id,meet_date" });
+      if (error) return out({ error: "เริ่มงานไม่ได้ (ต้องเป็นหัวหน้าของโรงนี้): " + error.message }, 403);
+      EdgeRuntime.waitUntil(chain({ job: "run", hospital_id, meet_date: body.meet_date, id }));
+      return out({ started: true, id });
+    }
+    if (body.job === "run") {
+      const next = { job: "run", hospital_id, meet_date: body.meet_date, id: J.id };
+      const r = J.round, lab: Record<string, string> = { propose: r === 1 ? "รอบ 1: AI 1 เสนอ RCA และวิธีแก้" : `รอบ ${r}: AI 1 แก้ตามที่ AI 3 สั่ง`, review: `รอบ ${r}: AI 2 วิเคราะห์ ทบทวน`, check: `รอบ ${r}: AI 3 ตรวจสอบ`, report: "AI 3 เรียบเรียงรายงานฉบับสุดท้าย" };
+      EdgeRuntime.waitUntil((async () => {
+        const label = lab[J.step] ?? J.step;
+        try {
+          if (++J.n > 30) throw new Error("ทำเกินจำนวนขั้นที่กำหนด หยุดไว้ก่อน");
+          J.updated_at = now(); await save({ job: J }); // heartbeat: the page sees this step has started
+          if (J.step === "propose") { J.p1 = (await doStep({ step: "propose", p1: J.p1, p2: J.p2, issues: J.issues })).text; J.step = "review"; J.events.push({ text: label, ok: true }); }
+          else if (J.step === "review") { J.p2 = (await doStep({ step: "review", p1: J.p1, issues: J.issues })).text; J.step = "check"; J.events.push({ text: label, ok: true }); }
+          else if (J.step === "check") {
+            const c = (await doStep({ step: "check", p1: J.p1, p2: J.p2, history: J.log })).check;
+            J.log.push({ round: r, approved: c.approved, issues: c.issues || [], summary: c.summary || "" });
+            J.events.push({ text: `${label}: ${c.approved ? "ผ่าน" : `สั่งแก้ ${c.issues.length} เรื่อง`}`, ok: c.approved, issues: c.approved ? [] : c.issues });
+            if (c.approved || r >= 4) J.step = "report"; else { J.issues = c.issues; J.round = r + 1; J.step = "propose"; }
+          } else if (J.step === "report") {
+            const res = await doStep({ step: "report", p1: J.p1, p2: J.p2, history: J.log });
+            J.events.push({ text: label, ok: true });
+            await save({ report: res.report, log: J.log, model: res.model, at: now(), job: { id: J.id, status: "done", events: J.events, started_at: J.started_at, updated_at: now() } });
+            return;
+          }
+          J.tries = 0; J.updated_at = now(); await save({ job: J }); await chain(next);
+        } catch (e) {
+          const msg = String((e as Error)?.message ?? e);
+          if (!/โควตา|limit: 0/.test(msg) && /ช้าเกิน|503|429|high demand|overload|UNAVAILABLE|RESOURCE_EXHAUSTED|ไม่ตรงรูปแบบ|ไม่ตอบ|ขัดข้อง/i.test(msg) && J.tries < 3) {
+            J.tries++; J.n--; J.updated_at = now(); J.events.push({ text: `${label}: AI ไม่ว่างหรือช้า ลองใหม่อัตโนมัติ (ครั้งที่ ${J.tries}/3)`, ok: false, retry: true });
+            await save({ job: J }); await new Promise((ok) => setTimeout(ok, 8000)); await chain(next);
+          } else { J.status = "error"; J.error = `${label} ไม่สำเร็จ: ${msg}`; J.updated_at = now(); await save({ job: J }); }
+        }
+      })());
+      return out({ accepted: true });
     }
 
     if (gkey) {

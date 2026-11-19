@@ -88,7 +88,7 @@
     $("#ro").textContent = canWrite ? "" : "ดูได้อย่างเดียว (บันทึกได้เฉพาะหัวหน้าของโรงนี้)";
     ["#fill", "#save", "#send", "#blSys"].forEach(k => $(k).hidden = !canWrite); $("#blFile").disabled = !canWrite;
     const r = await sb.from("perf_weekly").select("*").eq("hospital_id", h).eq("meet_date", meet()).maybeSingle(); if (r.error) throw r.error;
-    row = r.data; D = JSON.parse(JSON.stringify((row && row.data) || {})); BL = (row && row.backlog && row.backlog.rows) ? row.backlog : { rows: [] }; AI = (row && row.ai) || {};
+    row = r.data; D = JSON.parse(JSON.stringify((row && row.data) || {})); BL = (row && row.backlog && row.backlog.rows) ? row.backlog : { rows: [] }; AI = (row && row.ai) || {}; stopPoll(); if (AI.job && AI.job.status === "running") watchJob();
     if (!D.site) D.site = { hospital: hosp().name, chief: canWrite ? me.full_name || "" : "", qc: "" };
     const [a, b] = period(); $("#per").textContent = `· รอบนี้ ${thd(a, { day: "numeric", month: "short" })} – ${thd(b)}`;
     status();
@@ -314,6 +314,7 @@
   // ---------- save / send ----------
   async function persist(send) {
     const H = hosp(), rec = { hospital_id: H.id, meet_date: meet(), data: D, backlog: BL, ai: AI, updated_by: me.id, updated_at: new Date().toISOString() };
+    if (AI.job && AI.job.status === "running") delete rec.ai; // the server is writing the AI result, leave it alone
     if (send) { rec.submitted_at = new Date().toISOString(); rec.submitted_by = me.id; }
     const { data, error } = await sb.from("perf_weekly").upsert(rec, { onConflict: "hospital_id,meet_date" }).select().maybeSingle(); if (error) throw error;
     row = data; status();
@@ -336,6 +337,15 @@
   }
   $("#aiGo").onclick = guard(async () => {
     if (!BL.rows.length && !tbl("sum").some(r => String(r[3]).trim())) return toast("อัปโหลดไฟล์ Backlog หรือกรอกรายงานก่อน แล้วค่อยให้ AI วิเคราะห์", true);
+    if (canWrite) { // run on the server: the person may close the page or switch apps and come back for the result
+      if (AI.job && AI.job.status === "running" && !jobStalled()) return toast("AI กำลังทำงานของรอบนี้อยู่แล้ว รอผลได้เลย");
+      await sb.auth.refreshSession().catch(() => null); // a fresh sign-in token lasts about 1 hour for the server's steps
+      const { data, error } = await sb.functions.invoke("perf-ai", { body: { ...aiInput(), meet_date: meet(), job: "start" } });
+      let msg = data && data.error; if (error) { const j = error.context && typeof error.context.json === "function" ? await error.context.json().catch(() => ({})) : {}; msg = j.error || error.message; }
+      if (msg) return toast("เริ่มให้ AI ทำงานไม่ได้: " + msg, true);
+      AI = { ...AI, job: { id: data.id, status: "running", round: 1, step: "propose", events: [], started_at: new Date().toISOString(), updated_at: new Date().toISOString() } };
+      watchJob(); toast("AI เริ่มทำงานที่เซิร์ฟเวอร์แล้ว ปิดหน้านี้หรือไปทำอย่างอื่นได้ กลับมาเปิดหน้านี้เพื่อดูผล"); return;
+    }
     const box = $("#aiBox"); box.hidden = false;
     box.innerHTML = `<h3>Action plan โดย AI 3 คน</h3>${ROLES}<p>ใช้เวลาประมาณ 2–6 นาที ระหว่างนี้อย่าปิดหน้า อย่าสลับแอป และอย่าให้จอมือถือดับ</p><ol id="aiSteps"></ol>`;
     const body = aiInput();
@@ -391,7 +401,42 @@
   const toPng = (svg, w, h) => new Promise(ok => { const img = new Image();
     img.onload = () => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0); try { ok(cv.toDataURL("image/png")); } catch (e) { ok(null); } };
     img.onerror = () => ok(null); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
-  function drawAi() {
+  // ---------- background AI job (perf_weekly.ai.job): progress + polling ----------
+  let pollT = null, pollKey = "";
+  const stopPoll = () => { if (pollT) clearInterval(pollT); pollT = null; pollKey = ""; };
+  const jobStalled = () => AI.job && Date.now() - new Date(AI.job.updated_at || AI.job.started_at).getTime() > 4 * 60000;
+  const STEP_LAB = j => ({ propose: j.round === 1 ? "รอบ 1: AI 1 เสนอ RCA และวิธีแก้" : `รอบ ${j.round}: AI 1 แก้ตามที่ AI 3 สั่ง`, review: `รอบ ${j.round}: AI 2 วิเคราะห์ ทบทวน`, check: `รอบ ${j.round}: AI 3 ตรวจสอบ`, report: "AI 3 เรียบเรียงรายงานฉบับสุดท้าย" })[j.step] || j.step;
+  function drawJob() {
+    const j = AI.job, box = $("#aiBox"), t = s => new Date(s).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", timeStyle: "short" });
+    const evs = (j.events || []).map(e => `<li>${esc(e.text)} ${e.ok ? `<b class="ok">✓</b>` : ""}${(e.issues || []).length ? `<ul>${e.issues.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</li>`).join("");
+    const mins = Math.max(0, Math.round((Date.now() - new Date(j.started_at).getTime()) / 60000));
+    let tail;
+    if (j.status === "running") tail = `<li>${esc(STEP_LAB(j))} … กำลังทำงาน</li></ol><p class="note">${jobStalled() ? "ขั้นนี้ไม่มีความคืบหน้าเกิน 4 นาที ระบบกำลังสั่งให้ทำต่อ ถ้ายังไม่ขยับ กดปุ่ม 🤖 ด้านบนอีกครั้งเพื่อเริ่มใหม่" : "ปิดหน้านี้ ปิดจอ หรือไปทำอย่างอื่นได้ AI ทำงานต่อที่เซิร์ฟเวอร์ กลับมาเปิดหน้านี้ (โรงและวันประชุมเดิม) เพื่อดูผล"}</p>`;
+    else tail = `</ol><p class="note bad">ทำไม่สำเร็จ: ${esc(j.error || "")} · กดปุ่ม 🤖 ด้านบนเพื่อเริ่มใหม่</p>`;
+    const prog = `<h3>Action plan โดย AI 3 คน</h3>${ROLES}<p class="sub">เริ่มเมื่อ ${t(j.started_at)} น. (ผ่านไป ${mins} นาที) · ใช้เวลาประมาณ 3–10 นาที · อัปเดตล่าสุด ${t(j.updated_at || j.started_at)} น.</p><ol>${evs}${tail}`;
+    box.hidden = false;
+    if (AI.report) { drawAi(true); box.insertAdjacentHTML("afterbegin", `<div class="jobp">${prog}<p class="sub">ด้านล่างคือ Action plan ฉบับก่อน จะถูกแทนที่เมื่อฉบับใหม่เสร็จ</p><hr></div>`); }
+    else box.innerHTML = prog;
+  }
+  function watchJob() {
+    stopPoll(); const h = $("#h").value, d = meet(), key = h + d, id = AI.job.id; pollKey = key; drawJob();
+    let resumed = 0, lastResume = 0;
+    pollT = setInterval(async () => {
+      if (pollKey !== key) return stopPoll();
+      const r = await sb.from("perf_weekly").select("ai").eq("hospital_id", h).eq("meet_date", d).maybeSingle();
+      if (pollKey !== key || r.error || !r.data) return;
+      const ai = r.data.ai || {}, j = ai.job;
+      if (!j || j.id !== id) return;
+      AI = ai; if (row) row.ai = ai;
+      if (j.status === "done") { stopPoll(); drawAi(); toast("AI ทำ Action plan เสร็จแล้ว เก็บไว้กับรายงานรอบนี้"); return; }
+      if (j.status === "error") { stopPoll(); drawJob(); return; }
+      // the server's chain stopped (for example its sign-in token ran out): continue it from this page once
+      if (jobStalled() && canWrite && resumed < 2 && Date.now() - lastResume > 4 * 60000) { resumed++; lastResume = Date.now(); await sb.auth.refreshSession().catch(() => null); sb.functions.invoke("perf-ai", { body: { hospital_id: h, meet_date: d, job: "run", id } }).catch(() => null); }
+      drawJob();
+    }, 8000);
+  }
+  function drawAi(keepJob) {
+    if (!keepJob && AI.job && AI.job.status !== "done") return drawJob();
     const box = $("#aiBox"), R = AI.report; if (!R) { box.hidden = true; return; }
     box.hidden = false;
     box.innerHTML = `<h3>Action plan โดย AI 3 คน</h3>${ROLES}<p class="sub">ทำเมื่อ ${new Date(AI.at).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" })} · AI 3 ตรวจวน ${(AI.log || []).length} รอบ · ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
