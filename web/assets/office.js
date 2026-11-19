@@ -147,7 +147,7 @@ window.Office = (() => {
     try { await window.html2pdf().set({ margin: [10, 10, 12, 10], filename: name.replace(/\.(pptx|pdf)$/i, "") + ".pdf", image: { type: "jpeg", quality: 0.95 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }, pagebreak: { mode: ["avoid-all", "css"] } }).from(el).save(); } finally { window.scrollTo(sx, sy); }
   }
   // every executive-summary PPT button gets a Word and a PDF button beside it; they build the very same deck
-  const MORE = ["#pP", "#sP", "#moPpt", "#exPpt", "#fPpt", "#mpPpt", "#kP", "#yP"];
+  const MORE = ["#pP", "#sP", "#moPpt", "#exPpt", "#fPpt", "#mpPpt", "#kP", "#yP", "#wP"];
   const addMore = () => MORE.forEach(sel => { const b = document.querySelector("button" + sel); if (!b || b.dataset.more) return; b.dataset.more = 1;
     [["docx", "Word (บทสรุป + วิเคราะห์)"], ["pdf", "PDF"]].reverse().forEach(([m, label]) => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bprimary\b/, ""); c.textContent = label;
       if (b.style.alignSelf) c.style.alignSelf = b.style.alignSelf;
@@ -156,7 +156,7 @@ window.Office = (() => {
   // pages whose results so far had only an Excel button: PPT / Word / PDF beside it build an executive summary + analysis
   // from the very same rows the Excel file gets (the button's own handler runs; Office.table calls are collected, not saved)
   let deckBuf = null;
-  const TABLE_DECK = { "op.html": ["#sCsv", "#mCsv"], "ac.html": ["#uCsv", "#cCsv"], "gate.html": ["#x"], "survey.html": ["#vCsv"], "pmboard.html": ["#x", "#rx"], "staff.html": ["#dExport", "#qExport", "#wExport"], "training.html": ["#oX", "#mX", "#sX", "#pX"] };
+  const TABLE_DECK = { "op.html": ["#sCsv", "#mCsv"], "ac.html": ["#uCsv", "#cCsv"], "gate.html": ["#x"], "survey.html": ["#vCsv"], "pmboard.html": ["#x", "#rx"], "staff.html": ["#dExport", "#qExport", "#wExport"], "training.html": ["#oX", "#mX", "#sX", "#pX"], "energy.html": ["#yX", "#aX"] };
   function tableDeck(list) {
     const first = list[0], o = first.opts || {}, title = o.title || first.name.replace(/-/g, " "), many = list.length > 1;
     const d = { title, org: o.org, period: o.period, findings: [], kpis: [], analysis: [], sections: [], notes: [] };

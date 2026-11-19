@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>รายงานพลังงาน | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .hsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+  .hsel select,.hsel input,form.ef input,form.ef textarea,.efc input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:#17212b;background:#fff}
+  .hsel select,.hsel input{width:auto}
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#fff;margin:8px 0}
+  table.et td,table.et th{padding:6px 8px;color:#17212b;text-align:right;white-space:nowrap}
+  table.et th{background:#eef3f8;font-size:13px}
+  table.et td:first-child,table.et th:first-child{text-align:left}
+  table.et tr.sum td{font-weight:700;background:#f4f7fb}
+  .up{color:#9b1c13}.down{color:#14632f}
+  .ok{background:#d5f0df}.mid{background:#fcefd2}.bad{background:#f8d7d3}
+  form.ef{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px 12px;margin:8px 0}
+  form.ef fieldset{grid-column:1/-1;border:1px solid var(--line);border-radius:10px;padding:8px 12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;background:#fff}
+  form.ef legend{font-weight:700;color:#17212b;padding:0 6px}
+  form.ef label{font-size:13px;font-weight:600;display:flex;flex-direction:column;gap:4px;color:#17212b}
+  form.ef .wide{grid-column:1/-1}
+  .opb{border:1px solid #9cc3ea;border-radius:10px;background:#f4f9ff;padding:10px 12px;margin:10px 0;color:#17212b}
+  .opb table td{padding:3px 8px;color:#17212b}
+  .note{border-left:4px solid #0b5cad;background:#f4f9ff;padding:8px 12px;border-radius:8px;color:#17212b;margin:8px 0}
+  .acts{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  .chart{border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px;margin:8px 0;overflow-x:auto}.chart svg{width:100%;min-width:640px;height:auto;display:block}
+  table.ed td{white-space:normal;text-align:left}table.ed input,table.ed textarea{font:inherit;width:100%;min-width:110px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;color:#17212b;background:#fff}
+  form.ef textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:#17212b;background:#fff}
+  .st{display:inline-block;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:600}.st.ok{background:#d5f0df;color:#14532d}.st.late{background:#f8d7d3;color:#7f1d1d}.st.draft{background:#fcefd2;color:#713f12}.st.none{background:#f3f4f6;color:#374151}
+  .efc{display:flex;gap:10px;flex-wrap:wrap;align-items:end;font-size:13px;color:#17212b}.efc label{display:flex;flex-direction:column;gap:3px}.efc input{width:110px;padding:5px 8px}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">พลังงาน</span><h1>รายงานพลังงานและความยั่งยืน (GHI)</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าเจ้าหน้าที่</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="week" aria-selected="true">ประชุม Energy รายสัปดาห์</button>
+    <button role="tab" data-tab="month" aria-selected="false">บันทึกรายเดือน (บิล)</button>
+    <button role="tab" data-tab="year" aria-selected="false">สรุปรายปี</button>
+    <button role="tab" data-tab="all" aria-selected="false" id="tAll" hidden>ภาพรวม 12 โรง</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="home.html">หน้าหลัก</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <div id="body" hidden>
+    <div class="hsel"><label for="h">โรงพยาบาล</label><select id="h"></select>
+      <label for="y">ปี พ.ศ.</label><select id="y"></select>
+      <span class="sub" id="ro"></span></div>
+
+    <section id="tab-week">
+      <div class="note">Chief ทุกโรงส่งรายงานภายใน <b>วันเสาร์ 10.00 น.</b> · ประชุม 14.00–16.00 น. ตัวเลขข้อ 2.1–2.2 ระบบรวมจากมิเตอร์ไฟฟ้าใน "บันทึก OP" และบิลรายเดือนให้ ส่วนข้อ 1, 2.3–5 Chief พิมพ์เอง กด "บันทึกร่าง" ได้หลายครั้ง แล้วกด "ส่งรายงาน" เมื่อพร้อม</div>
+      <div class="hsel"><label for="wk">ประชุมวันเสาร์ที่</label><select id="wk"></select><span id="wStat"></span></div>
+      <h2>1. วาระครั้งก่อน (ติดตามผล)</h2>
+      <div class="tw"><table class="et ed" id="wPrev"></table></div>
+      <div class="acts"><button class="btn small" type="button" data-add="prev">+ เพิ่มเรื่อง</button><button class="btn small" type="button" id="wCopy">ดึงเรื่องจากสัปดาห์ก่อน</button></div>
+      <h2>2.1 สรุปค่าพลังงานไฟฟ้า</h2>
+      <div class="hsel"><label>ต้นทุนไฟฟ้า (บาท/หน่วย)<input type="number" step="any" min="0" id="wCost" style="width:90px"></label>
+        <label>เป้าหมายประหยัด (%)<input type="number" step="any" min="0" id="wTgt" style="width:70px"></label>
+        <label>พื้นที่ (ตร.ม.)<input type="number" step="any" min="0" id="wArea" style="width:110px"></label></div>
+      <div class="kpis" id="wk1"></div>
+      <div class="chart" id="wChart"></div>
+      <h2>2.2 ดัชนีการใช้พลังงาน · ไฟเข้า (INCOME) / ไฟออก (OUTCOME)</h2>
+      <p class="sub">เลือกว่ามิเตอร์แต่ละจุดเป็นไฟเข้า (MEA, MDB), โซลาร์ หรือไฟออก (EMDB, มิเตอร์ย่อย) ระบบนับ "ไฟเข้า" เป็นยอดใช้ไฟของโรง</p>
+      <div class="tw"><table class="et" id="wPts"></table></div>
+      <div class="kpis" id="wk2"></div>
+      <h2>2.3 ปัจจัยที่มีผลต่อการใช้พลังงาน</h2>
+      <form class="ef" id="wF">
+        <label>ผู้รับเหมา (งานปรับปรุง ระยะเวลา)<textarea rows="3" data-w="f_contractor"></textarea></label>
+        <label>ห้องประชุม / กิจกรรม<textarea rows="3" data-w="f_meeting"></textarea></label>
+        <label>ระบบวิศวกรรม (Chiller, ซ่อม, เปลี่ยนเครื่อง)<textarea rows="3" data-w="f_eng"></textarea></label>
+        <label>อุณหภูมิภายนอก<textarea rows="3" data-w="f_weather" placeholder="เช่น สูงสุด 35 °C ร้อนกว่าปีก่อน 1.5 °C"></textarea></label>
+      </form>
+      <h2>2.4 มาตรการที่ดำเนินการ</h2>
+      <div class="tw"><table class="et ed" id="wMeas"></table></div>
+      <div class="acts"><button class="btn small" type="button" data-add="meas">+ เพิ่มมาตรการ</button></div>
+      <form class="ef" id="wF2">
+        <label class="wide">2.5 มาตรการเชิงรุกภายในพื้นที่<textarea rows="3" data-w="proactive"></textarea></label>
+        <label class="wide">3. กิจกรรมส่วนกลาง ผลักดันสู่หน่วยงาน<textarea rows="3" data-w="central"></textarea></label>
+        <label class="wide">4. ขอสนับสนุนทางโรงพยาบาล<textarea rows="3" data-w="support"></textarea></label>
+        <label class="wide">5. ข้อเสนอแนะ<textarea rows="3" data-w="suggest"></textarea></label>
+      </form>
+      <div class="acts"><button class="btn" type="button" id="wSave">บันทึกร่าง</button><button class="btn primary" type="button" id="wSend">ส่งรายงาน</button>
+        <button class="btn" type="button" id="wP">PPT ตามวาระประชุม</button><button class="btn" type="button" id="wX">Excel (ไฟฟ้ารายวัน)</button><span class="sub" id="wMsg" role="status"></span></div>
+    </section>
+
+    <section id="tab-month" hidden>
+      <p class="sub">กรอกตัวเลขของเดือนจากบิลค่าไฟ ค่าน้ำ ใบรับน้ำมัน และสถิติของโรงพยาบาล (วันนอนผู้ป่วยใน, ผู้ป่วยนอก) ช่องที่ไม่มีข้อมูลเว้นว่างได้ ถ้าช่างบันทึกมิเตอร์ใน "บันทึก OP" ไว้ ระบบจะรวมให้ดูในกรอบสีฟ้าเพื่อเทียบกับบิล</p>
+      <div class="hsel"><label for="m">เดือน</label><select id="m"></select></div>
+      <div class="opb" id="op"></div>
+      <form class="ef" id="fE">
+        <fieldset><legend>ไฟฟ้า</legend>
+          <label>หน่วยไฟฟ้าตามบิล (kWh)<input type="number" step="any" min="0" data-k="elec_kwh"></label>
+          <label>ค่าไฟฟ้า (บาท)<input type="number" step="any" min="0" data-k="elec_cost"></label>
+          <label>ความต้องการไฟฟ้าสูงสุด (kW)<input type="number" step="any" min="0" data-k="peak_kw"></label>
+          <label>ไฟฟ้าระบบ Chiller (kWh)<input type="number" step="any" min="0" data-k="chiller_kwh"></label>
+          <label>ความเย็นที่ผลิตได้ (ตันความเย็น-ชั่วโมง, TR-h)<input type="number" step="any" min="0" data-k="chiller_tonh"></label></fieldset>
+        <fieldset><legend>น้ำและเชื้อเพลิง</legend>
+          <label>น้ำประปาตามบิล (m³)<input type="number" step="any" min="0" data-k="water_m3"></label>
+          <label>ค่าน้ำ (บาท)<input type="number" step="any" min="0" data-k="water_cost"></label>
+          <label>น้ำมันดีเซล (ลิตร)<input type="number" step="any" min="0" data-k="diesel_l"></label>
+          <label>ก๊าซ LPG (กก.)<input type="number" step="any" min="0" data-k="lpg_kg"></label></fieldset>
+        <fieldset><legend>ฐานสำหรับคิดต่อหน่วย</legend>
+          <label>พื้นที่ใช้สอย (ตร.ม.)<input type="number" step="any" min="0" data-k="area_m2"></label>
+          <label>วันนอนผู้ป่วยใน (วัน)<input type="number" step="any" min="0" data-k="patient_days"></label>
+          <label>ผู้ป่วยนอก (ครั้ง)<input type="number" step="any" min="0" data-k="opd_visits"></label></fieldset>
+        <fieldset><legend>ขยะ</legend>
+          <label>ขยะทั่วไป (กก.)<input type="number" step="any" min="0" data-k="waste_general_kg"></label>
+          <label>ขยะติดเชื้อ (กก.)<input type="number" step="any" min="0" data-k="waste_infect_kg"></label>
+          <label>ขยะรีไซเคิล (กก.)<input type="number" step="any" min="0" data-k="waste_recycle_kg"></label></fieldset>
+        <label class="wide">หมายเหตุ<input data-k="note" placeholder="เช่น ปิดซ่อม Chiller 2 สัปดาห์, เปิดตึกใหม่"></label>
+        <div class="wide acts"><button class="btn primary" type="submit" id="save">บันทึกเดือนนี้</button><button class="btn" type="button" id="copyBase">ใช้พื้นที่จากเดือนก่อน</button><span class="sub" id="msg" role="status"></span></div>
+      </form>
+      <h2>ตัวชี้วัดของเดือนนี้</h2>
+      <div class="kpis" id="mk"></div>
+    </section>
+
+    <section id="tab-year" hidden>
+      <div class="note" id="yNote"></div>
+      <div class="kpis" id="yk"></div>
+      <div class="chart" id="yChart"></div>
+      <h2>รายเดือน</h2>
+      <div class="tw"><table class="et" id="yTable"></table></div>
+      <h2>เทียบเดือนเดียวกันของปีก่อน (ใช้ประกอบ KPI ข้อ 8.1)</h2>
+      <div class="tw"><table class="et" id="yCmp"></table></div>
+      <details class="note"><summary><b>ค่าการปล่อยก๊าซเรือนกระจก (Emission factor)</b> ที่ใช้คิด CO₂e</summary>
+        <p class="sub">เป็นค่าตั้งต้นจากองค์การบริหารจัดการก๊าซเรือนกระจก (TGO) ควรตรวจทานกับฉบับล่าสุดก่อนใช้ในรายงานทางการ แก้ตัวเลขด้านล่างแล้วตารางจะคิดใหม่ทันที</p>
+        <div class="efc"><label>ไฟฟ้า kgCO₂e/kWh<input type="number" step="any" id="efE"></label><label>ดีเซล kgCO₂e/ลิตร<input type="number" step="any" id="efD"></label>
+          <label>LPG kgCO₂e/กก.<input type="number" step="any" id="efL"></label><label>น้ำประปา kgCO₂e/m³<input type="number" step="any" id="efW"></label></div></details>
+      <div class="acts"><button class="btn primary" type="button" id="yX">ดาวน์โหลด Excel (รายงานพลังงานรายปี)</button></div>
+    </section>
+
+    <section id="tab-all" hidden>
+      <h2>การส่งรายงานประชุม Energy รายสัปดาห์</h2>
+      <div class="hsel"><label for="awk">สัปดาห์</label><select id="awk"></select></div>
+      <div class="tw"><table class="et" id="aWeek"></table></div>
+      <h2>ยอดรวมทั้งปี</h2>
+      <p class="sub">ยอดรวมทั้งปีของทุกโรงที่มีข้อมูล ตัวเลขต่อหน่วยคิดจากเดือนที่กรอกฐาน (พื้นที่ / วันนอน) ครบเท่านั้น</p>
+      <div class="tw"><table class="et" id="aTable"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="aX">ดาวน์โหลด Excel (ภาพรวม 12 โรง)</button></div>
+    </section>
+  </div>
+</main>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+<script src="assets/energy.js"></script>
+</body>
+</html>
