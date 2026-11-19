@@ -151,11 +151,10 @@ Deno.serve(async (req) => {
       const r = await db.from("perf_weekly").select("ai").eq("hospital_id", hospital_id).eq("meet_date", body.meet_date).maybeSingle();
       // keep the last finished Action plan visible until the new one is done
       base = { ...(r.data?.ai ?? {}) }; delete base.job;
-    }
-    if (body.job === "run") {
-      const r = await db.from("perf_weekly").select("ai").eq("hospital_id", hospital_id).eq("meet_date", body.meet_date).maybeSingle();
-      J = r.data?.ai?.job;
-      if (!J || J.status !== "running" || J.id !== body.id) return out({ skipped: true });
+      if (body.job === "run") {
+        J = r.data?.ai?.job;
+        if (!J || J.status !== "running" || J.id !== body.id) return out({ skipped: true });
+      }
     }
     const src = J ? J.input : body;
     const data = JSON.stringify({ hospital: src.hospital, meeting: src.meeting, period: src.period, figures: src.figures, backlog: src.backlog, chief_notes: src.notes }).slice(0, 40000);
