@@ -113,8 +113,13 @@
       <div class="panel"><h3>ใบงานตามอาคาร</h3><div id="dBld"></div></div>
       <div class="panel"><h3>งานพักตามเหตุผล</h3><div id="dHold"></div></div>
       <div class="panel"><h3>SLA ตามความเร่งด่วน</h3><div class="scroll"><table id="dSla"></table></div></div>
-      <div class="panel"><h3>ตรวจคุณภาพงานซ่อม (QS) รายวัน</h3><div class="meta">สัญญาข้อ 3.20: ตรวจไม่น้อยกว่า 80% ของงานที่ซ่อมเสร็จในวันนั้น · ไม่เลือกช่วงวันที่ = 14 วันล่าสุด</div><div class="scroll"><table id="dQc"></table></div>
+      <div class="panel"><h3>ตรวจคุณภาพงานซ่อม (QS) รายสัปดาห์</h3><div class="meta">QS เข้าสัปดาห์ละครั้ง สุ่มตรวจงานที่ซ่อมเสร็จ เป้าอย่างน้อย 80% ของงานในสัปดาห์ (สัญญาข้อ 3.20) และตรวจว่างานรอทุกใบออก PR / Memo ภายใน 24 ชม. · ไม่เลือกช่วงวันที่ = 8 สัปดาห์ล่าสุด · ไม่มีผลกับงานค้าง SLA และ KPI</div>
+        <div class="scroll"><table id="dQcW"></table></div>
+        <h4 style="margin:12px 0 4px">รายละเอียดรายวัน (ดูประกอบ)</h4><div class="scroll"><table id="dQc"></table></div>
         <div class="row" style="margin-top:8px"><button class="btn small" type="button" id="qExport">ดาวน์โหลด Excel ผล QS</button></div></div>
+      <div class="panel"><h3>SLA งานรอ: ออก PR / Memo ภายใน 24 ชม. (ไม่นับใน KPI)</h3><div class="meta">ทุกครั้งที่ใบงานเข้าสถานะรอ (รออะไหล่ รอผู้รับเหมา รอเข้าพื้นที่ ฯลฯ) ต้องออก PR หรือ Memo ของใบงานนั้นภายใน 24 ชั่วโมงนับจากเวลาที่เริ่มรอ · กลับมาทำต่อได้ภายใน 24 ชม. = ไม่ต้องออก</div>
+        <div id="dWaitSum" class="kpis" style="margin:8px 0"></div><div class="scroll" style="max-height:420px"><table id="dWait"></table></div>
+        <div class="row" style="margin-top:8px"><button class="btn small" type="button" id="wExport">ดาวน์โหลด Excel งานรอ</button></div></div>
     </div>
   </section>
 
@@ -155,6 +160,14 @@
           <label>รหัส<input id="yCode" required placeholder="EE"></label><label>ชื่อ<input id="yName" required placeholder="ไฟฟ้า"></label><label>เวลามาตรฐาน (นาที)<input id="yStd" type="number" min="0"></label></div>
         <div class="row" style="margin-top:10px"><label style="flex-direction:row;align-items:center;gap:6px"><input id="yKpi" type="checkbox" checked style="width:auto">นับ KPI</label><button class="btn primary">เพิ่มประเภทงาน</button></div>
         <div id="yMsg"></div><div class="scroll" style="margin-top:12px"><table id="yList"></table></div></form>
+      <form class="panel" id="fMr"><h3>อีเมลรับ Memo</h3>
+        <p class="meta" style="margin:0 0 8px">ออก Memo แล้วระบบส่งอีเมลทันที ถึงผู้จัดการฝ่ายวิศวกรรมของโรงนี้ และสำเนาถึงรายชื่อภาพรวมของ Owner (ใส่ได้หลายอีเมล) · ปิดการส่งได้ ไม่ต้องลบ</p>
+        <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+          <label class="span2">ส่งถึงกลุ่ม<select id="mrScope"><option value="h">ผู้จัดการฝ่ายวิศวกรรมโรงพยาบาลนี้</option><option value="all">ภาพรวม (Owner / ผู้บริหาร) ได้รับ Memo ทุกโรง</option></select></label>
+          <label>ชื่อ (ไม่บังคับ)<input id="mrName" placeholder="เช่น คุณสมศักดิ์"></label><label>ตำแหน่ง<input id="mrPos" value="ผู้จัดการฝ่ายวิศวกรรมโรงพยาบาล"></label>
+          <label>อีเมล *<input id="mrEmail" type="email" required placeholder="name@hospital.com"></label>
+          <div class="row" style="align-self:end"><button class="btn primary">เพิ่มอีเมล</button></div></div>
+        <div id="mrMsg"></div><div class="scroll" style="margin-top:12px"><table id="mrList"></table></div></form>
       <form class="panel" id="fSet"><h3>การทำงานและการแจ้งเตือน</h3>
         <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
           <label>แนบรูป/วิดีโอได้สูงสุด (ไฟล์)<input name="gMax" type="number" min="1" max="10" required></label>

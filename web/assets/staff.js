@@ -51,6 +51,20 @@
   const qcOf = j => qcs.find(q => q.job_id === j.id);
   const dayTH = t => new Date(t).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   const noQc = j => QC_DONE.includes(j.status) && j.cleared_at && !qcOf(j) && mins(j.cleared_at) <= 7 * 1440;
+  // QS comes once a week: the 80% target is counted per week (Monday to Sunday, Bangkok)
+  const weekOf = d => { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() - (x.getUTCDay() + 6) % 7); return x.toISOString().slice(0, 10); };
+  const addDays = (d, n) => { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  const qcWeek = w => { const e = addDays(w, 6), f = jobs.filter(j => j.status !== "cancel" && j.cleared_at && dayTH(j.cleared_at) >= w && dayTH(j.cleared_at) <= e), c = f.filter(qcOf);
+    return { w, e, n: f.length, c: c.length, p: c.filter(j => qcOf(j).result === "pass").length, pct: f.length ? Math.round(c.length / f.length * 1000) / 10 : null }; };
+  // waiting SLA (not in KPI): a job put on hold needs a PR or Memo to the hospital within 24 hours of the start of the wait
+  const WAIT_H = 24;
+  const waitDoc = j => [...prs.filter(x => x.job_id === j.id && x.status !== "cancel").map(x => ({ no: x.pr_no, at: x.created_at })),
+    ...memos.filter(x => x.job_id === j.id && x.status !== "cancel").map(x => ({ no: x.memo_no, at: x.created_at }))]
+    .filter(x => j.hold_started_at && x.at >= j.hold_started_at).sort((a, b) => a.at.localeCompare(b.at))[0];
+  const waitInfo = j => { if (j.status !== "on_hold" || !j.hold_started_at) return null; const due = new Date(j.hold_started_at).getTime() + WAIT_H * 36e5, d = waitDoc(j);
+    return d ? { doc: d, ok: new Date(d.at).getTime() <= due, h: Math.round((new Date(d.at) - new Date(j.hold_started_at)) / 36e5 * 10) / 10 }
+      : { due, late: Date.now() > due, left: Math.round((due - Date.now()) / 36e5 * 10) / 10 }; };
+  const waitLate = j => { const w = waitInfo(j); return !!w && !w.doc && w.late; };
   const qcDay = d => { const f = jobs.filter(j => j.status !== "cancel" && j.cleared_at && dayTH(j.cleared_at) === d), c = f.filter(qcOf);
     return { d, n: f.length, c: c.length, p: c.filter(j => qcOf(j).result === "pass").length, pct: f.length ? Math.round(c.length / f.length * 1000) / 10 : null }; };
   const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
@@ -159,19 +173,46 @@
     store.set("rs-staff-tab", t);
     render();
   }
-  const VIEWS = [["all", "ทั้งหมด"], ["mine", "งานของฉัน"], ["review", "รอตรวจงาน"], ["approve", "รออนุมัติพักงาน"], ["appoint", "นัดหมาย"], ["noplan", "ยังไม่ใส่วันกำหนดเสร็จ"], ["planlate", "เลยวันกำหนดเสร็จ"], ["noqc", "ยังไม่ตรวจคุณภาพ (QS)"]];
+  const VIEWS = [["all", "ทั้งหมด"], ["mine", "งานของฉัน"], ["review", "รอตรวจงาน"], ["approve", "รออนุมัติพักงาน"], ["appoint", "นัดหมาย"], ["noplan", "ยังไม่ใส่วันกำหนดเสร็จ"], ["planlate", "เลยวันกำหนดเสร็จ"], ["noqc", "ยังไม่ตรวจคุณภาพ (QS)"], ["waitlate", "งานรอ ยังไม่ออก PR/Memo เกิน 24 ชม."]];
   function renderViews() {
     const n = { all: jobs.filter(j => OPEN.includes(j.status)).length, mine: jobs.filter(j => OPEN.includes(j.status) && mine(j)).length,
       review: jobs.filter(j => j.status === "clear").length, approve: jobs.filter(j => j.status === "on_hold" && j.hold_status === "pending").length,
       appoint: jobs.filter(j => OPEN.includes(j.status) && (j.appointment_at || j.hold_until)).length,
-      noplan: jobs.filter(noPlan).length, planlate: jobs.filter(planLate).length, noqc: jobs.filter(noQc).length };
+      noplan: jobs.filter(noPlan).length, planlate: jobs.filter(planLate).length, noqc: jobs.filter(noQc).length, waitlate: jobs.filter(waitLate).length };
     $("#wViews").innerHTML = VIEWS.map(([k, l]) => `<button type="button" class="chip" data-view="${k}" aria-pressed="${view === k}">${l}<b>${n[k]}</b></button>`).join("")
       + `<span style="flex:1"></span><button type="button" class="chip" data-bytech aria-pressed="${byTech}">งานยังไม่ปิด รายช่าง</button>
         <button type="button" class="chip" data-layout="card" aria-pressed="${layout === "card"}">การ์ด</button><button type="button" class="chip" data-layout="table" aria-pressed="${layout === "table"}">ตาราง</button>`;
   }
 
   /* ---------- data ---------- */
+  /* ---------- Memo e-mail recipients: this hospital's engineering manager + the overall (Owner) list ---------- */
+  let mrs = [], amExec = false;
+  const MR_POS = { h: "ผู้จัดการฝ่ายวิศวกรรมโรงพยาบาล", all: "Owner / ผู้บริหาร" };
+  async function loadMr() {
+    const [r, ex] = await Promise.all([sb.from("memo_recipients").select("*").or(`hospital_id.eq.${H.id},hospital_id.is.null`).order("created_at"), sb.rpc("am_exec")]);
+    mrs = r.error ? [] : r.data || []; amExec = ex.data === true; if (!$("#tab-setup").hidden) renderMr();
+  }
+  const mrTo = () => mrs.filter(x => x.active);
+  function renderMr() {
+    const all = $("#mrScope").querySelector('option[value="all"]'); all.disabled = !amExec; if (!amExec && $("#mrScope").value === "all") $("#mrScope").value = "h";
+    const row = x => { const ed = x.hospital_id ? isMgr() : amExec; return `<tr><td>${esc(x.name || "-")}<br><small>${esc(x.position)}</small></td><td class="mono">${esc(x.email)}</td><td>${x.active ? "ส่ง" : "<span class=\"meta\">ปิดการส่ง</span>"}</td>
+      <td>${ed ? `<button class="btn small" type="button" data-mr-toggle="${x.id}">${x.active ? "ปิดการส่ง" : "เปิดการส่ง"}</button>` : ""}</td></tr>`; };
+    const h = mrs.filter(x => x.hospital_id), c = mrs.filter(x => !x.hospital_id);
+    $("#mrList").innerHTML = `<tr><th colspan="4">ผู้จัดการฝ่ายวิศวกรรมโรงพยาบาล · ${esc(H.name)}</th></tr>${h.map(row).join("") || `<tr><td colspan="4" class="meta">ยังไม่ได้ใส่อีเมล Memo ของโรงนี้จะยังไม่ถูกส่ง</td></tr>`}
+      <tr><th colspan="4">ภาพรวม (Owner / ผู้บริหาร) ได้รับสำเนา Memo ทุกโรง${amExec ? "" : " · แก้ได้เฉพาะผู้บริหาร"}</th></tr>${c.map(row).join("") || `<tr><td colspan="4" class="meta">ยังไม่มี</td></tr>`}`;
+  }
+  $("#mrScope").addEventListener("change", () => { $("#mrPos").value = MR_POS[$("#mrScope").value]; });
+  $("#fMr").onsubmit = async e => { e.preventDefault();
+    const all = $("#mrScope").value === "all", em = $("#mrEmail").value.trim().toLowerCase();
+    const { error } = await sb.from("memo_recipients").insert({ hospital_id: all ? null : H.id, email: em, name: $("#mrName").value.trim() || null, position: $("#mrPos").value.trim() || MR_POS[all ? "all" : "h"] });
+    msg("#mrMsg", error && /duplicate|unique/i.test(error.message) ? new Error("มีอีเมลนี้อยู่แล้ว ถ้าปิดการส่งไว้ กด “เปิดการส่ง” ในตาราง") : error, "เพิ่มอีเมลแล้ว Memo ใบต่อไปจะส่งถึงอีเมลนี้ด้วย");
+    if (!error) { $("#mrEmail").value = ""; $("#mrName").value = ""; await loadMr(); } };
+  document.addEventListener("click", async e => { const t = e.target.closest("[data-mr-toggle]"); if (!t) return;
+    const x = mrs.find(y => y.id === t.dataset.mrToggle); const { error } = await sb.from("memo_recipients").update({ active: !x.active }).eq("id", x.id);
+    msg("#mrMsg", error, x.active ? "ปิดการส่งแล้ว" : "เปิดการส่งแล้ว"); await loadMr(); });
+
   async function loadRefs() {
+    loadMr();
     const [s, p, t, l, r, st] = await Promise.all([
       sb.from("profiles").select("id,full_name,role,active").eq("hospital_id", H.id).order("full_name"),
       sb.from("priorities").select("*").eq("hospital_id", H.id).order("sort").order("sla_minutes"),
@@ -298,10 +339,10 @@
     ${jobId ? "" : `<label class="span2">ผูกกับใบงาน (ไม่บังคับ)<select id="prJob"><option value="">ไม่ผูกใบงาน</option>${jobs.filter(j => OPEN.includes(j.status)).map(j => `<option value="${j.id}">${esc(j.job_no)} · ${esc((j.detail || "").slice(0, 40))}</option>`).join("")}</select></label>`}
     <div class="full scroll"><table class="items"><thead><tr><th>อะไหล่ในคลัง</th><th>รายการ *</th><th>จำนวน *</th><th>หน่วย</th><th>ราคา/หน่วย</th><th></th></tr></thead><tbody id="prRows">${prRow()}</tbody></table>
       <div class="row" style="margin-top:6px"><button class="btn small" type="button" data-pr-add>+ เพิ่มรายการ</button><span class="meta" id="prSum"></span></div></div>${ok}`;
-  const memoForm = (job, prId, ok) => `<label class="span2">เรื่อง *<input id="mSubj" value="${esc(job ? "ขออนุมัติดำเนินการซ่อม " + job.job_no : "")}"></label><label>เรียน *<input id="mTo" placeholder="เช่น ผู้อำนวยการโรงพยาบาล"></label>
+  const memoForm = (job, prId, ok) => `<label class="span2">เรื่อง *<input id="mSubj" value="${esc(job ? "ขออนุมัติดำเนินการซ่อม " + job.job_no : "")}"></label><label>เรียน *<input id="mTo" value="ผู้จัดการฝ่ายวิศวกรรมโรงพยาบาล" placeholder="เช่น ผู้จัดการฝ่ายวิศวกรรมโรงพยาบาล"></label>
     <label class="full">รายละเอียด *<textarea id="mBody">${esc(job ? `ตามใบงานแจ้งซ่อมเลขที่ ${job.job_no} (${[job.building, job.floor, job.department].filter(Boolean).join(" ")}) อาการ: ${job.detail}${job.hold_category ? `\nสถานะ: พักงาน (${job.hold_category}${job.hold_reason ? " - " + job.hold_reason : ""})` : ""}\n\nจึงเรียนมาเพื่อโปรดพิจารณาอนุมัติ` : "")}</textarea></label>
     <label>จำนวนเงิน (บาท ถ้ามี)<input id="mAmt" type="number" min="0" step="any"></label>
-    <label class="span2">อ้างอิงใบขอซื้อ<select id="mPr"><option value="">ไม่อ้างอิง</option>${prs.filter(x => x.status !== "cancel" && (!job || x.job_id === job.id || !x.job_id)).map(x => `<option value="${x.id}" ${x.id === prId ? "selected" : ""}>${esc(x.pr_no)} · ${baht(x.total)} บาท</option>`).join("")}</select></label>${ok}`;
+    <label class="span2">อ้างอิงใบขอซื้อ<select id="mPr"><option value="">ไม่อ้างอิง</option>${prs.filter(x => x.status !== "cancel" && (!job || x.job_id === job.id || !x.job_id)).map(x => `<option value="${x.id}" ${x.id === prId ? "selected" : ""}>${esc(x.pr_no)} · ${baht(x.total)} บาท</option>`).join("")}</select></label><div class="full meta">${mrTo().length ? `📧 กดบันทึกแล้วระบบส่งอีเมล Memo ทันทีถึง: ${mrTo().map(x => esc(x.name || x.email)).join(", ")}` : "📧 ยังไม่ได้ตั้งอีเมลรับ Memo (ตั้งที่แท็บ “ตั้งค่า” กรอบ “อีเมลรับ Memo”) Memo นี้จะยังไม่ถูกส่งทางอีเมล"}</div>${ok}`;
   function prItemsFromForm() {
     return [...document.querySelectorAll("#prRows tr")].map(r => ({ part_id: r.querySelector("[data-pr-part]").value || null, description: r.querySelector("[data-pr-desc]").value.trim(),
       qty: +r.querySelector("[data-pr-qty]").value, unit: r.querySelector("[data-pr-unit]").value.trim(), unit_price: +r.querySelector("[data-pr-price]").value || 0 }))
@@ -341,6 +382,9 @@
         <h4>${esc(j.detail)}${j.equipment_text ? ` <span style="color:var(--muted);font-weight:500">(${esc(j.equipment_text)})</span>` : ""}</h4>
         <div class="meta"><span>${[j.building, j.floor, j.department].map(esc).join(" · ")}</span><span>ผู้แจ้ง ${esc(j.reporter_name)} ${esc(j.reporter_phone)}${j.reporter_email ? " · " + esc(j.reporter_email) : ""}</span>${crew.length ? `<span>ช่าง ${crew.map((id, i) => esc(nameOf(id)) + (i === 0 && crew.length > 1 ? " (หัวหน้างาน)" : "")).join(", ")}</span>` : ""}</div>
         ${j.status === "on_hold" ? `<div class="meta" style="color:var(--s-on_hold)">พักงาน: ${esc(j.hold_category || "")}${j.hold_reason ? " · " + esc(j.hold_reason) : ""} · นัด ${fmtDate(j.hold_until)}${j.hold_status ? ` · <b>${HOLD_STATUS[j.hold_status]}</b>` : ""}${graceOver(j.hold_until && j.hold_until + "T00:00:00+07:00") ? ' · <b style="color:var(--bad)">เลยวันนัด</b>' : ""}</div>` : ""}
+        ${(() => { const w = waitInfo(j); if (!w) return ""; return w.doc ? `<div class="meta">📝 ออก ${esc(w.doc.no)} แล้ว หลังเริ่มรอ ${w.h} ชม.${w.ok ? " · ทัน 24 ชม." : ' · <b style="color:var(--bad)">เกิน 24 ชม.</b>'}</div>`
+          : w.late ? `<div class="meta"><b style="color:var(--bad)">📝 รอเกิน ${WAIT_H} ชม. ยังไม่ออก PR / Memo ถึงโรงพยาบาล</b> (ครบกำหนด ${fmt(new Date(w.due).toISOString())})</div>`
+          : `<div class="meta">📝 ต้องออก PR หรือ Memo ภายใน ${fmt(new Date(w.due).toISOString())} (เหลือ ${w.left} ชม.)</div>`; })()}
         ${j.appointment_at && OPEN.includes(j.status) ? `<div class="meta">นัดเข้าทำงาน ${fmt(j.appointment_at)}${graceOver(j.appointment_at) && j.status !== "work_on" ? ' · <b style="color:var(--bad)">เลยนัด</b>' : ""}</div>` : ""}
         ${j.memo_requested && !memos.some(m => m.job_id === j.id && m.status !== "cancel") ? `<div class="meta"><b>ขอ Memo</b> สำหรับงานนี้ (ยังไม่ได้เขียน)</div>` : ""}
         ${(() => { const u = jobParts(j); return u.length ? `<div class="meta">อะไหล่ที่ใช้: ${u.map(x => `${esc(x.name)} ${qtyf(x.q)} ${esc(x.unit)}`).join(", ")} · รวม ${baht(u.reduce((s, x) => s + x.c, 0))} บาท</div>` : ""; })()}
@@ -349,7 +393,7 @@
           return d.length ? `<div class="meta">เอกสาร: ${d.join(" ")}</div>` : ""; })()}
         ${j.summary ? `<div class="meta">สรุปการซ่อม: ${esc(j.summary)}${j.uses_parts ? " · ใช้อะไหล่" : ""}</div>` : ""}
         ${(() => { const q = qcOf(j); if (q) return `<div class="meta"><b style="color:${q.result === "pass" ? "#157a52" : "var(--bad)"}">QS: ${q.result === "pass" ? "✅ ผ่าน" : "❌ ไม่ผ่าน"}</b> · ${QC_ITEMS.filter(([k]) => (q.items || {})[k]).length}/${QC_ITEMS.length} ข้อ · โดย ${esc(nameOf(q.checked_by) || "-")} ${fmt(q.checked_at)}${q.note ? " · " + esc(q.note) : ""}</div>`;
-          return QC_DONE.includes(j.status) && j.cleared_at ? `<div class="meta"><b style="color:var(--bad)">ยังไม่ตรวจคุณภาพ (QS)</b></div>` : ""; })()}
+          return QC_DONE.includes(j.status) && j.cleared_at ? `<div class="meta">QS: ยังไม่ได้สุ่มตรวจ</div>` : ""; })()}
         ${j.rating ? `<div class="meta">ผู้แจ้งให้คะแนน ${"★".repeat(j.rating)}${"☆".repeat(5 - j.rating)}${j.rating_comment ? " · " + esc(j.rating_comment) : ""}</div>` : ""}
         <div class="meta">${photoLinks("ผู้แจ้ง", j.photo_paths)}${photoLinks("ก่อนซ่อม", j.before_photo_paths)}${photoLinks("หลังซ่อม", j.close_photo_paths)}</div></div>
       <div class="side">${pill(j.status, statusLabel(j))}${pr ? `<span class="pr${crit ? " crit" : ""}">${esc(pr.name)}</span>` : ""}
@@ -366,6 +410,7 @@
     if (view === "noplan") return noPlan(j);
     if (view === "planlate") return planLate(j);
     if (view === "noqc") return noQc(j);
+    if (view === "waitlate") return waitLate(j);
     return true;
   }
   // compact one-line-per-job table (like a spreadsheet); "จัดการ" opens the full card under the row
@@ -397,8 +442,10 @@
       : list.sort((a, b) => (isLate(b) - isLate(a)) || (slaOf(a) - slaOf(b)) || b.created_at.localeCompare(a.created_at));
     $("#wStatus").disabled = !useStatus;
     let html = can() ? "" : `<div class="note">บัญชี Observer ดูได้อย่างเดียว</div>`;
-    if (view === "noqc" || view === "review") { const q = qcDay(todayTH());
-      html += `<div class="note${q.pct != null && q.pct < QC_TARGET ? " bad" : ""}">ตรวจคุณภาพ (QS) วันนี้: ซ่อมเสร็จ ${q.n} ใบ ตรวจแล้ว ${q.c} ใบ${q.pct != null ? ` (${q.pct}%)` : ""} · เป้าตามสัญญา อย่างน้อย ${QC_TARGET}% ต่อวัน${q.n && q.pct < QC_TARGET ? ` · ต้องตรวจเพิ่มอีก ${Math.ceil(q.n * QC_TARGET / 100) - q.c} ใบ` : ""}</div>`; }
+    if (view === "noqc" || view === "review") { const q = qcWeek(weekOf(todayTH()));
+      html += `<div class="note${q.pct != null && q.pct < QC_TARGET ? " bad" : ""}">ตรวจคุณภาพ (QS) สัปดาห์นี้ (${fmtDate(q.w)} ถึง ${fmtDate(q.e)}): ซ่อมเสร็จ ${q.n} ใบ ตรวจแล้ว ${q.c} ใบ${q.pct != null ? ` (${q.pct}%)` : ""} · เป้าตามสัญญา อย่างน้อย ${QC_TARGET}% · QS เข้าสัปดาห์ละครั้ง${q.n && q.pct < QC_TARGET ? ` · ต้องตรวจเพิ่มอีก ${Math.ceil(q.n * QC_TARGET / 100) - q.c} ใบ` : ""}</div>`; }
+    if (view === "waitlate") { const h = jobs.filter(j => waitInfo(j)), ok = h.filter(j => (waitInfo(j).doc || {}).at && waitInfo(j).ok).length;
+      html += `<div class="note">งานรอ (รออะไหล่ รอผู้รับเหมา รอเข้าพื้นที่ ฯลฯ) ต้องออก PR หรือ Memo ถึงโรงพยาบาลภายใน ${WAIT_H} ชั่วโมงนับจากเวลาที่เริ่มรอ · ตอนนี้มีงานรอ ${h.length} ใบ ออกทันเวลาแล้ว ${ok} ใบ · ตัวเลขนี้ไม่นับใน KPI กดปุ่ม “ขอซื้อ” หรือ “เขียน Memo” บนใบงาน เวลาจะหยุดนับทันที</div>`; }
     if (view === "appoint") {
       let last = "";
       list.slice(0, 300).forEach(j => { const d = fmtDate(apptKey(j).slice(0, 10)); if (d !== last) { html += `<h3 class="day">${d}</h3>`; last = d; } html += card(j); });
@@ -588,13 +635,47 @@
       return `<tr><td>${esc(p.name)}</td><td>${dur(p.sla_minutes)}</td><td>${done.length}</td><td>${done.length ? Math.round(ok / done.length * 100) + "%" : "-"}</td><td>${open.filter(j => j.priority_id === p.id && isLate(j)).length}</td></tr>`;
     }).join("") + `<tr><td colspan="5" class="meta">เวลา SLA ไม่นับช่วงพักงาน</td></tr>`;
     const qd = qcDays();
-    $("#dQc").innerHTML = "<tr><th>วันที่ (ซ่อมเสร็จ)</th><th>ซ่อมเสร็จ</th><th>ตรวจ QS แล้ว</th><th>ผ่าน</th><th>% ตรวจ</th><th>ตามเป้า 80%</th></tr>" + (qd.length ? qd.map(q =>
-      `<tr><td>${fmtDate(q.d)}</td><td>${q.n}</td><td>${q.c}</td><td>${q.p}</td><td><b style="color:${q.pct >= QC_TARGET ? "#157a52" : "var(--bad)"}">${q.pct}%</b></td><td>${q.pct >= QC_TARGET ? "ผ่าน" : `ขาด ${Math.ceil(q.n * QC_TARGET / 100) - q.c} ใบ`}</td></tr>`).join("")
+    $("#dQc").innerHTML = "<tr><th>วันที่ (ซ่อมเสร็จ)</th><th>ซ่อมเสร็จ</th><th>ตรวจ QS แล้ว</th><th>ผ่าน</th><th>% ตรวจ</th><th>หมายเหตุ</th></tr>" + (qd.length ? qd.map(q =>
+      `<tr><td>${fmtDate(q.d)}</td><td>${q.n}</td><td>${q.c}</td><td>${q.p}</td><td>${q.pct}%</td><td class="meta">วัดผลรายสัปดาห์</td></tr>`).join("")
       : `<tr><td colspan="6" class="meta">ยังไม่มีงานที่ซ่อมเสร็จในช่วงนี้</td></tr>`);
+    loadWait();
   }
+  // weeks (Monday-Sunday) in the dashboard range; no range = last 8 weeks
+  function qcWeeks() {
+    const t = $("#dTo").value || todayTH(), f = $("#dFrom").value || addDays(weekOf(todayTH()), -49), out = [];
+    for (let w = weekOf(t); w >= weekOf(f); w = addDays(w, -7)) out.push(qcWeek(w));
+    return out;
+  }
+  let waitRows = [], waitKey = "";
+  const WAIT_RES = { ok: "ทัน 24 ชม.", late: "เกิน 24 ชม.", pending: "ยังอยู่ใน 24 ชม.", no_need: "กลับมาทำต่อใน 24 ชม. (ไม่ต้องออก)" };
+  async function loadWait() {
+    const ws = qcWeeks(), f = ws.length ? ws[ws.length - 1].w : todayTH(), t = ws.length ? ws[0].e : todayTH(), k = H.id + f + t;
+    if (k !== waitKey) { const { data, error } = await sb.rpc("wait_sla", { p_hospital: H.id, p_from: f, p_to: t }); waitRows = error ? [] : data || []; waitKey = k;
+      if (error) $("#dWait").innerHTML = `<tr><td class="meta">${esc(errText(error))}</td></tr>`; }
+    const inW = w => waitRows.filter(r => { const d = dayTH(r.started_at); return d >= w.w && d <= w.e; });
+    const cnt = (rs, x) => rs.filter(r => r.result === x).length, need = rs => rs.filter(r => r.result !== "no_need" && r.result !== "pending").length;
+    $("#dQcW").innerHTML = "<tr><th>สัปดาห์</th><th>ซ่อมเสร็จ</th><th>QS ตรวจ</th><th>% ตรวจ (เป้า 80%)</th><th>ผ่าน</th><th>งานรอที่ต้องออก PR/Memo</th><th>ทัน 24 ชม.</th><th>%</th></tr>" + ws.map(q => { const r = inW(q), n = need(r), ok = cnt(r, "ok");
+      return `<tr><td>${fmtDate(q.w)} – ${fmtDate(q.e)}</td><td>${q.n}</td><td>${q.c}</td><td>${q.pct == null ? "-" : `<b style="color:${q.pct >= QC_TARGET ? "#157a52" : "var(--bad)"}">${q.pct}%</b>${q.pct < QC_TARGET ? ` <small>ขาด ${Math.ceil(q.n * QC_TARGET / 100) - q.c} ใบ</small>` : ""}`}</td><td>${q.p}</td>
+        <td>${n}</td><td>${ok}</td><td>${n ? `<b style="color:${ok === n ? "#157a52" : "var(--bad)"}">${Math.round(ok / n * 1000) / 10}%</b>` : "-"}</td></tr>`; }).join("");
+    const n = need(waitRows), ok = cnt(waitRows, "ok");
+    $("#dWaitSum").innerHTML = [["ครั้งที่เข้าสถานะรอ", waitRows.length], ["ต้องออก PR/Memo", n], ["ทัน 24 ชม.", ok], ["เกิน 24 ชม.", cnt(waitRows, "late"), 1], ["ยังอยู่ใน 24 ชม.", cnt(waitRows, "pending")], ["% ทันเวลา", n ? Math.round(ok / n * 1000) / 10 + "%" : "-"]]
+      .map(([l, v, bad]) => `<div class="kpi"><b style="${bad && v ? "color:var(--bad)" : ""}">${v}</b><span>${l}</span></div>`).join("");
+    if (!waitRows.length && !$("#dWait").textContent.includes("สิทธิ์")) { $("#dWait").innerHTML = `<tr><td class="meta">ยังไม่มีงานที่เข้าสถานะรอในช่วงนี้</td></tr>`; return; }
+    $("#dWait").innerHTML = "<tr><th>เลขใบงาน</th><th>รออะไร</th><th>เริ่มรอ</th><th>ครบ 24 ชม.</th><th>PR / Memo</th><th>ผล</th></tr>" + waitRows.map(r => `<tr${r.result === "late" ? ' class="late"' : ""}>
+      <td class="mono">${esc(r.job_no)}<br><small>${esc((r.detail || "").slice(0, 40))}</small></td><td>${esc(r.category || "-")}</td><td>${fmt(r.started_at)}</td><td>${fmt(r.due_at)}</td>
+      <td>${r.doc_no ? `${esc(r.doc_no)}<br><small>${fmt(r.doc_at)} · หลังเริ่มรอ ${r.hours} ชม.</small>` : "-"}</td><td>${r.result === "late" ? `<b style="color:var(--bad)">${WAIT_RES.late}</b>` : WAIT_RES[r.result]}</td></tr>`).join("");
+  }
+  $("#wExport").onclick = () => {
+    const ws = qcWeeks(), n = waitRows.filter(r => r.result !== "no_need" && r.result !== "pending").length, ok = waitRows.filter(r => r.result === "ok").length;
+    csv(`งานรอ-PR-Memo-24ชม-${H.code}-${ws.length ? ws[ws.length - 1].w + "-" + ws[0].e : todayTH()}`, ["เลขใบงาน", "รายละเอียด", "รออะไร", "เริ่มรอ", "ครบ 24 ชม.", "PR / Memo", "เวลาออก", "ชั่วโมงหลังเริ่มรอ", "ผล", "สัปดาห์"],
+      waitRows.map(r => [r.job_no, r.detail, r.category, fmt(r.started_at), fmt(r.due_at), r.doc_no, r.doc_at ? fmt(r.doc_at) : "", r.hours, WAIT_RES[r.result], fmtDate(weekOf(dayTH(r.started_at)))]),
+      { title: "SLA งานรอ: ออก PR / Memo ภายใน 24 ชั่วโมง (ไม่นับใน KPI)", period: ws.length ? `${fmtDate(ws[ws.length - 1].w)} ถึง ${fmtDate(ws[0].e)}` : "",
+        findings: [`เข้าสถานะรอ ${waitRows.length} ครั้ง ต้องออก PR/Memo ${n} ครั้ง ทัน 24 ชม. ${ok} ครั้ง${n ? ` (${Math.round(ok / n * 1000) / 10}%)` : ""} เกิน ${waitRows.filter(r => r.result === "late").length} ครั้ง`],
+        notes: ["นับ 24 ชั่วโมงจากเวลาที่ใบงานเข้าสถานะรอ (ไม่ใช่ถึงเที่ยงคืน) · PR หรือ Memo ที่ผูกกับใบงานและออกหลังเริ่มรอ ใบแรก ใช้เป็นเวลาออก", "ตัวเลขนี้ไม่นับใน KPI ตามสัญญา ใช้ให้ QS ตรวจทุกสัปดาห์"] });
+  };
   // days (Bangkok) in the dashboard range that have finished jobs; no range = last 14 days
   function qcDays() {
-    const f = $("#dFrom").value || dayTH(Date.now() - 13 * 864e5), t = $("#dTo").value || todayTH();
+    const ws = qcWeeks(), f = ws.length ? ws[ws.length - 1].w : todayTH(), t = $("#dTo").value || todayTH();
     return [...new Set(jobs.filter(j => j.status !== "cancel" && j.cleared_at).map(j => dayTH(j.cleared_at)))].filter(d => d >= f && d <= t).sort().reverse().map(qcDay);
   }
   $("#qExport").onclick = () => {
@@ -607,8 +688,9 @@
     csv(`ตรวจคุณภาพ-QS-${H.code}-${qd.length ? qd[qd.length - 1].d + "-" + qd[0].d : todayTH()}`, head, body, { title: "ตรวจคุณภาพงานซ่อม (Quality Supervisor) ตามสัญญาข้อ 3.20",
       period: qd.length ? `${fmtDate(qd[qd.length - 1].d)} ถึง ${fmtDate(qd[0].d)}` : "",
       findings: [`ซ่อมเสร็จ ${all.n} ใบ ตรวจ QS แล้ว ${all.c} ใบ (${pct}%) ผ่าน ${all.p} ใบ ไม่ผ่าน ${all.c - all.p} ใบ`,
-        `วันที่ตรวจได้ตามเป้า ${QC_TARGET}%: ${qd.length - low.length} จาก ${qd.length} วัน${low.length ? ` · ต่ำกว่าเป้า: ${low.slice(0, 7).map(q => `${fmtDate(q.d)} ${q.pct}%`).join(", ")}${low.length > 7 ? " …" : ""}` : ""}`],
-      notes: ["เป้าตามสัญญาข้อ 3.20: Quality Supervisor ตรวจงานซ่อมไม่น้อยกว่า 80% ของงานที่ซ่อมเสร็จในแต่ละวัน"] });
+        (() => { const w = qcWeeks().filter(x => x.n), lw = w.filter(x => x.pct < QC_TARGET); return `สัปดาห์ที่ตรวจได้ตามเป้า ${QC_TARGET}%: ${w.length - lw.length} จาก ${w.length} สัปดาห์${lw.length ? ` · ต่ำกว่าเป้า: ${lw.map(x => `${fmtDate(x.w)} ${x.pct}%`).join(", ")}` : ""}`; })()],
+      notes: ["เป้าตามสัญญาข้อ 3.20: Quality Supervisor ตรวจงานซ่อมไม่น้อยกว่า 80% · QS เข้าสัปดาห์ละครั้ง จึงวัดผลเป็นรายสัปดาห์ (จันทร์ ถึง อาทิตย์)",
+        ...qcWeeks().filter(w => w.n).map(w => `สัปดาห์ ${fmtDate(w.w)} – ${fmtDate(w.e)}: ซ่อมเสร็จ ${w.n} ตรวจ ${w.c} (${w.pct}%) ${w.pct >= QC_TARGET ? "ผ่านเป้า" : "ต่ำกว่าเป้า"}`)] });
   };
   $("#dExport").onclick = () => {
     const f = $("#dFrom").value, t = $("#dTo").value;
@@ -935,7 +1017,7 @@
     if (!$("#tab-docs").hidden) renderDocs();
     if (!$("#tab-report").hidden) renderReport();
     if (!$("#tab-dash").hidden) renderDash();
-    if (!$("#tab-setup").hidden) renderSetup();
+    if (!$("#tab-setup").hidden) { renderSetup(); renderMr(); }
   }
   setInterval(() => { if (!editing && !partOpen && !docForm) render(); checkAlerts(); }, 30000);
 })();
