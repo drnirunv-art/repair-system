@@ -211,8 +211,61 @@
     const x = mrs.find(y => y.id === t.dataset.mrToggle); const { error } = await sb.from("memo_recipients").update({ active: !x.active }).eq("id", x.id);
     msg("#mrMsg", error, x.active ? "ปิดการส่งแล้ว" : "เปิดการส่งแล้ว"); await loadMr(); });
 
+  /* ---------- LINE alerts: groups the bot was invited to, which hospital each is for, and what it gets ---------- */
+  let lnGroups = [], lnHosp = [];
+  const LN_KIND = { new: "งานใหม่", resp: "เกินเวลาตอบรับ", sla: "เกิน SLA", test: "ทดสอบ" };
+  const LN_ST = { pending: "รอส่ง", sending: "กำลังส่ง", sent: "ส่งแล้ว", failed: "ส่งไม่สำเร็จ" };
+  async function loadLine() {
+    if (!isMgr()) { $("#fLine").hidden = true; return; }
+    const [g, h, o, ex] = await Promise.all([sb.from("line_groups").select("*").order("joined_at", { ascending: false }), sb.rpc("my_hospitals"),
+      sb.from("line_outbox").select("id,kind,status,error,created_at,sent_at,sent_to,hospital_id").order("id", { ascending: false }).limit(15), sb.rpc("am_exec")]);
+    if (ex.data === true) amExec = true;
+    if (g.error) { $("#fLine").hidden = true; return; }   // not live yet
+    lnGroups = g.data || []; lnHosp = h.data || [];
+    renderLine(o.data || []);
+    $("#lnState").textContent = "กำลังตรวจการเชื่อมต่อ LINE…";
+    try {
+      const { data } = await sb.functions.invoke("line-send", { body: { status: true } });
+      $("#lnState").innerHTML = !data ? "ตรวจการเชื่อมต่อ LINE ไม่ได้" : !data.token ? '<b style="color:var(--bad)">ยังไม่ได้ใส่รหัส LINE (Channel access token) ใน Supabase</b> ระบบยังส่ง LINE ไม่ได้'
+        : data.error ? `<b style="color:var(--bad)">รหัส LINE ใช้ไม่ได้</b> ${esc(data.error)}`
+        : `เชื่อมต่อ LINE แล้ว · บอท <b>${esc(data.bot || "-")}</b>${data.basicId ? ` (LINE ID <b class="mono">${esc(data.basicId)}</b>)` : ""} · ใช้ข้อความเดือนนี้ ${data.used ?? "-"}${data.quotaType === "limited" ? ` จาก ${data.quota} ข้อความ` : ""}`;
+    } catch { $("#lnState").textContent = "ตรวจการเชื่อมต่อ LINE ไม่ได้"; }
+  }
+  function renderLine(log) {
+    const hName = id => (lnHosp.find(x => x.id === id) || {}).code || "";
+    const opt = g => `<option value="">— เลือกโรงพยาบาล —</option>${amExec ? `<option value="all" ${g.all_hospitals ? "selected" : ""}>ทุกโรงพยาบาล (Owner / ผู้บริหาร)</option>` : ""}`
+      + lnHosp.map(x => `<option value="${x.id}" ${g.hospital_id === x.id ? "selected" : ""}>${esc(x.code + " " + x.name)}</option>`).join("");
+    const ck = (g, k, l) => `<label class="ck" style="display:block"><input type="checkbox" data-ln="${k}" ${g[k] ? "checked" : ""}> ${l}</label>`;
+    $("#lnList").innerHTML = `<tr><th>กลุ่ม LINE</th><th>รับแจ้งเตือนของ</th><th>เรื่องที่แจ้ง</th><th>การส่ง</th><th></th></tr>` + (lnGroups.map(g => `<tr data-lng="${g.id}">
+      <td>${esc(g.name || "(ยังไม่ทราบชื่อ)")}<br><small>${g.kind === "user" ? "แชทส่วนตัว" : "กลุ่ม"} · เข้ามา ${fmt(g.joined_at)}${g.left_at ? ' · <b style="color:var(--bad)">บอทออกจากกลุ่มแล้ว</b>' : ""}</small></td>
+      <td><select data-ln="hosp">${opt(g)}</select></td>
+      <td>${ck(g, "notify_new", "งานแจ้งซ่อมใหม่")}${ck(g, "notify_resp", "ยังไม่มีช่างรับงาน เกินเวลาตอบรับ")}${ck(g, "notify_sla", "งานเกิน SLA")}</td>
+      <td>${ck(g, "active", "เปิดการส่ง")}</td>
+      <td><button class="btn small primary" type="button" data-ln-save>บันทึก</button> <button class="btn small" type="button" data-ln-test ${g.left_at ? "disabled" : ""}>ส่งทดสอบ</button></td></tr>`).join("")
+      || `<tr><td colspan="5" class="meta">ยังไม่มีกลุ่ม LINE · เชิญบอทเข้ากลุ่มตาม “วิธีเพิ่มกลุ่ม LINE” ด้านบน</td></tr>`);
+    $("#lnLog").innerHTML = log.length ? `<tr><th colspan="4">ข้อความล่าสุด</th></tr><tr><th>เวลา</th><th>เรื่อง</th><th>โรง</th><th>ผล</th></tr>` + log.map(r => `<tr><td>${fmt(r.created_at)}</td><td>${LN_KIND[r.kind] || r.kind}</td><td>${esc(hName(r.hospital_id))}</td>
+      <td>${LN_ST[r.status] || r.status}${r.status === "sent" ? ` ${r.sent_to.length} กลุ่ม` : ""}${r.error ? `<br><small style="color:var(--bad)">${esc(r.error)}</small>` : ""}</td></tr>`).join("") : "";
+  }
+  $("#lnReload").onclick = () => loadLine();
+  document.addEventListener("click", async e => {
+    const sv = e.target.closest("[data-ln-save]"), ts = e.target.closest("[data-ln-test]"); if (!sv && !ts) return;
+    const tr = e.target.closest("[data-lng]"), id = tr.dataset.lng, q = k => tr.querySelector(`[data-ln="${k}"]`);
+    if (sv) {
+      const h = q("hosp").value, act = q("active").checked;
+      if (act && !h) return msg("#lnMsg", new Error("เลือกโรงพยาบาลของกลุ่มก่อนเปิดการส่ง"));
+      const { error } = await sb.rpc("line_group_set", { p_id: id, p_hospital: h && h !== "all" ? h : null, p_all: h === "all",
+        p_new: q("notify_new").checked, p_resp: q("notify_resp").checked, p_sla: q("notify_sla").checked, p_active: act });
+      msg("#lnMsg", error, act ? "บันทึกแล้ว กลุ่มนี้จะได้รับแจ้งเตือนตั้งแต่ตอนนี้" : "บันทึกแล้ว (ยังปิดการส่งอยู่)");
+    } else {
+      const { error } = await sb.rpc("line_test", { p_id: id });
+      msg("#lnMsg", error, "ส่งข้อความทดสอบแล้ว ดูในกลุ่ม LINE ภายใน 1 นาที");
+    }
+    await loadLine();
+  });
+
   async function loadRefs() {
     loadMr();
+    loadLine();
     const [s, p, t, l, r, st] = await Promise.all([
       sb.from("profiles").select("id,full_name,role,active").eq("hospital_id", H.id).order("full_name"),
       sb.from("priorities").select("*").eq("hospital_id", H.id).order("sort").order("sla_minutes"),
@@ -372,6 +425,7 @@
       if (OPEN.includes(j.status)) acts += b("pr", "ขอซื้อ") + b("memo", "เขียน Memo", j.memo_requested && !memos.some(m => m.job_id === j.id && m.status !== "cancel"));
       if (OPEN.includes(j.status) && isMgr()) acts += b("edit", "แก้ไขใบงาน") + b("cancel", "ยกเลิกใบงาน");
       if (["clear", "close"].includes(j.status) && j.summary) acts += `<a class="btn small" href="ops.html?tab=kb&job=${j.id}">บันทึกเป็นวิธีแก้</a>`;
+      acts += `<a class="btn small" href="floor.html?job=${encodeURIComponent(j.job_no)}">🗺️ ดูบนแผนผัง</a>`;
       acts += b("history", "ประวัติ");
     }
     const inline = editing && editing.id === j.id ? `<div class="inline">${inlineForm(j)}</div>` : "";

@@ -19,7 +19,7 @@
     <button role="tab" data-tab="dash" aria-selected="false">Dashboard</button>
     <button role="tab" data-tab="report" aria-selected="false">รายงาน</button>
     <button role="tab" data-tab="setup" aria-selected="false" data-manager>ตั้งค่า</button>
-    <a href="pm.html">PM Inhouse ↗</a><a href="pm.html?by=MA">PM MA ↗</a><a href="ma.html">สัญญา MA 12 โรง ↗</a><a href="op.html">บันทึก OP ↗</a><a href="book.html">Monthly Report ↗</a><a href="market.html">ตลาดอะไหล่ ↗</a><a href="ref.html">เบอร์ภายใน · ข้อมูลพื้นที่ ↗</a><a href="ac.html">งานผู้รับเหมาแอร์ ↗</a><a href="survey.html?view=1">แบบสอบถาม ↗</a><a href="wp.html">Work Permit ↗</a><a href="gate.html">ป้อม รปภ. ผู้รับเหมา ↗</a><a href="fms.html">FMS Round · Tracer JCI ↗</a><a href="pmboard.html">PM Board · ความพร้อมอาคาร ↗</a><a href="ops.html">ส่งเวร · รายงานเดือน · คลังวิธีแก้ ↗</a><a href="kpi.html">KPI ตามสัญญา (แนบ 4) ↗</a><a href="training.html">อบรม · แฟ้มสมรรถนะ ↗</a><a href="energy.html">รายงานพลังงาน (GHI) ↗</a><a href="perf.html">ประชุม Bi-Weekly Performance ↗</a><a href="water.html">Water Management ↗</a>
+    <a href="pm.html">PM Inhouse ↗</a><a href="pm.html?by=MA">PM MA ↗</a><a href="ma.html">สัญญา MA 12 โรง ↗</a><a href="op.html">บันทึก OP ↗</a><a href="book.html">Monthly Report ↗</a><a href="market.html">ตลาดอะไหล่ ↗</a><a href="ref.html">เบอร์ภายใน · ข้อมูลพื้นที่ ↗</a><a href="ac.html">งานผู้รับเหมาแอร์ ↗</a><a href="survey.html?view=1">แบบสอบถาม ↗</a><a href="wp.html">Work Permit ↗</a><a href="gate.html">ป้อม รปภ. ผู้รับเหมา ↗</a><a href="fms.html">FMS Round · Tracer JCI ↗</a><a href="pmboard.html">PM Board · ความพร้อมอาคาร ↗</a><a href="ops.html">ส่งเวร · รายงานเดือน · คลังวิธีแก้ ↗</a><a href="kpi.html">KPI ตามสัญญา (แนบ 4) ↗</a><a href="training.html">อบรม · แฟ้มสมรรถนะ ↗</a><a href="energy.html">รายงานพลังงาน (GHI) ↗</a><a href="perf.html">ประชุม Bi-Weekly Performance ↗</a><a href="jci.html">แฟ้มพร้อมตรวจ JCI ↗</a><a href="floor.html">แผนผังอาคาร ↗</a><a href="water.html">Water Management ↗</a>
   </nav>
 </div></header>
 <main class="wrap">
@@ -168,6 +168,18 @@
           <label>อีเมล *<input id="mrEmail" type="email" required placeholder="name@hospital.com"></label>
           <div class="row" style="align-self:end"><button class="btn primary">เพิ่มอีเมล</button></div></div>
         <div id="mrMsg"></div><div class="scroll" style="margin-top:12px"><table id="mrList"></table></div></form>
+      <form class="panel" id="fLine"><h3>แจ้งเตือน LINE</h3>
+        <p class="meta" style="margin:0 0 8px">ส่งเข้ากลุ่ม LINE ทันทีเมื่อมีงานแจ้งซ่อมใหม่ เมื่อยังไม่มีช่างรับงานเกินเวลาตอบรับ (5 / 15 / 45 นาที) และเมื่องานเกิน SLA · ระบบตรวจทุก 5 นาที · หลายเรื่องในรอบเดียวกันรวมเป็นข้อความเดียวเพื่อประหยัดโควตาข้อความของ LINE</p>
+        <div id="lnState" class="meta" style="margin:0 0 8px">กำลังตรวจการเชื่อมต่อ LINE…</div>
+        <details style="margin:0 0 10px"><summary><b>วิธีเพิ่มกลุ่ม LINE</b></summary><ol style="margin:6px 0 0 18px;padding:0">
+          <li>ในแอป LINE เปิดกลุ่มของทีมช่าง กดเมนู ☰ (ขวาบน) แล้วกด “เชิญ”</li>
+          <li>ค้นหาบอทแจ้งเตือนด้วยชื่อหรือ LINE ID ที่แสดงด้านบน แล้วกด “เชิญ”</li>
+          <li>บอทจะทักในกลุ่ม แล้วกลุ่มจะขึ้นในตารางด้านล่างนี้ (กด “โหลดใหม่” ถ้ายังไม่เห็น)</li>
+          <li>เลือกโรงพยาบาลของกลุ่ม ติ๊กเรื่องที่ต้องการ ติ๊ก “เปิดการส่ง” แล้วกด “บันทึก”</li>
+          <li>กด “ส่งทดสอบ” แล้วดูว่ามีข้อความเข้ากลุ่มหรือไม่ · พิมพ์คำว่า สถานะ ในกลุ่มเพื่อดูการตั้งค่าได้ทุกเมื่อ</li></ol></details>
+        <div class="row"><button class="btn small" type="button" id="lnReload">โหลดใหม่</button></div>
+        <div id="lnMsg"></div><div class="scroll" style="margin-top:12px"><table id="lnList"></table></div>
+        <div class="scroll" style="margin-top:12px"><table id="lnLog"></table></div></form>
       <form class="panel" id="fSet"><h3>การทำงานและการแจ้งเตือน</h3>
         <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
           <label>แนบรูป/วิดีโอได้สูงสุด (ไฟล์)<input name="gMax" type="number" min="1" max="10" required></label>
