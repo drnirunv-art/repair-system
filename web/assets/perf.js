@@ -294,6 +294,33 @@
     BL = { rows, file: "ระบบ RS", sheet: "", at: new Date().toISOString(), src: "system" };
     $("#blMsg").innerHTML = `<p class="note ok">ใช้งานค้างในระบบ RS ${rows.length} ใบ</p>`; fillFromBacklog(); drawBl(); if (canWrite) await persist(false);
   });
+  // Backlog report: executive summary + analysis from the uploaded backlog rows only (no invented numbers)
+  function blDeck() {
+    const H = hosp(), R = BL.rows, M = blMatrix(), n = R.length, pc = v => nf(v * 100 / n, 1) + "%";
+    const over = R.filter(r => +r.age > 60).length, mid = R.filter(r => +r.age > 30 && +r.age <= 60).length, d1 = R.filter(r => +r.age <= 1).length;
+    const avg = R.reduce((s, r) => s + (+r.age || 0), 0) / n, old = Math.max(...R.map(r => +r.age || 0));
+    const reasons = {}; R.forEach(r => { const k = r.reason || r.status || "ไม่ระบุ"; reasons[k] = (reasons[k] || 0) + 1; });
+    const RS = Object.entries(reasons).sort((a, b) => b[1] - a[1]), gt = GRP.map(g => [g[1], M.reduce((s, r) => s + r[g[0]], 0)]).sort((a, b) => b[1] - a[1]);
+    const types = {}; R.forEach(r => { const k = r.type || "ไม่ระบุ"; types[k] = (types[k] || 0) + 1; }); const TS = Object.entries(types).sort((a, b) => b[1] - a[1]);
+    const overGrp = GRP.map(g => [g[1], M[4][g[0]]]).filter(x => x[1]).sort((a, b) => b[1] - a[1]);
+    const weeks = Math.max(1, Math.ceil((new Date(new Date().getFullYear(), 11, 31) - new Date()) / (7 * 864e5)));
+    const findings = [`${H.name} มีงานค้าง ${n} ใบ อายุเฉลี่ย ${nf(avg, 1)} วัน เก่าสุด ${old} วัน`,
+      over ? `งานค้างเกิน 60 วัน ${over} ใบ (${pc(over)}) ต้องเคลียร์ก่อนเป็นลำดับแรก${overGrp.length ? ` ส่วนใหญ่อยู่กลุ่ม "${overGrp[0][0]}" ${overGrp[0][1]} ใบ` : ""}` : "ไม่มีงานค้างเกิน 60 วัน",
+      `สาเหตุที่ค้างมากที่สุด "${RS[0][0]}" ${RS[0][1]} ใบ (${pc(RS[0][1])})${RS[1] ? ` รองลงมา "${RS[1][0]}" ${RS[1][1]} ใบ (${pc(RS[1][1])})` : ""}`,
+      `เป้าหมายงานค้างเป็นศูนย์ภายในสิ้นเดือนธันวาคม เหลือประมาณ ${weeks} สัปดาห์ ต้องปิดเฉลี่ยสัปดาห์ละ ${Math.ceil(n / weeks)} ใบ (ไม่นับงานเข้าใหม่)`];
+    const analysis = [`แยกตามกลุ่ม: ${gt.map(([k, v]) => `${k} ${v} ใบ (${pc(v)})`).join(", ")}`,
+      `แยกตามอายุ: ≤ 1 วัน ${d1} ใบ, > 30–60 วัน ${mid} ใบ, > 60 วัน ${over} ใบ`,
+      gt[0][1] / n >= 0.4 ? `กลุ่ม "${gt[0][0]}" มีสัดส่วนสูง (${pc(gt[0][1])}) ควรแก้ที่ต้นเหตุของกลุ่มนี้ก่อน` : `งานค้างกระจายหลายกลุ่ม ควรมอบผู้รับผิดชอบแยกตามกลุ่ม`,
+      `ประเภทงานที่ค้างมากที่สุด: ${TS.slice(0, 3).map(([k, v]) => `${k} ${v} ใบ`).join(", ")}`,
+      ...(mid ? [`งานอายุ 30–60 วัน ${mid} ใบ จะกลายเป็นงานเกิน 60 วันภายใน 1 เดือนถ้าไม่เร่งปิด`] : [])];
+    const top = [...R].sort((a, b) => (+b.age || 0) - (+a.age || 0)).slice(0, 12);
+    return { title: `รายงานงานค้าง (Backlog) ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${thd(meet())} · ที่มา: ${BL.file || "งานค้างในระบบ RS"}`,
+      findings, kpis: [["งานค้างทั้งหมด", n], ["ค้างเกิน 60 วัน", over], ["อายุเฉลี่ย (วัน)", nf(avg, 1)], ["เก่าสุด (วัน)", old]], analysis,
+      sections: [{ title: "งานค้างตามอายุและกลุ่ม", head: ["ช่วงอายุ", ...GRP.map(g => g[1]), "รวม"], chart: false, rows: [...AGE.map((a, i) => [a[0], ...GRP.map(g => M[i][g[0]]), GRP.reduce((s, g) => s + M[i][g[0]], 0)]), ["รวม", ...GRP.map(g => M.reduce((s, r) => s + r[g[0]], 0)), n]] },
+        { title: "เหตุผลที่ค้าง", head: ["เหตุผล / สถานะค้าง", "ใบ", "%"], rows: RS.slice(0, 12).map(([k, v]) => [k, v, pc(v)]) },
+        { title: "งานค้างนานที่สุด 12 ใบ", head: ["เลขใบงาน", "อายุ (วัน)", "ประเภท", "รายละเอียด", "เหตุผล"], chart: false, left: true, colW: [1.8, 1.1, 1.6, 5.3, 2.5], fs: 11, rows: top.map(r => [r.no, r.age ?? "", r.type || "", String(r.detail || "").slice(0, 70), r.reason || r.status || ""]) }],
+      notes: ["เคลียร์งานเกิน 60 วันก่อน แล้วไล่ตามอายุ", "งานรออะไหล่ / ผู้รับเหมา / พื้นที่ ต้องมี PR หรือ Memo ภายใน 24 ชม. และวันวางเสร็จทุกใบ", "ให้ AI 3 คนทำ Action plan (RCA) ต่อจากรายงานนี้ได้ที่ปุ่ม 🤖 ด้านบน"] };
+  }
   function drawBl() {
     const R = BL.rows;
     if (!R.length) { $("#blSum").innerHTML = `<p class="note">ยังไม่มีข้อมูลงานค้างของรอบนี้ อัปโหลดไฟล์ Backlog ด้านบน</p>`; $("#blList").innerHTML = ""; drawAi(); return; }
@@ -304,7 +331,14 @@
       <div class="kpi"><span>อายุเฉลี่ย (วัน)</span><b>${nf(R.reduce((s, r) => s + (+r.age || 0), 0) / R.length, 1)}</b></div><div class="kpi"><span>เก่าสุด (วัน)</span><b>${Math.max(...R.map(r => +r.age || 0))}</b></div></div>
       <div class="tw"><table class="pt"><thead><tr><th>ช่วงอายุงานค้าง</th>${GRP.map(g => `<th>${g[1]}</th>`).join("")}<th>รวม</th></tr></thead><tbody>${AGE.map((a, i) => `<tr><td class="lab">${esc(a[0])}</td>${GRP.map(g => `<td class="num">${M[i][g[0]]}</td>`).join("")}<td class="num"><b>${GRP.reduce((s, g) => s + M[i][g[0]], 0)}</b></td></tr>`).join("")}
       <tr class="sum"><td>รวม</td>${GRP.map(g => `<td class="num">${tot(g[0])}</td>`).join("")}<td class="num">${R.length}</td></tr></tbody></table></div>
-      <h3>เหตุผลที่ค้าง</h3><div class="tw"><table class="pt"><thead><tr><th>เหตุผล / สถานะค้าง</th><th>ใบ</th><th>%</th></tr></thead><tbody>${Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td><td class="num">${nf(v * 100 / R.length, 1)}%</td></tr>`).join("")}</tbody></table></div>`;
+      <h3>เหตุผลที่ค้าง</h3><div class="tw"><table class="pt"><thead><tr><th>เหตุผล / สถานะค้าง</th><th>ใบ</th><th>%</th></tr></thead><tbody>${Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td><td class="num">${nf(v * 100 / R.length, 1)}%</td></tr>`).join("")}</tbody></table></div>` +
+      `<div class="acts"><button class="btn primary" type="button" id="bP">รายงานงานค้าง (PPT บทสรุป + วิเคราะห์)</button><button class="btn" type="button" id="bW">Word</button><button class="btn" type="button" id="bF">PDF</button><button class="btn" type="button" id="bX">Excel</button></div>`;
+    const bRun = fn => () => { try { fn(blDeck()); } catch (e) { toast(errText(e), true); } };
+    $("#bP").onclick = bRun(d => Office.pptx(fname("Backlog"), d)); $("#bW").onclick = bRun(d => Office.docx(fname("Backlog"), d)); $("#bF").onclick = bRun(d => Office.pdf(fname("Backlog"), d).catch(e => toast(errText(e), true)));
+    $("#bX").onclick = bRun(d => Office.xlsx(fname("Backlog"), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: [...d.findings, ...d.analysis], notes: d.notes, figures: d.kpis }),
+      ...d.sections.map(x => ({ name: x.title, rows: [x.head, ...x.rows], header: 0 })),
+      { name: "รายการงานค้างทั้งหมด", rows: [["เลขใบงาน", "อายุ (วัน)", "กลุ่ม", "ประเภท", "สถานที่", "รายละเอียด", "สถานะค้าง", "เหตุผล", "ผู้รับผิดชอบ"],
+        ...[...R].sort((a, b) => (+b.age || 0) - (+a.age || 0)).map(r => [r.no, r.age ?? "", GRP.find(g => g[0] === grpOf(r))[1], r.type || "", r.loc || "", r.detail || "", r.status || "", r.reason || "", r.owner || ""])], header: 0 }]));
     const list = [...R].sort((a, b) => (+b.age || 0) - (+a.age || 0));
     $("#blList").innerHTML = `<h2>รายการงานค้าง (เรียงจากค้างนานสุด)</h2><div class="tw"><table class="pt bl"><thead><tr><th>เลขใบงาน</th><th>อายุ (วัน)</th><th>กลุ่ม</th><th>ประเภท</th><th>สถานที่</th><th>รายละเอียด</th><th>สถานะค้าง</th><th>เหตุผล</th><th>ผู้รับผิดชอบ</th></tr></thead><tbody>` +
       list.map(r => `<tr><td>${esc(r.no)}</td><td class="num ${+r.age > 60 ? "c-bad" : +r.age > 30 ? "c-mid" : ""}">${esc(r.age ?? "")}</td><td>${esc(GRP.find(g => g[0] === grpOf(r))[1])}</td><td>${esc(r.type || "")}</td><td>${esc(r.loc || "")}</td><td class="d">${esc(r.detail || "")}</td><td>${esc(r.status || "")}</td><td>${esc(r.reason || "")}</td><td>${esc(r.owner || "")}</td></tr>`).join("") + `</tbody></table></div>`;
