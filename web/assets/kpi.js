@@ -109,36 +109,74 @@
   const cut = (t, n) => { if (vis(t) <= n) return t; let k = t.length; while (k > 0 && vis(t.slice(0, k)) > n - 1) k--; return t.slice(0, k) + "…"; };
   const short = t => String(t || "").replace(/\s*\(.*$/, "");
   const wrap = (t, n) => { const out = []; let rest = String(t || ""); while (rest.length > n && out.length < 2) { let k = rest.lastIndexOf(" ", n); if (k < n / 2) k = n; out.push(rest.slice(0, k).trim()); rest = rest.slice(k).trim(); } out.push(cut(rest, n)); return out; };
-  function fishSvg(c, title, r) {
-    const W = 1400, H = 600, Y = 300, x = v => esc(v);
+  // full text rule (user 2026-11-20): every line is written out in full, never cut with "…": long text wraps onto more lines and drawings grow
+  const MARK_ = /[ัิ-ฺ็-๎]/, LEAD_ = /[เ-ไ]/;
+  const SEG_ = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter("th", { granularity: "word" }) : null;
+  // Thai has no spaces between words: break lines at word boundaries (Intl.Segmenter) so no word is split
+  const wrapAll = (t, n) => { const src = String(t ?? "").replace(/\s+/g, " ").trim(); if (!SEG_) return wrapRaw(src, n);
+    const out = []; let cur = "";
+    for (const { segment: w, isWordLike } of SEG_.segment(src)) {
+      if (vis(cur + w) <= n || (!isWordLike && w.trim() && cur.trim() && vis(cur + w) <= n + 3)) { cur += w; continue; }   // closing marks like ")" stay on their line
+      if (cur.trim()) { out.push(cur.trim()); cur = ""; }
+      if (vis(w) > n) { const parts = wrapRaw(w, n); cur = parts.pop(); out.push(...parts); } else cur = w.trimStart(); }
+    if (cur.trim() || !out.length) out.push(cur.trim()); return out; };
+  const wrapRaw = (t, n) => { const out = []; let rest = t;
+    while (vis(rest) > n) { let k = 0, v = 0; while (k < rest.length && (v < n || MARK_.test(rest[k]))) { if (!MARK_.test(rest[k])) v++; k++; }
+      const b = rest.lastIndexOf(" ", k); if (b > k * 0.45) { out.push(rest.slice(0, b)); rest = rest.slice(b + 1); continue; }
+      while (k > 1 && LEAD_.test(rest[k - 1])) k--;
+      out.push(rest.slice(0, k)); rest = rest.slice(k).trimStart(); }
+    if (rest || !out.length) out.push(rest); return out; };
+  const svgWH = svg => { const m = String(svg).match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/); return m ? [+m[1], +m[2]] : [1400, 600]; };
+  const pngOf = svg => { const [w, h] = svgWH(svg); return toPng(svg, w, h); };
+  const gRowH = r => Math.max(34, 14 + wrapAll(r.step, 44).length * 20);
+  const gChunks = (P, max = 520) => { const out = []; let cur = [], h = 0; P.forEach(r => { const rh = gRowH(r); if (cur.length && h + rh > max) { out.push(cur); cur = []; h = 0; } cur.push(r); h += rh; }); if (cur.length) out.push(cur); return out; };
+  // fishbone 4M with every cause in full: bones grow longer when there is more to write
+  function fishDraw(label, title, get) {
+    const W = 1400, x = v => esc(v), FL = 20;
+    const B = M4.map(([k, lab], i) => { const items = (get(k) || []).map(t => wrapAll(t, 26)), need = items.reduce((a, l) => a + l.length * FL + 14, 0); return { lab, i, items, len: Math.max(230, need + 70) }; });
+    const TL = wrapAll(title, 17), hh = Math.max(184, 88 + TL.length * 28), up = Math.max(B[0].len, B[1].len, hh / 2 + 10), dn = Math.max(B[2].len, B[3].len, hh / 2 + 10), Y = 70 + up, H = Math.round(Y + dn + 70);
     let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>` +
       `<line x1="30" y1="${Y}" x2="1132" y2="${Y}" stroke="#1F2A37" stroke-width="6"/><polygon points="1126,${Y - 24} 1150,${Y} 1126,${Y + 24}" fill="#1F2A37"/>` +
-      `<rect x="1152" y="${Y - 92}" width="236" height="184" rx="14" fill="#FDE8E6" stroke="#B42318" stroke-width="3"/>` +
-      `<text x="1270" y="${Y - 52}" text-anchor="middle" font-size="22" font-weight="bold" fill="#9B1C13">ปัญหา: ข้อ ${x(c)} ตก</text>` +
-      wrap(short(title), 17).map((t, i) => `<text x="1270" y="${Y - 14 + i * 30}" text-anchor="middle" font-size="18" fill="#1F2A37">${x(t)}</text>`).join("");
-    M4.forEach(([k, lab], i) => { const J = i % 2 ? 1040 : 560, top = i < 2, ex = J - 220, ey = top ? 70 : 530;
+      `<rect x="1152" y="${Y - hh / 2}" width="236" height="${hh}" rx="14" fill="#FDE8E6" stroke="#B42318" stroke-width="3"/>` +
+      `<text x="1270" y="${Y - hh / 2 + 40}" text-anchor="middle" font-size="22" font-weight="bold" fill="#9B1C13">${x(label)}</text>` +
+      TL.map((t, i) => `<text x="1270" y="${Y - hh / 2 + 78 + i * 28}" text-anchor="middle" font-size="18" fill="#1F2A37">${x(t)}</text>`).join("");
+    B.forEach(b => { const J = b.i % 2 ? 1040 : 560, top = b.i < 2, ex = J - 220, ey = top ? Y - b.len : Y + b.len, bxAt = yy => top ? ex + 220 * (yy - ey) / b.len : ex + 220 * (ey - yy) / b.len;
       s += `<line x1="${ex}" y1="${ey}" x2="${J}" y2="${Y}" stroke="#0B5CAD" stroke-width="4"/>` +
-        `<rect x="${ex - 125}" y="${top ? ey - 52 : ey + 6}" width="250" height="46" rx="9" fill="#0B5CAD"/><text x="${ex}" y="${top ? ey - 21 : ey + 37}" text-anchor="middle" fill="#ffffff" font-size="19" font-weight="bold">${lab}</text>`;
-      lines(r[k]).slice(0, 4).forEach((t, j) => { const yy = top ? 112 + 44 * j : 352 + 44 * j, bx = top ? ex + 220 * (yy - 70) / 230 : ex + 220 * (530 - yy) / 230;
-        s += `<line x1="${bx - 24}" y1="${yy}" x2="${bx}" y2="${yy}" stroke="#0B5CAD" stroke-width="2"/><text x="${bx - 30}" y="${yy + 6}" text-anchor="end" font-size="16" fill="#1F2A37">${x(cut(t, 28))}</text>`; }); });
+        `<rect x="${ex - 125}" y="${top ? ey - 52 : ey + 6}" width="250" height="46" rx="9" fill="#0B5CAD"/><text x="${ex}" y="${top ? ey - 21 : ey + 37}" text-anchor="middle" fill="#ffffff" font-size="19" font-weight="bold">${b.lab}</text>`;
+      let yy = top ? ey + 42 : Y + 52;
+      b.items.forEach(L => { const bx = bxAt(yy); s += `<line x1="${Math.round(bx - 24)}" y1="${yy}" x2="${Math.round(bx)}" y2="${yy}" stroke="#0B5CAD" stroke-width="2"/>`;
+        L.forEach((t, j) => { s += `<text x="${Math.round(bxAt(yy + j * FL + (top ? 0 : 6)) - 30)}" y="${yy + 6 + j * FL}" text-anchor="end" font-size="16" fill="#1F2A37">${x(t)}</text>`; }); yy += L.length * FL + 14; }); });
     return s + "</svg>";
   }
+  // SWOT 4 boxes with every point in full: boxes grow taller when there is more to write
+  function swotSvg(sw) {
+    const W = 1400, x = v => esc(v), LH = 32;
+    const B = SW.map(([k]) => ((sw && sw[k]) || []).map(t => wrapAll(t, 44))), bh = L => Math.max(320, 98 + L.reduce((a, l) => a + l.length * LH + 14, 0));
+    const R1 = Math.max(bh(B[0]), bh(B[1])), R2 = Math.max(bh(B[2]), bh(B[3])), H = 60 + R1 + R2;
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
+    SW.forEach(([k, lab, ink, bg], i) => { const X = 20 + (i % 2) * 690, Y = i < 2 ? 20 : 40 + R1, h = i < 2 ? R1 : R2;
+      s += `<rect x="${X}" y="${Y}" width="670" height="${h}" rx="12" fill="#${bg}" stroke="#${ink}" stroke-width="3"/><text x="${X + 24}" y="${Y + 44}" font-size="26" font-weight="bold" fill="#${ink}">${lab}</text>`;
+      let yy = Y + 98; B[i].forEach(L => { L.forEach((t, j) => { s += `<text x="${X + (j ? 52 : 30)}" y="${yy}" font-size="23" fill="#1F2A37">${x((j ? "" : "• ") + t)}</text>`; yy += LH; }); yy += 14; }); });
+    return s + "</svg>";
+  }
+  function fishSvg(c, title, r) { return fishDraw(`ปัญหา: ข้อ ${c} ตก`, title, k => lines(r[k])); }
   // step plan (Gantt): every corrective step has an owner, a start date, a planned finish date (วันวางเสร็จ) and a status
   const ST = ["ยังไม่เริ่ม", "กำลังทำ", "เสร็จ"];
   const dAdd = (iso, n) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   const dDiff = (a, b) => Math.round((new Date(b + "T00:00:00Z") - new Date(a + "T00:00:00Z")) / 864e5);
   const dm = iso => new Date(iso + "T00:00:00").toLocaleDateString("th-TH", { day: "numeric", month: "short" });
+  const PGX = rows => Math.max(70, 32 + Math.max(...rows.map(r => vis(String(r.grp || "")))) * 10);
   function ganttSvg(rows) {
-    const W = 1400, L = 600, R = 1330, top = 58, rh = 34, H = top + rows.length * rh + 16, x = v => esc(v);
+    const W = 1400, L = 600, R = 1330, top = 58, LH = 20, GX = PGX(rows), GW = Math.max(20, Math.floor((L - 90 - GX) / 10.4)), RL = rows.map(r => wrapAll(r.step, GW)), RH = RL.map(l => Math.max(34, 14 + l.length * LH)), YS = RH.map((_, i) => top + RH.slice(0, i).reduce((a, b) => a + b, 0)), H = top + RH.reduce((a, b) => a + b, 0) + 16, x = v => esc(v);
     const d0 = rows.reduce((m, r) => r.start < m ? r.start : m, rows[0].start), d1 = rows.reduce((m, r) => r.end > m ? r.end : m, rows[0].end);
     const span = Math.max(7, dDiff(d0, d1) + 1), px = d => L + (R - L) * dDiff(d0, d) / span, t = today();
     let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>` +
       `<text x="20" y="34" font-size="17" font-weight="bold" fill="#1F2A37">ข้อ · ขั้นตอน</text><text x="${L - 10}" y="34" text-anchor="end" font-size="15" fill="#5B6776">วางเสร็จ</text>`;
     for (let k = 0; k <= span; k += 7) { const d = dAdd(d0, k), xx = px(d); s += `<line x1="${xx}" y1="${top - 8}" x2="${xx}" y2="${H - 12}" stroke="#E3E9F1"/><text x="${xx + 3}" y="34" font-size="14" fill="#5B6776">${x(dm(d))}</text>`; }
-    rows.forEach((r, i) => { const y = top + i * rh, late = r.status !== "เสร็จ" && r.end < t, col = r.status === "เสร็จ" ? "#14632F" : late ? "#B42318" : r.status === "กำลังทำ" ? "#0B5CAD" : "#7F9CC0";
+    rows.forEach((r, i) => { const y = YS[i], rh = RH[i], late = r.status !== "เสร็จ" && r.end < t, col = r.status === "เสร็จ" ? "#14632F" : late ? "#B42318" : r.status === "กำลังทำ" ? "#0B5CAD" : "#7F9CC0";
       if (i % 2) s += `<rect x="10" y="${y}" width="${W - 20}" height="${rh}" fill="#F6F8FB"/>`;
-      s += `<text x="20" y="${y + 22}" font-size="15" fill="#1F2A37"><tspan font-weight="bold">${x(r.grp)}</tspan> ${x(cut(r.step, 44))}</text><text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="14" fill="${late ? "#B42318" : "#1F2A37"}">${x(dm(r.end))}</text>` +
-        `<rect x="${px(r.start)}" y="${y + 7}" width="${Math.max(6, px(dAdd(r.end, 1)) - px(r.start))}" height="${rh - 14}" rx="5" fill="${col}"/>`; });
+      s += `<text x="20" y="${y + 22}" font-size="15" font-weight="bold" fill="#1F2A37">${x(r.grp)}</text>${RL[i].map((l, j) => `<text x="${GX}" y="${y + 22 + j * LH}" font-size="15" fill="#1F2A37">${x(l)}</text>`).join("")}<text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="14" fill="${late ? "#B42318" : "#1F2A37"}">${x(dm(r.end))}</text>` +
+        `<rect x="${px(r.start)}" y="${y + rh / 2 - 10}" width="${Math.max(6, px(dAdd(r.end, 1)) - px(r.start))}" height="20" rx="5" fill="${col}"/>`; });
     if (t >= d0 && t <= d1) s += `<line x1="${px(t)}" y1="${top - 8}" x2="${px(t)}" y2="${H - 12}" stroke="#B42318" stroke-width="2" stroke-dasharray="6 4"/><text x="${px(t) + 4}" y="${top - 12}" font-size="13" fill="#B42318">วันนี้</text>`;
     return { svg: s + "</svg>", w: W, h: H };
   }
@@ -147,15 +185,7 @@
   const swotLines = R => R && R.swot ? SW.map(([k, lab]) => `SWOT ${lab}: ${(R.swot[k] || []).join("; ") || "-"}`) : ["SWOT: รายงาน AI รอบนี้ทำก่อนมี SWOT กดปุ่ม 🤖 ใหม่เพื่อให้ AI 3 คนทำ SWOT"];
   const swotNote = R => R && R.swot ? [] : [swotLines(R)[0]];   // old reports made before SWOT: tell the user to run 🤖 again
   // SWOT is always the 4-box chart, placed right after the executive summary (screen, PPT, Word, PDF, Excel)
-  const swotLead = async (R, title = "SWOT") => R && R.swot ? [{ title, img: await toPng(swotSvg(R.swot), 1400, 700), imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : [];
-  function swotSvg(sw) {
-    const W = 1400, H = 700, x = v => esc(v);
-    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
-    SW.forEach(([k, lab, ink, bg], i) => { const X = 20 + (i % 2) * 690, Y = 20 + Math.floor(i / 2) * 340;
-      s += `<rect x="${X}" y="${Y}" width="670" height="320" rx="12" fill="#${bg}" stroke="#${ink}" stroke-width="3"/><text x="${X + 24}" y="${Y + 44}" font-size="26" font-weight="bold" fill="#${ink}">${lab}</text>`;
-      ((sw && sw[k]) || []).slice(0, 5).forEach((t, j) => { s += `<text x="${X + 30}" y="${Y + 98 + j * 48}" font-size="23" fill="#1F2A37">${x("• " + cut(t, 44))}</text>`; }); });
-    return s + "</svg>";
-  }
+  const swotLead = async (R, title = "SWOT") => R && R.swot ? [{ title, img: await pngOf(swotSvg(R.swot)), svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : [];
   const TM = [["ม.ค.", "มกราคม"], ["ก.พ.", "กุมภาพันธ์"], ["มี.ค.", "มีนาคม"], ["เม.ย.", "เมษายน"], ["พ.ค.", "พฤษภาคม"], ["มิ.ย.", "มิถุนายน"], ["ก.ค.", "กรกฎาคม"], ["ส.ค.", "สิงหาคม"], ["ก.ย.", "กันยายน"], ["ต.ค.", "ตุลาคม"], ["พ.ย.", "พฤศจิกายน"], ["ธ.ค.", "ธันวาคม"]];
   function parseDue(v) {   // "15 ธ.ค. 2569", "15 ธันวาคม 69", "2026-12-15", "15/12/2569" -> ISO (CE); null when no date
     const t = String(v || "").trim(), pad = n => String(n).padStart(2, "0"); let m, d, mo, y;
@@ -177,7 +207,7 @@
   const toPng = (svg, w, h) => new Promise(ok => { const img = new Image();
     img.onload = () => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0); try { ok(cv.toDataURL("image/png")); } catch (e) { ok(null); } };
     img.onerror = () => ok(null); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
-  const fishPng = svg => toPng(svg, 1400, 600);
+  const fishPng = svg => pngOf(svg);
   const thd = d => d ? new Date(d + "T00:00:00").toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }) : "-";
   const catOf = c => ["5", "6", "7"].includes(c) ? "5" : c[0];
   const has = v => v !== undefined && v !== null && v !== "";
@@ -343,8 +373,8 @@
       DISC.includes(H.code) ? (t >= 90 ? "ไม่มีส่วนลดค่าบริการ" : `ตามสัญญา ผลนี้ทำให้มีส่วนลดค่าบริการ ${disc(t)}%`) : "สัญญาของโรงนี้ไม่มีข้อส่วนลดค่าบริการตามผล KPI",
       lost.length ? `เสียคะแนน ${lost.length} ข้อ มากที่สุดคือ ${lost.slice(0, 3).map(x => `${x.it.code} (${r1(x.it.max - x.sc)} คะแนน)`).join(", ")}` : "ไม่เสียคะแนนในข้อที่กรอกแล้ว"];
     if (blank.length) findings.push(`ยังไม่มีค่า ${blank.length} ข้อ: ${blank.map(it => it.code).join(", ")} คะแนนรวมยังไม่ครบ`);
-    const analysis = lost.slice(0, 8).map(x => `${x.it.code} ${x.it.title}: ได้ ${x.sc}/${x.it.max} ค่าจริง ${x.it.kind === "pass" ? (vals[x.it.code].v === "pass" ? "ผ่าน" : "ไม่ผ่าน") : vals[x.it.code].v + (x.it.kind === "pct" ? "%" : "")} เป้าหมาย ${x.it.target}`);
-    const notes = lost.slice(0, 5).map(x => { const a = apOf(x.it.code); return `ข้อ ${x.it.code}: ${a.act.split("\n")[0].replace(/^1\. /, "")} (ผู้รับผิดชอบ ${a.owner} เสร็จ ${thd(a.due)}) ดูรายละเอียดใน Action plan`; });
+    const analysis = lost.map(x => `${x.it.code} ${x.it.title}: ได้ ${x.sc}/${x.it.max} ค่าจริง ${x.it.kind === "pass" ? (vals[x.it.code].v === "pass" ? "ผ่าน" : "ไม่ผ่าน") : vals[x.it.code].v + (x.it.kind === "pct" ? "%" : "")} เป้าหมาย ${x.it.target}`);
+    const notes = lost.map(x => { const a = apOf(x.it.code); return `ข้อ ${x.it.code}: ${a.act.split("\n")[0].replace(/^1\. /, "")} (ผู้รับผิดชอบ ${a.owner} เสร็จ ${thd(a.due)}) ดูรายละเอียดใน Action plan`; });
     if (auto && auto.aging_over60 > 0) notes.push(`มีงานค้างเกิน 60 วัน ${auto.aging_over60} งาน ต้องปิดหรือกำหนดวันเสร็จ`);
     return { title: `KPI ตามสัญญา (แนบ 4) ${H.code}`, org: H.name, period: mName(y, m), findings,
       kpis: [["คะแนนรวม", t], ["ผลประเมิน", t >= 90 ? "ผ่าน" : "ไม่ผ่าน"], ["ส่วนลด", DISC.includes(H.code) ? disc(t) + "%" : "-"], ["ข้อที่เสียคะแนน", lost.length], ["ข้อที่ยังไม่มีค่า", blank.length]],
@@ -368,21 +398,21 @@
         `ลำดับความสำคัญ: ${F.slice(0, 4).map(x => `${x.it.code} (เสีย ${r1(x.it.max - x.sc)})`).join(", ")}`,
         `ทุกข้อมีผู้รับผิดชอบและกำหนดเสร็จ ติดตามผลในการประชุมประจำเดือนและใน KPI เดือนถัดไป`] : ["ไม่มีข้อที่ตก ยังไม่ต้องทำ Action plan"];
     const pics = await Promise.all(F.map(x => fishPng(fishSvg(x.it.code, x.it.title, apOf(x.it.code).rca))));
-    const PR = planRows(F), chunks = []; for (let i = 0; i < PR.length; i += 14) chunks.push(PR.slice(i, i + 14));
+    const PR = planRows(F), chunks = gChunks(PR);
     const gpics = await Promise.all(chunks.map(ch => { const g = ganttSvg(ch); return toPng(g.svg, g.w, g.h).then(img => ({ img, r: g.h / g.w })); }));
     const sections = F.flatMap((x, k) => { const a = apOf(x.it.code), r = a.rca, why = lines(r.why);
       return [...(pics[k] ? [{ title: `RCA ก้างปลา 4M ข้อ ${x.it.code}`, img: pics[k], svg: fishSvg(x.it.code, x.it.title, a.rca), note: `สาเหตุราก: ${a.cause || "(ยังไม่ระบุ)"}` }] : []),
-        { title: `ข้อ ${x.it.code} ${x.it.title}`.slice(0, 70), head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 15,
+        { title: `ข้อ ${x.it.code} ${x.it.title}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 15,
         rows: [["ผลเดือนนี้", `ได้ ${x.sc}/${x.it.max} ค่าจริง ${shown(x)} เป้าหมาย ${x.it.target}`], ["สาเหตุ", a.cause || "(ยังไม่ระบุ)"], ...a.act.split("\n").filter(Boolean).map((s, i) => [i ? "" : "วิธีแก้ไข", s]),
           ["ผู้รับผิดชอบ", a.owner], ["กำหนดเสร็จ", thd(a.due)], ["วัดผล", `KPI ข้อ ${x.it.code} เดือนถัดไปต้องได้ ${x.it.max}/${x.it.max} (${x.it.target})`]] },
         { title: `โครงการแก้ไข ข้อ ${x.it.code}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 14,
-          rows: [["ชื่อโครงการ", r.proj], ["เป้าหมาย", r.goal], ...(why.length ? why.slice(0, 5).map((t, i) => [i ? "" : "5 Why", t]) : [["5 Why", "(ยังไม่ได้ทำ)"]]), ["สาเหตุราก", a.cause || "(ยังไม่ระบุ)"],
+          rows: [["ชื่อโครงการ", r.proj], ["เป้าหมาย", r.goal], ...(why.length ? why.map((t, i) => [i ? "" : "5 Why", t]) : [["5 Why", "(ยังไม่ได้ทำ)"]]), ["สาเหตุราก", a.cause || "(ยังไม่ระบุ)"],
             ["งบประมาณ", r.budget || "-"], ["ผู้รับผิดชอบ", a.owner], ["กำหนดเสร็จ", thd(a.due)]] },
         { title: `แผนงานและวันวางเสร็จ ข้อ ${x.it.code}`, head: ["ขั้นตอน", "ผู้รับผิดชอบ", "เริ่ม", "วางเสร็จ", "สถานะ"], chart: false, left: true, colW: [5.4, 2.8, 1.4, 1.4, 1.3], fs: 13,
           rows: r.plan.map((p, i) => [`${i + 1}. ${p.step}`, p.owner, thd(p.start), thd(p.end), p.status !== "เสร็จ" && p.end < today() ? p.status + " (เลยกำหนด)" : p.status]) }]; });
     return { title: `Action plan แก้ไข KPI ${H.code}`, org: H.name, period: mName(y, m), findings,
       kpis: [["คะแนนรวม", t], ["ข้อที่ตก", F.length], ["คะแนนที่เสีย", lostPts], ["เป้าหมาย", "≥ 90"]],
-      analysis: F.map(x => `${x.it.code}: ${apOf(x.it.code).cause || "ยังไม่ระบุสาเหตุ"}`).slice(0, 9),
+      analysis: F.map(x => `${x.it.code}: ${apOf(x.it.code).cause || "ยังไม่ระบุสาเหตุ"}`),
       sections: [...gpics.filter(g => g.img).map((g, i) => ({ title: `แผนงานรวมและวันวางเสร็จ (Gantt)${gpics.length > 1 ? ` ${i + 1}/${gpics.length}` : ""}`, img: g.img, imgR: g.r,
           note: `ทั้งหมด ${PR.length} ขั้นตอน เริ่ม ${thd(PR.reduce((m, p) => p.start < m ? p.start : m, PR[0].start))} วางเสร็จทั้งหมด ${thd(PR.reduce((m, p) => p.end > m ? p.end : m, PR[0].end))}` })),
         { title: "แผนแก้ไขสรุป", head: ["ข้อ", "เสีย", "ผู้รับผิดชอบ", "กำหนดเสร็จ"], chart: false, left: true, colW: [4.3, 1.5, 4.0, 2.5], fs: 15, rows: F.map(x => [x.it.code, r1(x.it.max - x.sc), apOf(x.it.code).owner, thd(apOf(x.it.code).due)]) }, ...sections],
@@ -478,21 +508,21 @@
   const aiName = () => { const [y, m] = ym(); return `ActionPlan_AI_KPI_${hosp().code}_${y + 543}-${String(m).padStart(2, "0")}`; };
   const aiRca = it => Object.fromEntries(M4.map(m => [m[0], (it.m4 && it.m4[m[0]] || []).join("\n")]));
   async function aiDeck() { const [y, m] = ym(), H = hosp(), R = aiRep, pics = await Promise.all(R.items.map(it => fishPng(fishSvg(it.code, it.title, aiRca(it)))));
-    const PR = aiPlanRows(R), ch = []; for (let i = 0; i < PR.length; i += 14) ch.push(PR.slice(i, i + 14));
+    const PR = aiPlanRows(R), ch = gChunks(PR);
     const gp = await Promise.all(ch.map(c => { const g = ganttSvg(c); return toPng(g.svg, g.w, g.h).then(img => ({ ...g, img })); }));
     return { title: `รายงาน Action plan แก้ไข KPI ${H.code}`, org: H.name, period: mName(y, m) + " · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)",
       findings: [R.summary, ...swotNote(R)], lead: await swotLead(R), kpis: [["คะแนนรวม", r1(total())], ["ข้อที่ตก", R.items.length], ["ขั้นตอนแก้ไขทั้งหมด", R.items.reduce((s, it) => s + it.actions.length, 0)]],
-      analysis: R.analysis.slice(0, 9),
+      analysis: R.analysis,
       sections: [...gp.map((g, i) => ({ title: `แผนงานและวันวางเสร็จ (Gantt)${gp.length > 1 ? ` ${i + 1}/${gp.length}` : ""}`, img: g.img, imgR: g.h / g.w, svg: g.svg, note: `ทั้งหมด ${PR.length} ขั้นตอน วางเสร็จทั้งหมด ${thd(PR.reduce((m, p) => p.end > m ? p.end : m, PR[0].end))}` })),
         ...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M ข้อ ${it.code}`, img: pics[k], svg: fishSvg(it.code, it.title, aiRca(it)), note: "สาเหตุราก: " + it.root_cause }] : []),
         { title: `5 Why และโครงการแก้ไข ข้อ ${it.code}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 14,
-          rows: [...(it.why5 || []).slice(0, 5).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", it.root_cause], ["ชื่อโครงการ", it.project.name], ["เป้าหมาย", it.project.goal], ["งบประมาณ", it.project.budget]] },
-        { title: `ข้อ ${it.code} ${it.title}`.slice(0, 70), head: ["วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล"], chart: false, left: true, colW: [5.6, 2.4, 1.7, 2.6], fs: 12,
+          rows: [...(it.why5 || []).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", it.root_cause], ["ชื่อโครงการ", it.project.name], ["เป้าหมาย", it.project.goal], ["งบประมาณ", it.project.budget]] },
+        { title: `ข้อ ${it.code} ${it.title}`, head: ["วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล"], chart: false, left: true, colW: [5.6, 2.4, 1.7, 2.6], fs: 12,
           rows: [...it.actions.map(a => [a.step, a.owner, a.due, a.measure]), ["ผลที่คาดหวัง: " + it.expected_result, "", "", ""]] }]),
         { title: "แผนเวลา", head: ["ช่วงเวลา", "กิจกรรม"], chart: false, left: true, colW: [2.8, 9.5], fs: 13, rows: R.timeline.map(x => [x.when, x.activity]) },
         ...(aiLog.length ? [{ title: "การตรวจวนของ AI 3 (แก้จนผ่าน)", head: ["รอบ", "ผลตรวจ", "สิ่งที่สั่งแก้ / สรุป"], chart: false, left: true, colW: [1.3, 1.5, 9.5], fs: 12, rows: logRows() }] : []),
         { title: "ความเสี่ยงและการทบทวน", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.8, 9.5], fs: 12, rows: [...R.risks.map((x, i) => [i ? "" : "ความเสี่ยง", x]), ...R.review_notes.map((x, i) => [i ? "" : "AI 2 ทบทวน / AI 3 แก้", x])] }],
-      notes: R.follow_up.slice(0, 9) }; }
+      notes: R.follow_up }; }
 
   // ---------- 12 hospitals, one year ----------
   let year = [];
@@ -515,11 +545,11 @@
     const Y = +$("#y").value, R = yearRows(), got = R.filter(r => r.avg != null).sort((a, b) => b.avg - a.avg), all = R.flatMap(r => r.ms.filter(v => v != null));
     const fails = R.flatMap(r => r.ms.map((v, i) => v != null && v < 90 ? `${r.h.code} ${new Date(Y, i, 1).toLocaleDateString("th-TH", { month: "short" })} (${v})` : null).filter(Boolean));
     const findings = [`ปี ${Y + 543} มีผล KPI แล้ว ${got.length} จาก ${R.length} โรง รวม ${all.length} โรง-เดือน`, all.length ? `คะแนนเฉลี่ย ${r1(all.reduce((s, v) => s + v, 0) / all.length)} จาก 100` : "ยังไม่มีคะแนนที่บันทึก",
-      fails.length ? `ไม่ผ่านเกณฑ์ 90 จำนวน ${fails.length} โรง-เดือน: ${fails.slice(0, 8).join(", ")}${fails.length > 8 ? " …" : ""}` : "ทุกโรงทุกเดือนที่บันทึกผ่านเกณฑ์ 90"];
+      fails.length ? `ไม่ผ่านเกณฑ์ 90 จำนวน ${fails.length} โรง-เดือน: ${fails.join(", ")}` : "ทุกโรงทุกเดือนที่บันทึกผ่านเกณฑ์ 90"];
     const disc6 = fails.filter(f => DISC.includes(f.split(" ")[0]));
     if (disc6.length) findings.push(`มีผลต่อส่วนลดค่าบริการ ${disc6.length} โรง-เดือน (เฉพาะ 6 โรงที่สัญญามีข้อส่วนลด)`);
     return { title: "KPI ตามสัญญา (แนบ 4) 12 โรงพยาบาล", org: "งานบริหารวิศวกรรมอาคาร", period: `ปี พ.ศ. ${Y + 543}`, findings,
-      kpis: got.slice(0, 12).map(r => [r.h.code, r.avg]),
+      kpis: got.map(r => [r.h.code, r.avg]),
       analysis: got.length ? [`คะแนนเฉลี่ยสูงสุด ${got[0].h.code} (${got[0].avg}) ต่ำสุด ${got[got.length - 1].h.code} (${got[got.length - 1].avg})`, ...R.filter(r => r.avg == null).slice(0, 1).map(() => `ยังไม่มีผล: ${R.filter(r => r.avg == null).map(r => r.h.code).join(", ")}`)] : ["ยังไม่มีคะแนนให้วิเคราะห์"],
       notes: fails.length ? ["ให้หัวหน้าแต่ละโรงระบุสาเหตุและแผนแก้ไขในช่องหมายเหตุของข้อที่เสียคะแนน"] : [],
       sections: [{ title: "คะแนนเฉลี่ยรายโรง", head: ["โรงพยาบาล", "คะแนนเฉลี่ย", "เดือนไม่ผ่าน"], rows: got.map(r => [r.h.code, r.avg, r.fail]) }] };

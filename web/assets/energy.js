@@ -351,34 +351,72 @@
   const cut = (t, n) => { if (vis(t) <= n) return t; let k = t.length; while (k > 0 && vis(t.slice(0, k)) > n - 1) k--; return t.slice(0, k) + "…"; };
   const short = t => String(t || "").replace(/\s*\(.*$/, "");
   const wrap = (t, n) => { const out = []; let rest = String(t || ""); while (rest.length > n && out.length < 2) { let k = rest.lastIndexOf(" ", n); if (k < n / 2) k = n; out.push(rest.slice(0, k).trim()); rest = rest.slice(k).trim(); } out.push(cut(rest, n)); return out; };
-  function fishSvg(head, title, r) {
-    const W = 1400, H = 600, Y = 300, x = v => esc(v);
+  // full text rule (user 2026-11-20): every line is written out in full, never cut with "…": long text wraps onto more lines and drawings grow
+  const MARK_ = /[ัิ-ฺ็-๎]/, LEAD_ = /[เ-ไ]/;
+  const SEG_ = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter("th", { granularity: "word" }) : null;
+  // Thai has no spaces between words: break lines at word boundaries (Intl.Segmenter) so no word is split
+  const wrapAll = (t, n) => { const src = String(t ?? "").replace(/\s+/g, " ").trim(); if (!SEG_) return wrapRaw(src, n);
+    const out = []; let cur = "";
+    for (const { segment: w, isWordLike } of SEG_.segment(src)) {
+      if (vis(cur + w) <= n || (!isWordLike && w.trim() && cur.trim() && vis(cur + w) <= n + 3)) { cur += w; continue; }   // closing marks like ")" stay on their line
+      if (cur.trim()) { out.push(cur.trim()); cur = ""; }
+      if (vis(w) > n) { const parts = wrapRaw(w, n); cur = parts.pop(); out.push(...parts); } else cur = w.trimStart(); }
+    if (cur.trim() || !out.length) out.push(cur.trim()); return out; };
+  const wrapRaw = (t, n) => { const out = []; let rest = t;
+    while (vis(rest) > n) { let k = 0, v = 0; while (k < rest.length && (v < n || MARK_.test(rest[k]))) { if (!MARK_.test(rest[k])) v++; k++; }
+      const b = rest.lastIndexOf(" ", k); if (b > k * 0.45) { out.push(rest.slice(0, b)); rest = rest.slice(b + 1); continue; }
+      while (k > 1 && LEAD_.test(rest[k - 1])) k--;
+      out.push(rest.slice(0, k)); rest = rest.slice(k).trimStart(); }
+    if (rest || !out.length) out.push(rest); return out; };
+  const svgWH = svg => { const m = String(svg).match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/); return m ? [+m[1], +m[2]] : [1400, 600]; };
+  const pngOf = svg => { const [w, h] = svgWH(svg); return toPng(svg, w, h); };
+  const gRowH = r => Math.max(34, 14 + wrapAll(r.step, 44).length * 20);
+  const gChunks = (P, max = 520) => { const out = []; let cur = [], h = 0; P.forEach(r => { const rh = gRowH(r); if (cur.length && h + rh > max) { out.push(cur); cur = []; h = 0; } cur.push(r); h += rh; }); if (cur.length) out.push(cur); return out; };
+  // fishbone 4M with every cause in full: bones grow longer when there is more to write
+  function fishDraw(label, title, get) {
+    const W = 1400, x = v => esc(v), FL = 20;
+    const B = M4.map(([k, lab], i) => { const items = (get(k) || []).map(t => wrapAll(t, 26)), need = items.reduce((a, l) => a + l.length * FL + 14, 0); return { lab, i, items, len: Math.max(230, need + 70) }; });
+    const TL = wrapAll(title, 17), hh = Math.max(184, 88 + TL.length * 28), up = Math.max(B[0].len, B[1].len, hh / 2 + 10), dn = Math.max(B[2].len, B[3].len, hh / 2 + 10), Y = 70 + up, H = Math.round(Y + dn + 70);
     let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>` +
       `<line x1="30" y1="${Y}" x2="1132" y2="${Y}" stroke="#1F2A37" stroke-width="6"/><polygon points="1126,${Y - 24} 1150,${Y} 1126,${Y + 24}" fill="#1F2A37"/>` +
-      `<rect x="1152" y="${Y - 92}" width="236" height="184" rx="14" fill="#FDE8E6" stroke="#B42318" stroke-width="3"/>` +
-      `<text x="1270" y="${Y - 52}" text-anchor="middle" font-size="22" font-weight="bold" fill="#9B1C13">${x(head)}</text>` +
-      wrap(short(title), 17).map((t, i) => `<text x="1270" y="${Y - 14 + i * 30}" text-anchor="middle" font-size="18" fill="#1F2A37">${x(t)}</text>`).join("");
-    M4.forEach(([k, lab], i) => { const J = i % 2 ? 1040 : 560, top = i < 2, ex = J - 220, ey = top ? 70 : 530;
+      `<rect x="1152" y="${Y - hh / 2}" width="236" height="${hh}" rx="14" fill="#FDE8E6" stroke="#B42318" stroke-width="3"/>` +
+      `<text x="1270" y="${Y - hh / 2 + 40}" text-anchor="middle" font-size="22" font-weight="bold" fill="#9B1C13">${x(label)}</text>` +
+      TL.map((t, i) => `<text x="1270" y="${Y - hh / 2 + 78 + i * 28}" text-anchor="middle" font-size="18" fill="#1F2A37">${x(t)}</text>`).join("");
+    B.forEach(b => { const J = b.i % 2 ? 1040 : 560, top = b.i < 2, ex = J - 220, ey = top ? Y - b.len : Y + b.len, bxAt = yy => top ? ex + 220 * (yy - ey) / b.len : ex + 220 * (ey - yy) / b.len;
       s += `<line x1="${ex}" y1="${ey}" x2="${J}" y2="${Y}" stroke="#0B5CAD" stroke-width="4"/>` +
-        `<rect x="${ex - 125}" y="${top ? ey - 52 : ey + 6}" width="250" height="46" rx="9" fill="#0B5CAD"/><text x="${ex}" y="${top ? ey - 21 : ey + 37}" text-anchor="middle" fill="#ffffff" font-size="19" font-weight="bold">${lab}</text>`;
-      lines(r[k]).slice(0, 4).forEach((t, j) => { const yy = top ? 112 + 44 * j : 352 + 44 * j, bx = top ? ex + 220 * (yy - 70) / 230 : ex + 220 * (530 - yy) / 230;
-        s += `<line x1="${bx - 24}" y1="${yy}" x2="${bx}" y2="${yy}" stroke="#0B5CAD" stroke-width="2"/><text x="${bx - 30}" y="${yy + 6}" text-anchor="end" font-size="16" fill="#1F2A37">${x(cut(t, 28))}</text>`; }); });
+        `<rect x="${ex - 125}" y="${top ? ey - 52 : ey + 6}" width="250" height="46" rx="9" fill="#0B5CAD"/><text x="${ex}" y="${top ? ey - 21 : ey + 37}" text-anchor="middle" fill="#ffffff" font-size="19" font-weight="bold">${b.lab}</text>`;
+      let yy = top ? ey + 42 : Y + 52;
+      b.items.forEach(L => { const bx = bxAt(yy); s += `<line x1="${Math.round(bx - 24)}" y1="${yy}" x2="${Math.round(bx)}" y2="${yy}" stroke="#0B5CAD" stroke-width="2"/>`;
+        L.forEach((t, j) => { s += `<text x="${Math.round(bxAt(yy + j * FL + (top ? 0 : 6)) - 30)}" y="${yy + 6 + j * FL}" text-anchor="end" font-size="16" fill="#1F2A37">${x(t)}</text>`; }); yy += L.length * FL + 14; }); });
     return s + "</svg>";
   }
+  // SWOT 4 boxes with every point in full: boxes grow taller when there is more to write
+  function swotSvg(sw) {
+    const W = 1400, x = v => esc(v), LH = 32;
+    const B = SW.map(([k]) => ((sw && sw[k]) || []).map(t => wrapAll(t, 44))), bh = L => Math.max(320, 98 + L.reduce((a, l) => a + l.length * LH + 14, 0));
+    const R1 = Math.max(bh(B[0]), bh(B[1])), R2 = Math.max(bh(B[2]), bh(B[3])), H = 60 + R1 + R2;
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
+    SW.forEach(([k, lab, ink, bg], i) => { const X = 20 + (i % 2) * 690, Y = i < 2 ? 20 : 40 + R1, h = i < 2 ? R1 : R2;
+      s += `<rect x="${X}" y="${Y}" width="670" height="${h}" rx="12" fill="#${bg}" stroke="#${ink}" stroke-width="3"/><text x="${X + 24}" y="${Y + 44}" font-size="26" font-weight="bold" fill="#${ink}">${lab}</text>`;
+      let yy = Y + 98; B[i].forEach(L => { L.forEach((t, j) => { s += `<text x="${X + (j ? 52 : 30)}" y="${yy}" font-size="23" fill="#1F2A37">${x((j ? "" : "• ") + t)}</text>`; yy += LH; }); yy += 14; }); });
+    return s + "</svg>";
+  }
+  function fishSvg(head, title, r) { return fishDraw(head, title, k => lines(r[k])); }
   const dAdd = (iso, n) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   const dDiff = (a, b) => Math.round((new Date(b + "T00:00:00Z") - new Date(a + "T00:00:00Z")) / 864e5);
   const dm = iso => new Date(iso + "T00:00:00").toLocaleDateString("th-TH", { day: "numeric", month: "short" });
+  const PGX = rows => Math.max(70, 32 + Math.max(...rows.map(r => vis(String(r.grp || "")))) * 10);
   function ganttSvg(rows) {
-    const W = 1400, L = 600, R = 1330, top = 58, rh = 34, H = top + rows.length * rh + 16, x = v => esc(v);
+    const W = 1400, L = 600, R = 1330, top = 58, LH = 20, GX = PGX(rows), GW = Math.max(20, Math.floor((L - 90 - GX) / 10.4)), RL = rows.map(r => wrapAll(r.step, GW)), RH = RL.map(l => Math.max(34, 14 + l.length * LH)), YS = RH.map((_, i) => top + RH.slice(0, i).reduce((a, b) => a + b, 0)), H = top + RH.reduce((a, b) => a + b, 0) + 16, x = v => esc(v);
     const d0 = rows.reduce((m, r) => r.start < m ? r.start : m, rows[0].start), d1 = rows.reduce((m, r) => r.end > m ? r.end : m, rows[0].end);
     const span = Math.max(7, dDiff(d0, d1) + 1), px = d => L + (R - L) * dDiff(d0, d) / span, t = today();
     let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>` +
       `<text x="20" y="34" font-size="17" font-weight="bold" fill="#1F2A37">ข้อ · ขั้นตอน</text><text x="${L - 10}" y="34" text-anchor="end" font-size="15" fill="#5B6776">วางเสร็จ</text>`;
     for (let k = 0; k <= span; k += 7) { const d = dAdd(d0, k), xx = px(d); s += `<line x1="${xx}" y1="${top - 8}" x2="${xx}" y2="${H - 12}" stroke="#E3E9F1"/><text x="${xx + 3}" y="34" font-size="14" fill="#5B6776">${x(dm(d))}</text>`; }
-    rows.forEach((r, i) => { const y = top + i * rh, late = r.status !== "เสร็จ" && r.end < t, col = r.status === "เสร็จ" ? "#14632F" : late ? "#B42318" : r.status === "กำลังทำ" ? "#0B5CAD" : "#7F9CC0";
+    rows.forEach((r, i) => { const y = YS[i], rh = RH[i], late = r.status !== "เสร็จ" && r.end < t, col = r.status === "เสร็จ" ? "#14632F" : late ? "#B42318" : r.status === "กำลังทำ" ? "#0B5CAD" : "#7F9CC0";
       if (i % 2) s += `<rect x="10" y="${y}" width="${W - 20}" height="${rh}" fill="#F6F8FB"/>`;
-      s += `<text x="20" y="${y + 22}" font-size="15" fill="#1F2A37"><tspan font-weight="bold">${x(r.grp)}</tspan> ${x(cut(r.step, 44))}</text><text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="14" fill="${late ? "#B42318" : "#1F2A37"}">${x(dm(r.end))}</text>` +
-        `<rect x="${px(r.start)}" y="${y + 7}" width="${Math.max(6, px(dAdd(r.end, 1)) - px(r.start))}" height="${rh - 14}" rx="5" fill="${col}"/>`; });
+      s += `<text x="20" y="${y + 22}" font-size="15" font-weight="bold" fill="#1F2A37">${x(r.grp)}</text>${RL[i].map((l, j) => `<text x="${GX}" y="${y + 22 + j * LH}" font-size="15" fill="#1F2A37">${x(l)}</text>`).join("")}<text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="14" fill="${late ? "#B42318" : "#1F2A37"}">${x(dm(r.end))}</text>` +
+        `<rect x="${px(r.start)}" y="${y + rh / 2 - 10}" width="${Math.max(6, px(dAdd(r.end, 1)) - px(r.start))}" height="20" rx="5" fill="${col}"/>`; });
     if (t >= d0 && t <= d1) s += `<line x1="${px(t)}" y1="${top - 8}" x2="${px(t)}" y2="${H - 12}" stroke="#B42318" stroke-width="2" stroke-dasharray="6 4"/><text x="${px(t) + 4}" y="${top - 12}" font-size="13" fill="#B42318">วันนี้</text>`;
     return { svg: s + "</svg>", w: W, h: H };
   }
@@ -387,15 +425,7 @@
   const swotLines = R => R && R.swot ? SW.map(([k, lab]) => `SWOT ${lab}: ${(R.swot[k] || []).join("; ") || "-"}`) : ["SWOT: รายงาน AI รอบนี้ทำก่อนมี SWOT กดปุ่ม 🤖 ใหม่เพื่อให้ AI 3 คนทำ SWOT"];
   const swotNote = R => R && R.swot ? [] : [swotLines(R)[0]];   // old reports made before SWOT: tell the user to run 🤖 again
   // SWOT is always the 4-box chart, placed right after the executive summary (screen, PPT, Word, PDF, Excel)
-  const swotLead = async (R, title = "SWOT") => R && R.swot ? [{ title, img: await toPng(swotSvg(R.swot), 1400, 700), imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : [];
-  function swotSvg(sw) {
-    const W = 1400, H = 700, x = v => esc(v);
-    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
-    SW.forEach(([k, lab, ink, bg], i) => { const X = 20 + (i % 2) * 690, Y = 20 + Math.floor(i / 2) * 340;
-      s += `<rect x="${X}" y="${Y}" width="670" height="320" rx="12" fill="#${bg}" stroke="#${ink}" stroke-width="3"/><text x="${X + 24}" y="${Y + 44}" font-size="26" font-weight="bold" fill="#${ink}">${lab}</text>`;
-      ((sw && sw[k]) || []).slice(0, 5).forEach((t, j) => { s += `<text x="${X + 30}" y="${Y + 98 + j * 48}" font-size="23" fill="#1F2A37">${x("• " + cut(t, 44))}</text>`; }); });
-    return s + "</svg>";
-  }
+  const swotLead = async (R, title = "SWOT") => R && R.swot ? [{ title, img: await pngOf(swotSvg(R.swot)), svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : [];
   const TM = [["ม.ค.", "มกราคม"], ["ก.พ.", "กุมภาพันธ์"], ["มี.ค.", "มีนาคม"], ["เม.ย.", "เมษายน"], ["พ.ค.", "พฤษภาคม"], ["มิ.ย.", "มิถุนายน"], ["ก.ค.", "กรกฎาคม"], ["ส.ค.", "สิงหาคม"], ["ก.ย.", "กันยายน"], ["ต.ค.", "ตุลาคม"], ["พ.ย.", "พฤศจิกายน"], ["ธ.ค.", "ธันวาคม"]];
   function parseDue(v) {   // "15 ธ.ค. 2569", "15 ธันวาคม 69", "2026-12-15", "15/12/2569" -> ISO (CE); null when no date
     const t = String(v || "").trim(), pad = n => String(n).padStart(2, "0"); let m, d, mo, y;
@@ -514,7 +544,7 @@
   let swImg = null;
   function drawAi() {
     const A = wData.ai, box = $("#aiBox"); if (!A || !A.report) { box.hidden = true; box.innerHTML = ""; return; }
-    if (A.report.swot) toPng(swotSvg(A.report.swot), 1400, 700).then(x => { swImg = x; });
+    if (A.report.swot) pngOf(swotSvg(A.report.swot)).then(x => { swImg = x; });
     const R = A.report, li = a => `<ul>${(a || []).map(x => `<li>${esc(x)}</li>`).join("") || "<li>-</li>"}</ul>`, tb = (h, rows) => `<div class="tw"><table><tr>${h.map(x => `<th>${esc(x)}</th>`).join("")}</tr>${rows.map(r => `<tr>${r.map(x => `<td>${esc(x)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${h.length}">-</td></tr>`}</table></div>`;
     box.hidden = false;
     box.innerHTML = `<h3>รายงานโดย AI 3 คน</h3>${AI_ROLES}<p class="sub">ทำเมื่อ ${new Date(A.at).toLocaleString("th-TH")} · ${A.rounds} รอบ · AI 3 ${A.approved ? "ให้ผ่าน" : "ยังมีข้อสังเกต (ดูตารางการตรวจ)"}${A.model ? ` · ${esc(A.model)}` : ""} · ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
@@ -557,12 +587,12 @@
     { title: "การทำงานของ AI 3 คน", head: ["รอบ", "AI", "ทำอะไร", "สิ่งที่สั่งแก้ / สรุปผลตรวจ"], rows: aiLogRows(A) }]; };
   async function aiDeck() {
     const A = wData.ai, R = A.report, H = hosp(), C = wCalc || {};
-    const fsv = R.rca ? fishSvg("ปัญหา", R.rca.problem, aiRca(R)) : null, fPic = fsv ? await toPng(fsv, 1400, 600) : null;
-    const PR = aiPlanRows(R), ch = []; for (let i = 0; i < PR.length; i += 14) ch.push(PR.slice(i, i + 14));
+    const fsv = R.rca ? fishSvg("ปัญหา", R.rca.problem, aiRca(R)) : null, fPic = fsv ? await pngOf(fsv) : null;
+    const PR = aiPlanRows(R), ch = gChunks(PR);
     const gp = await Promise.all(ch.map(c => { const g = ganttSvg(c); return toPng(g.svg, g.w, g.h).then(img => ({ ...g, img })); }));
     return { title: `รายงานพลังงานโดย AI 3 คน · ${H.code}`, org: H.name, period: `ประชุมวันเสาร์ที่ ${dTH($("#wk").value)} · ${C.month || ""}`,
       findings: [R.summary, ...swotNote(R), ...R.analysis.slice(0, 3)], lead: await swotLead(R), kpis: [["kWh เดือนนี้", nf(C.mtd)], ["เฉลี่ย kWh/วัน", nf(C.avg)], ["เป้าหมาย kWh/วัน", nf(C.tDay)], ["ปีก่อน kWh/วัน", nf(C.bDay)], ["ข้อมูลครบ", wScore(wData, C).pct + "%"], ["รอบที่ AI ตรวจ", String(A.rounds)]],
-      analysis: R.analysis.slice(0, 9),
+      analysis: R.analysis,
       sections: [...(fsv ? [{ title: "RCA ก้างปลา 4M", img: fPic, svg: fsv, note: "สาเหตุราก: " + R.rca.root_cause }] : []),
         ...gp.map((g, i) => ({ title: `แผนงานและวันวางเสร็จ (Gantt)${gp.length > 1 ? ` ${i + 1}/${gp.length}` : ""}`, img: g.img, imgR: g.h / g.w, svg: g.svg, note: `ทั้งหมด ${PR.length} มาตรการ วางเสร็จทั้งหมด ${thd(PR.reduce((m, p) => p.end > m ? p.end : m, PR[0].end))}` })),
         ...aiSections(A), { title: "สิ่งที่ AI 2 และ AI 3 ทักและแก้แล้ว", head: ["ทบทวนแล้ว"], rows: R.review_notes.map(x => [x]) }],

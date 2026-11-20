@@ -262,7 +262,7 @@
     n += setIf("sum", 2, 3, BL.rows.length) + setIf("sum", 3, 3, over);
     const B = tbl("bap"), empty = B.every(r => r.every(v => !String(v).trim()));
     if (empty) { const top = [...BL.rows].sort((x, y) => (+y.age || 0) - (+x.age || 0)).slice(0, 10);
-      D.t.bap = top.map(r => [`${r.no} ${String(r.detail || "").slice(0, 60)}`, String(r.age || ""), [r.status, r.reason].filter(Boolean).join(" · "), "", "", "", ""]); n += top.length; }
+      D.t.bap = top.map(r => [`${r.no} ${String(r.detail || "")}`, String(r.age || ""), [r.status, r.reason].filter(Boolean).join(" · "), "", "", "", ""]); n += top.length; }
     return n;
   }
   const HDR = { no: /เลขใบงาน|เลขที่ใบงาน|ticket|job/i, date: /วันที่แจ้ง|วันที่/i, type: /ประเภท|หมวด/i, loc: /สถานที่/i, detail: /รายละเอียด|อาการ/i, owner: /ผู้รับผิดชอบ|ช่าง/i, status: /สถานะ/i, reason: /เหตุผล|สาเหตุ/i, age: /อายุ/i, stale: /ไม่อัปเดต/i };
@@ -335,7 +335,7 @@
     return { title: `รายงานงานค้าง (Backlog) ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${thd(meet())} · ที่มา: ${BL.file || "งานค้างในระบบ RS"}`,
       findings, lead: await swotLead(A, "SWOT ของงานค้างรอบนี้ (AI 3 คน)"), kpis: [["งานค้างทั้งหมด", n], ["ค้างเกิน 60 วัน", over], ["อายุเฉลี่ย (วัน)", nf(avg, 1)], ["เก่าสุด (วัน)", old]], analysis,
       sections: [{ title: "งานค้างตามอายุและกลุ่ม", head: ["ช่วงอายุ", ...GRP.map(g => g[1]), "รวม"], chart: false, rows: [...AGE.map((a, i) => [a[0], ...GRP.map(g => M[i][g[0]]), GRP.reduce((s, g) => s + M[i][g[0]], 0)]), ["รวม", ...GRP.map(g => M.reduce((s, r) => s + r[g[0]], 0)), n]] },
-        { title: "เหตุผลที่ค้าง", head: ["เหตุผล / สถานะค้าง", "ใบ", "%"], rows: RS.slice(0, 12).map(([k, v]) => [k, v, pc(v)]) },
+        { title: "เหตุผลที่ค้าง", head: ["เหตุผล / สถานะค้าง", "ใบ", "%"], rows: RS.map(([k, v]) => [k, v, pc(v)]) },
         { title: "งานค้างนานที่สุด 12 ใบ", head: ["เลขใบงาน", "อายุ (วัน)", "ประเภท", "รายละเอียด", "เหตุผล"], chart: false, left: true, colW: [1.8, 1.1, 1.6, 5.3, 2.5], fs: 11, rows: top.map(r => [r.no, r.age ?? "", r.type || "", String(r.detail || "").slice(0, 70), r.reason || r.status || ""]) }, ...extra, ...more],
       notes: ["เคลียร์งานเกิน 60 วันก่อน แล้วไล่ตามอายุ", "งานรออะไหล่ / ผู้รับเหมา / พื้นที่ ต้องมี PR หรือ Memo ภายใน 24 ชม. และวันวางเสร็จทุกใบ", ...(A ? A.follow_up.slice(0, 5).map(x => "ติดตามผล: " + x) : ["ให้ AI 3 คนทำวิธีแก้และแผน (RCA) ได้ที่ปุ่ม 🤖 ด้านล่าง แล้วดาวน์โหลดรายงานนี้ใหม่"])] };
   }
@@ -355,7 +355,7 @@
     const bRun = fn => () => { if (!AI.report) toast("ยังไม่มีวิธีแก้จาก AI 3 คน รายงานนี้จะมีแค่ข้อมูลงานค้างและแผนรายสัปดาห์ กด 🤖 ด้านล่างก่อนเพื่อให้มีวิธีแก้ครบ", true); blDeck().then(fn).catch(e => toast(errText(e), true)); };
     $("#bP").onclick = bRun(d => Office.pptx(fname("Backlog"), d)); $("#bW").onclick = bRun(d => Office.docx(fname("Backlog"), d)); $("#bF").onclick = bRun(d => Office.pdf(fname("Backlog"), d));
     $("#bX").onclick = bRun(d => Office.xlsx(fname("Backlog"), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: [...d.findings, ...d.analysis], notes: d.notes, figures: d.kpis }),
-      ...d.sections.filter(x => x.rows && !x.svg).slice(0, 4 + (AI.report ? 1 : 0)).map(x => ({ name: x.title.slice(0, 31), rows: [x.head, ...x.rows], header: 0 })),
+      ...d.sections.filter(x => x.rows && !x.svg).map(x => ({ name: x.title.slice(0, 31), rows: [x.head, ...x.rows], header: 0 })),
       ...(AI.report ? aiSheets() : []), ...Office.drawSheets(d),
       { name: "รายการงานค้างทั้งหมด", rows: [["เลขใบงาน", "อายุ (วัน)", "กลุ่ม", "ประเภท", "สถานที่", "รายละเอียด", "สถานะค้าง", "เหตุผล", "ผู้รับผิดชอบ"],
         ...[...R].sort((a, b) => (+b.age || 0) - (+a.age || 0)).map(r => [r.no, r.age ?? "", GRP.find(g => g[0] === grpOf(r))[1], r.type || "", r.loc || "", r.detail || "", r.status || "", r.reason || "", r.owner || ""])], header: 0 }]));
@@ -446,35 +446,64 @@
   const vis = t => t.replace(/[ัิ-ฺ็-๎]/g, "").length;
   const cut = (t, n) => { t = String(t || ""); if (vis(t) <= n) return t; let k = t.length; while (k > 0 && vis(t.slice(0, k)) > n - 1) k--; return t.slice(0, k) + "…"; };
   const wrap = (t, n) => { const out = []; let rest = String(t || ""); while (rest.length > n && out.length < 2) { let k = rest.lastIndexOf(" ", n); if (k < n / 2) k = n; out.push(rest.slice(0, k).trim()); rest = rest.slice(k).trim(); } out.push(cut(rest, n)); return out; };
-  function fishSvg(c, title, m4) {
-    const W = 1400, H = 600, Y = 300, x = v => esc(v);
+  // full text rule (user 2026-11-20): every line is written out in full, never cut with "…": long text wraps onto more lines and drawings grow
+  const MARK_ = /[ัิ-ฺ็-๎]/, LEAD_ = /[เ-ไ]/;
+  const SEG_ = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter("th", { granularity: "word" }) : null;
+  // Thai has no spaces between words: break lines at word boundaries (Intl.Segmenter) so no word is split
+  const wrapAll = (t, n) => { const src = String(t ?? "").replace(/\s+/g, " ").trim(); if (!SEG_) return wrapRaw(src, n);
+    const out = []; let cur = "";
+    for (const { segment: w, isWordLike } of SEG_.segment(src)) {
+      if (vis(cur + w) <= n || (!isWordLike && w.trim() && cur.trim() && vis(cur + w) <= n + 3)) { cur += w; continue; }   // closing marks like ")" stay on their line
+      if (cur.trim()) { out.push(cur.trim()); cur = ""; }
+      if (vis(w) > n) { const parts = wrapRaw(w, n); cur = parts.pop(); out.push(...parts); } else cur = w.trimStart(); }
+    if (cur.trim() || !out.length) out.push(cur.trim()); return out; };
+  const wrapRaw = (t, n) => { const out = []; let rest = t;
+    while (vis(rest) > n) { let k = 0, v = 0; while (k < rest.length && (v < n || MARK_.test(rest[k]))) { if (!MARK_.test(rest[k])) v++; k++; }
+      const b = rest.lastIndexOf(" ", k); if (b > k * 0.45) { out.push(rest.slice(0, b)); rest = rest.slice(b + 1); continue; }
+      while (k > 1 && LEAD_.test(rest[k - 1])) k--;
+      out.push(rest.slice(0, k)); rest = rest.slice(k).trimStart(); }
+    if (rest || !out.length) out.push(rest); return out; };
+  const svgWH = svg => { const m = String(svg).match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/); return m ? [+m[1], +m[2]] : [1400, 600]; };
+  const pngOf = svg => { const [w, h] = svgWH(svg); return toPng(svg, w, h); };
+  const gRowH = r => Math.max(34, 14 + wrapAll(r.step, 44).length * 20);
+  const gChunks = (P, max = 520) => { const out = []; let cur = [], h = 0; P.forEach(r => { const rh = gRowH(r); if (cur.length && h + rh > max) { out.push(cur); cur = []; h = 0; } cur.push(r); h += rh; }); if (cur.length) out.push(cur); return out; };
+  // fishbone 4M with every cause in full: bones grow longer when there is more to write
+  function fishDraw(label, title, get) {
+    const W = 1400, x = v => esc(v), FL = 20;
+    const B = M4.map(([k, lab], i) => { const items = (get(k) || []).map(t => wrapAll(t, 26)), need = items.reduce((a, l) => a + l.length * FL + 14, 0); return { lab, i, items, len: Math.max(230, need + 70) }; });
+    const TL = wrapAll(title, 17), hh = Math.max(184, 88 + TL.length * 28), up = Math.max(B[0].len, B[1].len, hh / 2 + 10), dn = Math.max(B[2].len, B[3].len, hh / 2 + 10), Y = 70 + up, H = Math.round(Y + dn + 70);
     let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>` +
       `<line x1="30" y1="${Y}" x2="1132" y2="${Y}" stroke="#1F2A37" stroke-width="6"/><polygon points="1126,${Y - 24} 1150,${Y} 1126,${Y + 24}" fill="#1F2A37"/>` +
-      `<rect x="1152" y="${Y - 92}" width="236" height="184" rx="14" fill="#FDE8E6" stroke="#B42318" stroke-width="3"/>` +
-      `<text x="1270" y="${Y - 52}" text-anchor="middle" font-size="22" font-weight="bold" fill="#9B1C13">ปัญหา ${x(c)}</text>` +
-      wrap(title, 17).map((t, i) => `<text x="1270" y="${Y - 14 + i * 30}" text-anchor="middle" font-size="18" fill="#1F2A37">${x(t)}</text>`).join("");
-    M4.forEach(([k, lab], i) => { const J = i % 2 ? 1040 : 560, top = i < 2, ex = J - 220, ey = top ? 70 : 530;
+      `<rect x="1152" y="${Y - hh / 2}" width="236" height="${hh}" rx="14" fill="#FDE8E6" stroke="#B42318" stroke-width="3"/>` +
+      `<text x="1270" y="${Y - hh / 2 + 40}" text-anchor="middle" font-size="22" font-weight="bold" fill="#9B1C13">${x(label)}</text>` +
+      TL.map((t, i) => `<text x="1270" y="${Y - hh / 2 + 78 + i * 28}" text-anchor="middle" font-size="18" fill="#1F2A37">${x(t)}</text>`).join("");
+    B.forEach(b => { const J = b.i % 2 ? 1040 : 560, top = b.i < 2, ex = J - 220, ey = top ? Y - b.len : Y + b.len, bxAt = yy => top ? ex + 220 * (yy - ey) / b.len : ex + 220 * (ey - yy) / b.len;
       s += `<line x1="${ex}" y1="${ey}" x2="${J}" y2="${Y}" stroke="#0B5CAD" stroke-width="4"/>` +
-        `<rect x="${ex - 125}" y="${top ? ey - 52 : ey + 6}" width="250" height="46" rx="9" fill="#0B5CAD"/><text x="${ex}" y="${top ? ey - 21 : ey + 37}" text-anchor="middle" fill="#ffffff" font-size="19" font-weight="bold">${lab}</text>`;
-      ((m4 && m4[k]) || []).slice(0, 4).forEach((t, j) => { const yy = top ? 112 + 44 * j : 352 + 44 * j, bx = top ? ex + 220 * (yy - 70) / 230 : ex + 220 * (530 - yy) / 230;
-        s += `<line x1="${bx - 24}" y1="${yy}" x2="${bx}" y2="${yy}" stroke="#0B5CAD" stroke-width="2"/><text x="${bx - 30}" y="${yy + 6}" text-anchor="end" font-size="16" fill="#1F2A37">${x(cut(t, 28))}</text>`; }); });
+        `<rect x="${ex - 125}" y="${top ? ey - 52 : ey + 6}" width="250" height="46" rx="9" fill="#0B5CAD"/><text x="${ex}" y="${top ? ey - 21 : ey + 37}" text-anchor="middle" fill="#ffffff" font-size="19" font-weight="bold">${b.lab}</text>`;
+      let yy = top ? ey + 42 : Y + 52;
+      b.items.forEach(L => { const bx = bxAt(yy); s += `<line x1="${Math.round(bx - 24)}" y1="${yy}" x2="${Math.round(bx)}" y2="${yy}" stroke="#0B5CAD" stroke-width="2"/>`;
+        L.forEach((t, j) => { s += `<text x="${Math.round(bxAt(yy + j * FL + (top ? 0 : 6)) - 30)}" y="${yy + 6 + j * FL}" text-anchor="end" font-size="16" fill="#1F2A37">${x(t)}</text>`; }); yy += L.length * FL + 14; }); });
     return s + "</svg>";
   }
+  // SWOT 4 boxes with every point in full: boxes grow taller when there is more to write
+  function swotSvg(sw) {
+    const W = 1400, x = v => esc(v), LH = 32;
+    const B = SW.map(([k]) => ((sw && sw[k]) || []).map(t => wrapAll(t, 44))), bh = L => Math.max(320, 98 + L.reduce((a, l) => a + l.length * LH + 14, 0));
+    const R1 = Math.max(bh(B[0]), bh(B[1])), R2 = Math.max(bh(B[2]), bh(B[3])), H = 60 + R1 + R2;
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
+    SW.forEach(([k, lab, ink, bg], i) => { const X = 20 + (i % 2) * 690, Y = i < 2 ? 20 : 40 + R1, h = i < 2 ? R1 : R2;
+      s += `<rect x="${X}" y="${Y}" width="670" height="${h}" rx="12" fill="#${bg}" stroke="#${ink}" stroke-width="3"/><text x="${X + 24}" y="${Y + 44}" font-size="26" font-weight="bold" fill="#${ink}">${lab}</text>`;
+      let yy = Y + 98; B[i].forEach(L => { L.forEach((t, j) => { s += `<text x="${X + (j ? 52 : 30)}" y="${yy}" font-size="23" fill="#1F2A37">${x((j ? "" : "• ") + t)}</text>`; yy += LH; }); yy += 14; }); });
+    return s + "</svg>";
+  }
+  function fishSvg(c, title, m4) { return fishDraw(`ปัญหา ${c}`, title, k => (m4 && m4[k]) || []); }
   // SWOT 2x2: strengths / weaknesses (inside the team), opportunities / threats (outside)
   const SW = [["strengths", "S จุดแข็ง", "14632F", "E3F3E8"], ["weaknesses", "W จุดอ่อน", "B42318", "FDE8E6"], ["opportunities", "O โอกาส", "0B5CAD", "E3EEFA"], ["threats", "T อุปสรรค", "8A5A00", "FCEFD2"]];
   // SWOT always goes into the executive summary and the analysis of every AI 3-role report
   const swotLines = R => R && R.swot ? SW.map(([k, lab]) => `SWOT ${lab}: ${(R.swot[k] || []).join("; ") || "-"}`) : ["SWOT: รายงาน AI รอบนี้ทำก่อนมี SWOT กดปุ่ม 🤖 ใหม่เพื่อให้ AI 3 คนทำ SWOT"];
   const swotNote = R => R && R.swot ? [] : [swotLines(R)[0]];   // old reports made before SWOT: tell the user to run 🤖 again
   // SWOT is always the 4-box chart, placed right after the executive summary (screen, PPT, Word, PDF, Excel)
-  const swotLead = async (R, title = "SWOT") => R && R.swot ? [{ title, img: await toPng(swotSvg(R.swot), 1400, 700), imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : [];
-  function swotSvg(sw) {
-    const W = 1400, H = 700, x = v => esc(v);
-    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
-    SW.forEach(([k, lab, ink, bg], i) => { const X = 20 + (i % 2) * 690, Y = 20 + Math.floor(i / 2) * 340;
-      s += `<rect x="${X}" y="${Y}" width="670" height="320" rx="12" fill="#${bg}" stroke="#${ink}" stroke-width="3"/><text x="${X + 24}" y="${Y + 44}" font-size="26" font-weight="bold" fill="#${ink}">${lab}</text>`;
-      ((sw && sw[k]) || []).slice(0, 5).forEach((t, j) => { s += `<text x="${X + 30}" y="${Y + 98 + j * 48}" font-size="23" fill="#1F2A37">${x("• " + cut(t, 44))}</text>`; }); });
-    return s + "</svg>";
-  }
+  const swotLead = async (R, title = "SWOT") => R && R.swot ? [{ title, img: await pngOf(swotSvg(R.swot)), svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : [];
   // ---------- Gantt of the AI plan: each step runs from the previous step's due date (or today) to its own due date ----------
   const TM = [["ม.ค.", "มกราคม"], ["ก.พ.", "กุมภาพันธ์"], ["มี.ค.", "มีนาคม"], ["เม.ย.", "เมษายน"], ["พ.ค.", "พฤษภาคม"], ["มิ.ย.", "มิถุนายน"], ["ก.ค.", "กรกฎาคม"], ["ส.ค.", "สิงหาคม"], ["ก.ย.", "กันยายน"], ["ต.ค.", "ตุลาคม"], ["พ.ย.", "พฤศจิกายน"], ["ธ.ค.", "ธันวาคม"]];
   function parseDue(v) {   // "15 ธ.ค. 2569", "15 ธันวาคม 69", "2026-12-15", "15/12/2569" -> ISO (CE); null when no date
@@ -499,21 +528,22 @@
   const dDiff = (a, b) => Math.round((new Date(b + "T00:00:00Z") - new Date(a + "T00:00:00Z")) / 864e5);
   const dmS = iso => new Date(iso + "T00:00:00").toLocaleDateString("th-TH", { day: "numeric", month: "short" });
   const GCOL = ["#0B5CAD", "#14632F", "#9A5B00", "#6B3FA0", "#B42318", "#0E7C86"];
+  const PGX = () => 70;
   function ganttSvg(rows) {
-    const W = 1400, L = 640, R = 1340, top = 58, rh = 34, H = top + rows.length * rh + 16, x = v => esc(v), t = today(), codes = [...new Set(rows.map(r => r.grp))];
+    const W = 1400, L = 640, R = 1340, top = 58, LH = 20, GX = PGX(rows), GW = Math.max(20, Math.floor((L - 90 - GX) / 10.4)), RL = rows.map(r => wrapAll(r.step, GW)), RH = RL.map(l => Math.max(34, 14 + l.length * LH)), YS = RH.map((_, i) => top + RH.slice(0, i).reduce((a, b) => a + b, 0)), H = top + RH.reduce((a, b) => a + b, 0) + 16, x = v => esc(v), t = today(), codes = [...new Set(rows.map(r => r.grp))];
     const d0 = rows.reduce((m, r) => r.start < m ? r.start : m, rows[0].start), d1 = rows.reduce((m, r) => r.end > m ? r.end : m, rows[0].end);
     const span = Math.max(7, dDiff(d0, d1) + 1), px = d => L + (R - L) * dDiff(d0, d) / span;
     let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>` +
       `<text x="20" y="34" font-size="17" font-weight="bold" fill="#1F2A37">กลุ่ม · ขั้นตอน</text><text x="${L - 10}" y="34" text-anchor="end" font-size="15" fill="#5B6776">วางเสร็จ</text>`;
     for (let k = 0; k <= span; k += 7) { const d = dAdd(d0, k), xx = px(d); s += `<line x1="${xx}" y1="${top - 8}" x2="${xx}" y2="${H - 12}" stroke="#E3E9F1" stroke-width="1"/><text x="${xx + 3}" y="34" font-size="14" fill="#5B6776">${x(dmS(d))}</text>`; }
-    rows.forEach((r, i) => { const y = top + i * rh, late = r.end < t, col = late ? "#B42318" : GCOL[codes.indexOf(r.grp) % GCOL.length];
+    rows.forEach((r, i) => { const y = YS[i], rh = RH[i], late = r.end < t, col = late ? "#B42318" : GCOL[codes.indexOf(r.grp) % GCOL.length];
       if (i % 2) s += `<rect x="10" y="${y}" width="${W - 20}" height="${rh}" fill="#F6F8FB"/>`;
-      s += `<text x="20" y="${y + 22}" font-size="15" font-weight="bold" fill="${col}">${x(r.grp)}</text><text x="70" y="${y + 22}" font-size="15" fill="#1F2A37">${x(cut(r.step, 46))}</text><text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="14" fill="${late ? "#B42318" : "#1F2A37"}">${x(dmS(r.end))}</text>` +
-        `<rect x="${px(r.start)}" y="${y + 7}" width="${Math.max(6, px(dAdd(r.end, 1)) - px(r.start))}" height="${rh - 14}" rx="5" fill="${col}"/>`; });
+      s += `<text x="20" y="${y + 22}" font-size="15" font-weight="bold" fill="${col}">${x(r.grp)}</text>${RL[i].map((l, j) => `<text x="${GX}" y="${y + 22 + j * LH}" font-size="15" fill="#1F2A37">${x(l)}</text>`).join("")}<text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="14" fill="${late ? "#B42318" : "#1F2A37"}">${x(dmS(r.end))}</text>` +
+        `<rect x="${px(r.start)}" y="${y + rh / 2 - 10}" width="${Math.max(6, px(dAdd(r.end, 1)) - px(r.start))}" height="20" rx="5" fill="${col}"/>`; });
     if (t >= d0 && t <= d1) s += `<line x1="${px(t)}" y1="${top - 8}" x2="${px(t)}" y2="${H - 12}" stroke="#B42318" stroke-width="2"/><text x="${px(t) + 4}" y="${top - 12}" font-size="13" fill="#B42318">วันนี้</text>`;
     return { svg: s + "</svg>", w: W, h: H };
   }
-  const ganttChunks = R => { const P = aiPlan(R), out = []; for (let i = 0; i < P.length; i += 14) out.push(P.slice(i, i + 14)); return { P, out }; };
+  const ganttChunks = R => { const P = aiPlan(R), out = gChunks(P); return { P, out }; };
   const toPng = (svg, w, h) => new Promise(ok => { const img = new Image();
     img.onload = () => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0); try { ok(cv.toDataURL("image/png")); } catch (e) { ok(null); } };
     img.onerror = () => ok(null); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
@@ -583,7 +613,7 @@
   // ผลอ่านใบงานค้างทุกใบ (rule for the AI 3 roles): page counts + the AI's review of each ticket
   const CHK = [["total", "งานค้างทั้งหมด"], ["over_24h", "ค้างเกิน 24 ชม. (ยังไม่ปิด)"], ["waiting", "อยู่ระหว่างรอ (อะไหล่/ผู้รับเหมา/อนุมัติ/พื้นที่)"], ["waiting_no_pr_memo", "รอ แต่ไม่พบ PR/Memo ในสถานะหรือเหตุผล"], ["no_reason", "ไม่ระบุเหตุผลที่ค้าง"], ["not_updated_over_1_day", "ไม่อัปเดตเกิน 1 วัน (Sup ไม่ได้ตรวจทุกวัน)"], ["no_type", "ไม่ระบุประเภท/หมวด"]];
   const chkRows = () => { const c = blChecks(BL.rows); return CHK.map(([k, lab]) => [lab, c[k] == null ? "ไม่มีข้อมูลในไฟล์ (ต้องมีคอลัมน์ ไม่อัปเดต)" : c[k]]); };
-  const trRows = R => ((R && R.ticket_review) || []).map(x => [x.issue, (x.tickets || []).length, (x.tickets || []).slice(0, 25).join(", ") + ((x.tickets || []).length > 25 ? " …" : ""), x.fix]);
+  const trRows = R => ((R && R.ticket_review) || []).map(x => [x.issue, (x.tickets || []).length, (x.tickets || []).join(", "), x.fix]);
   const trSecs = R => [{ title: "ผลตรวจนับจากใบงานค้างทุกใบ", head: ["รายการตรวจ", "จำนวนใบ"], chart: false, left: true, colW: [9.3, 3.0], fs: 13, rows: chkRows() },
     ...(trRows(R).length ? [{ title: "AI 3 คนอ่านใบงานค้างทุกใบ: ปัญหาการทำงานและวิธีแก้", head: ["ปัญหา", "ใบ", "เลขใบงาน", "วิธีแก้"], chart: false, left: true, colW: [2.8, 0.7, 4.6, 4.2], fs: 10, rows: trRows(R) }] : [])];
   function aiSheets() { const R = AI.report, rows = [["กลุ่ม", "ปัญหา", "ใบงาน", "สาเหตุราก", "วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล", "ผลที่คาดหวัง"]];
@@ -597,12 +627,12 @@
       { name: "การตรวจวน AI 3", rows: [["รอบ", "ผลตรวจ", "สิ่งที่สั่งแก้ / สรุป"], ...logRows()], header: 0 }]; }
   async function aiSlides() { const R = AI.report; if (!R) return [];
     const GC = ganttChunks(R), gant = await Promise.all(GC.out.map(ch => { const g = ganttSvg(ch); return toPng(g.svg, g.w, g.h).then(img => ({ ...g, img })); }));
-    const pics = await Promise.all(R.items.map(it => toPng(fishSvg(it.code, it.title, it.m4), 1400, 600)));
+    const pics = await Promise.all(R.items.map(it => pngOf(fishSvg(it.code, it.title, it.m4))));
     return [{ title: "Action plan โดย AI 3 คน: บทสรุป", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 13, rows: [["บทสรุปผู้บริหาร", R.summary], ...R.analysis.slice(0, 6).map((x, i) => [i ? "" : "บทวิเคราะห์", x])] }, ...trSecs(R),
-      ...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M · ${it.code} ${it.title}`.slice(0, 80), img: pics[k], svg: fishSvg(it.code, it.title, it.m4), note: "สาเหตุราก: " + it.root_cause }] : []),
+      ...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M · ${it.code} ${it.title}`, img: pics[k], svg: fishSvg(it.code, it.title, it.m4), note: "สาเหตุราก: " + it.root_cause }] : []),
         { title: `5 Why และโครงการแก้ไข · ${it.code}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 13,
-          rows: [...(it.why5 || []).slice(0, 5).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", it.root_cause], ["โครงการ", it.project.name], ["เป้าหมาย", it.project.goal], ["งบประมาณ", it.project.budget], ...((it.tickets || []).length ? [["ใบงาน", it.tickets.join(", ")]] : [])] },
-        { title: `Action plan · ${it.code} ${it.title}`.slice(0, 80), head: ["วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล"], chart: false, left: true, colW: [5.6, 2.4, 1.7, 2.6], fs: 12,
+          rows: [...(it.why5 || []).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", it.root_cause], ["โครงการ", it.project.name], ["เป้าหมาย", it.project.goal], ["งบประมาณ", it.project.budget], ...((it.tickets || []).length ? [["ใบงาน", it.tickets.join(", ")]] : [])] },
+        { title: `Action plan · ${it.code} ${it.title}`, head: ["วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล"], chart: false, left: true, colW: [5.6, 2.4, 1.7, 2.6], fs: 12,
           rows: [...it.actions.map(a => [a.step, a.owner, a.due, a.measure]), ["ผลที่คาดหวัง: " + it.expected_result, "", "", ""]] }]),
       ...gant.map((g, i) => ({ title: `แผนงานและวันวางเสร็จ (Gantt)${gant.length > 1 ? ` ${i + 1}/${gant.length}` : ""}`, img: g.img, imgR: g.h / g.w, svg: g.svg,
         note: `ทั้งหมด ${GC.P.length} ขั้นตอน วางเสร็จทั้งหมด ${thd(GC.P.reduce((m, p) => p.end > m ? p.end : m, GC.P[0].end))} · แถบสีแดง = เลยกำหนด` })),
@@ -611,7 +641,7 @@
   async function aiDeck() { const H = hosp(), R = AI.report;
     return { title: `Action plan แก้ปัญหา (RCA 4M + 5 Why) ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${thd(meet())} · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)`,
       findings: [R.summary, ...swotNote(R)], lead: await swotLead(R, "SWOT ของงานวิศวกรรมรอบนี้"), kpis: [["งานค้างทั้งหมด", BL.rows.length], ["ค้างเกิน 60 วัน", BL.rows.filter(r => +r.age > 60).length], ["กลุ่มปัญหา", R.items.length], ["ขั้นตอนแก้ไข", R.items.reduce((s, it) => s + it.actions.length, 0)]],
-      analysis: R.analysis.slice(0, 9), sections: await aiSlides(), notes: R.follow_up.slice(0, 9) }; }
+      analysis: R.analysis, sections: await aiSlides(), notes: R.follow_up }; }
 
   // ---------- exports of the Chief report (template order) ----------
   const fname = p => `${p}_${hosp().code}_${meet().replace(/^(\d{4})/, y => +y + 543)}`;
@@ -622,8 +652,8 @@
     if (BL.rows.length) find.push(`งานค้าง ${BL.rows.length} ใบ เกิน 60 วัน ${BL.rows.filter(r => +r.age > 60).length} ใบ (จาก ${BL.file})`);
     const dec = tbl("dec").filter(r => String(r[0]).trim()).map(r => `ขอ Owner ตัดสินใจ: ${r[0]}${r[2] ? " · ข้อเสนอ: " + r[2] : ""}`);
     return { title: `Chief Engineer Bi-Weekly Performance ${H.code}`, org: H.name, period: `ประชุม ${thd(meet())} 14:00–16:00 น. · ข้อมูล ${thd(a)} – ${thd(b)} · ผู้รายงาน ${D.site.chief || "-"}${D.site.qc ? " · " + D.site.qc : ""}`,
-      findings: find.length ? find.slice(0, 8) : ["ยังไม่ได้กรอกผลรอบนี้"], kpis: [["งานค้าง (ใบ)", BL.rows.length || S[2][3] || "-"], ["ค้าง > 60 วัน", BL.rows.length ? BL.rows.filter(r => +r.age > 60).length : S[3][3] || "-"], ["CM 24 ชม.", tbl("k24")[14][4] || "-"], ["TOR", S[0][3] || S[0][2] || "-"]],
-      lead: await swotLead(AI.report, "SWOT ของงานวิศวกรรมรอบนี้ (AI 3 คน)"), analysis: dec.slice(0, 6),
+      findings: find.length ? find : ["ยังไม่ได้กรอกผลรอบนี้"], kpis: [["งานค้าง (ใบ)", BL.rows.length || S[2][3] || "-"], ["ค้าง > 60 วัน", BL.rows.length ? BL.rows.filter(r => +r.age > 60).length : S[3][3] || "-"], ["CM 24 ชม.", tbl("k24")[14][4] || "-"], ["TOR", S[0][3] || S[0][2] || "-"]],
+      lead: await swotLead(AI.report, "SWOT ของงานวิศวกรรมรอบนี้ (AI 3 คน)"), analysis: dec,
       sections: [...SEC.map(s => ({ title: s.t, head: s.cols, rows: filled(tbl(s.k)), chart: false, left: true, fs: s.days || s.k === "bap" ? 9 : 11, ...(s.k === "bap" ? { colW: [4.4, 0.9, 2.4, 1.2, 1.1, 1.1, 1.2] } : {}) })), ...(await aiSlides())],
       notes: ["รายงานนี้ต้องมีทางเลือกและข้อเสนอของ Chief ทุกปัญหา", "ตัวเลข PR / ขออนุมัติภายใน 24 ชม. นับผ่าน KPI แต่ใบงานยังอยู่ใน Backlog จนปิดจริง"] }; }
   const repRun = fn => () => repDeck().then(fn).catch(e => toast(errText(e), true));
@@ -655,7 +685,7 @@
   function allDeck() { const n = s => allRows.filter(r => r[2] === s).length, bl = allRows.reduce((s, r) => s + (+r[4] || 0), 0), o = allRows.reduce((s, r) => s + (+r[5] || 0), 0);
     return { title: "ประชุม Bi-Weekly Performance 12 โรงพยาบาล", org: "งานบริหารวิศวกรรมอาคาร", period: `ประชุม ${thd(meet())} 14:00–16:00 น.`,
       findings: [`ส่งตรงเวลา ${n("ส่งตรงเวลา")} โรง · ส่งเลยเวลา ${n("ส่งเลยเวลา")} โรง · ร่าง ${n("ร่าง ยังไม่ส่ง")} โรง · ยังไม่มีรายงาน ${n("ยังไม่มีรายงาน")} โรง`, `งานค้างรวม ${bl} ใบ เกิน 60 วัน ${o} ใบ (เฉพาะโรงที่อัปโหลด Backlog)`],
-      kpis: [["ส่งตรงเวลา", n("ส่งตรงเวลา")], ["งานค้างรวม", bl], ["เกิน 60 วัน", o]], analysis: allRows.filter(r => r[2] !== "ส่งตรงเวลา").map(r => `${r[0]} ${r[2]}`).slice(0, 9),
+      kpis: [["ส่งตรงเวลา", n("ส่งตรงเวลา")], ["งานค้างรวม", bl], ["เกิน 60 วัน", o]], analysis: allRows.filter(r => r[2] !== "ส่งตรงเวลา").map(r => `${r[0]} ${r[2]}`),
       sections: [{ title: "สถานะการส่งรายงาน 12 โรง", head: allDeck.head, rows: allRows.map(r => r.map(String)), chart: false, left: true, fs: 10 }], notes: ["Chief ส่งภายในเสาร์ 10:00 น. QC ตรวจ 10:00–12:00 น. ประชุม 14:00–16:00 น."] }; }
   const fA = () => `BiWeekly_12รพ_${+meet().slice(0, 4) + 543}${meet().slice(4)}`;
   $("#aP").onclick = () => Office.pptx(fA(), allDeck()); $("#aW").onclick = () => Office.docx(fA(), allDeck()); $("#aF").onclick = () => Office.pdf(fA(), allDeck());

@@ -141,7 +141,9 @@ window.Office = (() => {
   // deck: { title, org, period, findings: [], lead: [sections shown right after the summary], analysis: [], notes: [], kpis: [[label, value]], sections: [{ title, head, rows, chart: true|false, note }] }
   // the same deck as Word (.docx) and PDF, so every executive summary comes as Excel + PPT + Word + PDF
   let mode = null;
-  const deckParts = d => { const out = [];
+  // a drawing's own size decides its picture ratio (SWOT, fishbone and Gantt grow taller when their text is long)
+  const fixR = x => { if (x && x.svg) { const m = String(x.svg).match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/); if (m) x.imgR = +m[2] / +m[1]; } return x; };
+  const deckParts = d => { const out = []; [...(d.lead || []), ...(d.sections || [])].forEach(fixR);
     const sec = x => out.push({ h: x.title, head: x.head, rows: x.rows && x.rows.length ? x.rows : null, note: x.note, img: x.img, imgR: x.imgR, svg: x.svg }), shown = x => (x.rows && x.rows.length) || x.img || x.svg;
     if ((d.findings || []).length) out.push({ h: "บทสรุปผู้บริหาร", list: d.findings });
     (d.lead || []).filter(shown).forEach(sec);
@@ -219,7 +221,7 @@ window.Office = (() => {
       a.figures.filter(f => /สูงสุด$/.test(f[0])).slice(0, 3).forEach(f => d.analysis.push(`${tag}${f[0].replace(": สูงสุด", "")}: ค่าสูงสุด ${nf(f[1])} (เฉลี่ย ${nf((a.figures.find(x => x[0] === f[0].replace("สูงสุด", "เฉลี่ย")) || [])[1] ?? "-")})`));
       (opts.notes || []).forEach(t => d.notes.push(tag + t)); });
     if (!d.analysis.length) d.analysis.push("ข้อมูลชุดนี้ยังไม่มีกลุ่มหรือตัวเลขให้เปรียบเทียบ ดูรายละเอียดในไฟล์ Excel");
-    d.sections = d.sections.slice(0, 8); return d;
+    return d;
   }
   const addDeck = () => (TABLE_DECK[(location.pathname.split("/").pop() || "")] || []).forEach(sel => { const b = document.querySelector("button" + sel); if (!b || b.dataset.deck) return; b.dataset.deck = 1;
     [["pptx", "PPT (บทสรุป + วิเคราะห์)"], ["docx", "Word (บทสรุป + วิเคราะห์)"], ["pdf", "PDF (บทสรุป)"]].reverse().forEach(([m, label]) => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bprimary\b/, ""); c.textContent = label;
@@ -230,13 +232,18 @@ window.Office = (() => {
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addDeck); else addDeck();
   async function pptx(name, d) {
     const m = mode; mode = null;
+    [...(d.lead || []), ...(d.sections || [])].forEach(fixR);
     if (m === "docx") return docx(name, d);
     if (m === "pdf") return pdf(name, d);
     await loadPptx();
     const p = new window.PptxGenJS(); p.layout = "LAYOUT_WIDE"; const F = "Tahoma", INK = "1F2A37", ACC = "0B5CAD", MUT = "5B6776";
     const foot = (s, i) => { s.addText(`${d.org || ""} · ${d.title}`, { x: 0.5, y: 7.0, w: 10, h: 0.3, fontFace: F, fontSize: 10, color: MUT }); s.addText(String(i), { x: 12.2, y: 7.0, w: 0.7, h: 0.3, fontFace: F, fontSize: 10, color: MUT, align: "right" }); };
-    const head = (s, t) => { s.addText(t, { x: 0.5, y: 0.35, w: 12.3, h: 0.7, fontFace: F, fontSize: 26, bold: true, color: INK }); s.addShape(p.ShapeType.rect, { x: 0.5, y: 1.08, w: 1.2, h: 0.06, fill: { color: ACC }, line: { color: ACC } }); };
-    const bullets = (s, list, y, h) => s.addText(list.map(t => ({ text: t, options: { bullet: true, breakLine: true, paraSpaceAfter: 8 } })), { x: 0.6, y, w: 12.1, h, fontFace: F, fontSize: list.length > 7 ? 15 : 18, color: INK, valign: "top" });
+    const vis = t => String(t ?? "").replace(/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/g, "").length;
+    const head = (s, t) => { const v = vis(t); s.addText(t, { x: 0.5, y: 0.3, w: 12.3, h: 0.78, fontFace: F, fontSize: v > 56 ? Math.max(15, Math.floor(26 * 56 / v)) : 26, bold: true, color: INK, valign: "middle", fit: "shrink" }); s.addShape(p.ShapeType.rect, { x: 0.5, y: 1.08, w: 1.2, h: 0.06, fill: { color: ACC }, line: { color: ACC } }); };
+    const bullets = (s, list, y, h) => s.addText(list.map(t => ({ text: t, options: { bullet: true, breakLine: true, paraSpaceAfter: 8 } })), { x: 0.6, y, w: 12.1, h, fontFace: F, fontSize: 16, color: INK, valign: "top" });
+    // full text: every point is written in full; when a slide is full the list continues on the next slide (ต่อ)
+    const pages = (list, cap, cost) => { const out = []; let cur = [], u = 0; list.forEach(t => { const c = cost(t); if (cur.length && u + c > cap) { out.push(cur); cur = []; u = 0; } cur.push(t); u += c; }); if (cur.length) out.push(cur); return out; };
+    const bulletSlides = (title, list) => pages(list, 360, t => Math.max(1, Math.ceil(vis(t) / 92)) * 21 + 9).forEach((L, i) => { s = p.addSlide(); head(s, title + (i ? " (ต่อ)" : "")); bullets(s, L, 1.35, 5.5); foot(s, ++n); });
     let n = 0, s = p.addSlide(); s.background = { color: "F4F7FB" };
     s.addText(d.title, { x: 0.7, y: 2.3, w: 12, h: 1.2, fontFace: F, fontSize: 38, bold: true, color: INK });
     s.addText([d.org, d.period].filter(Boolean).join(" · "), { x: 0.7, y: 3.5, w: 12, h: 0.6, fontFace: F, fontSize: 22, color: ACC });
@@ -253,25 +260,29 @@ window.Office = (() => {
     const secSlide = sec => { s = p.addSlide(); head(s, sec.title);
       if (!(sec.rows && sec.rows.length) && sec.svg) { shapes(s, sec.svg, 0.5, 1.3, 12.3, 5.25); if (sec.note) s.addText(sec.note, { x: 0.5, y: 6.62, w: 12.3, h: 0.35, fontFace: F, fontSize: 12, color: ACC, italic: true }); foot(s, ++n); return; }
       if (!(sec.rows && sec.rows.length)) { { const r = sec.imgR || 600 / 1400, w = Math.min(12.3, 5.27 / r); s.addImage({ data: sec.img, x: 0.5, y: 1.35, w, h: w * r }); } if (sec.note) s.addText(sec.note, { x: 0.5, y: 6.62, w: 12.3, h: 0.35, fontFace: F, fontSize: 12, color: ACC, italic: true }); foot(s, ++n); return; }
-      const rows = sec.rows.slice(0, 12), withChart = sec.chart !== false && rows.length > 1 && rows.every(r => isNum(r[1]));
+      const all = sec.rows, withChart = sec.chart !== false && all.length > 1 && all.length <= 12 && all.every(r => isNum(r[1]));
       const tw = withChart ? 6.2 : 12.3, cw = sec.colW || sec.head.map((_, i) => i ? (tw * 0.5) / Math.max(1, sec.head.length - 1) : tw * 0.5);
+      // full text: every row in full; a long table continues on the next slide (ต่อ) with its header again
+      const fs0 = sec.fs || (all.length > 10 ? 11 : 13), rowH = r => Math.max(...sec.head.map((_, i) => Math.ceil(Math.max(1, vis(r[i])) / Math.max(4, cw[i] * 72 / (fs0 * 0.62))))) * fs0 * 1.3 / 72 + 0.1;
+      const parts = pages(all, sec.note ? 4.6 : 5.2, rowH);
+      parts.forEach((rows, pi) => { if (pi) { foot(s, ++n); s = p.addSlide(); head(s, sec.title + " (ต่อ)"); }
       s.addTable([sec.head.map(h => ({ text: String(h), options: { bold: true, fill: { color: "DCE9F5" }, color: INK } })), ...rows.map(r => r.map((v, i) => ({ text: String(v ?? ""), options: { align: i && !sec.left ? "right" : "left" } })))],
-        { x: 0.5, y: 1.4, w: tw, colW: cw, fontFace: F, fontSize: sec.fs || (rows.length > 10 ? 11 : 13), color: INK, border: { type: "solid", color: "D5DEE9", pt: 0.75 } });
-      if (withChart) s.addChart(p.ChartType.bar, [{ name: sec.head[1], labels: rows.map(r => String(r[0])).reverse(), values: rows.map(r => +r[1]).reverse() }],
+        { x: 0.5, y: 1.4, w: tw, colW: cw, fontFace: F, fontSize: fs0, color: INK, border: { type: "solid", color: "D5DEE9", pt: 0.75 } }); });
+      if (withChart) s.addChart(p.ChartType.bar, [{ name: sec.head[1], labels: all.map(r => String(r[0])).reverse(), values: all.map(r => +r[1]).reverse() }],
         { x: 7.0, y: 1.4, w: 5.8, h: 4.6, barDir: "bar", valAxisMinVal: 0, chartColors: [ACC], catAxisLabelFontFace: F, catAxisLabelFontSize: 11, valAxisLabelFontSize: 10, showValue: true, dataLabelFontSize: 10, showLegend: false });
       if (sec.note) s.addText(sec.note, { x: 0.5, y: 6.3, w: 12.3, h: 0.55, fontFace: F, fontSize: 14, color: ACC, italic: true });
       foot(s, ++n); };
     const shown = x => (x.rows && x.rows.length) || x.img || x.svg;
-    if ((d.findings || []).length) { s = p.addSlide(); head(s, "บทสรุปผู้บริหาร"); bullets(s, d.findings.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
+    if ((d.findings || []).length) bulletSlides("บทสรุปผู้บริหาร", d.findings);
     (d.lead || []).filter(shown).forEach(secSlide);   // lead: drawings that belong to the executive summary (SWOT 4 boxes), right after it
-    if ((d.kpis || []).length) { s = p.addSlide(); head(s, "ตัวเลขสำคัญ");
-      d.kpis.slice(0, 12).forEach(([k, v], i) => { const cx = 0.5 + (i % 4) * 3.1, cy = 1.5 + Math.floor(i / 4) * 1.8;
+    for (let q = 0; q < (d.kpis || []).length; q += 12) { s = p.addSlide(); head(s, "ตัวเลขสำคัญ" + (q ? " (ต่อ)" : ""));
+      d.kpis.slice(q, q + 12).forEach(([k, v], i) => { const cx = 0.5 + (i % 4) * 3.1, cy = 1.5 + Math.floor(i / 4) * 1.8;
         s.addShape(p.ShapeType.roundRect, { x: cx, y: cy, w: 2.9, h: 1.55, fill: { color: "F4F7FB" }, line: { color: "D5DEE9" }, rectRadius: 0.08 });
         s.addText(String(v), { x: cx + 0.15, y: cy + 0.15, w: 2.6, h: 0.75, fontFace: F, fontSize: 26, bold: true, color: ACC });
-        s.addText(String(k), { x: cx + 0.15, y: cy + 0.9, w: 2.6, h: 0.5, fontFace: F, fontSize: 12, color: MUT }); }); foot(s, ++n); }
-    if ((d.analysis || []).length) { s = p.addSlide(); head(s, "บทวิเคราะห์"); bullets(s, d.analysis.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
+        s.addText(String(k), { x: cx + 0.15, y: cy + 0.85, w: 2.6, h: 0.62, fontFace: F, fontSize: vis(k) > 40 ? 10 : 12, color: MUT, valign: "top", fit: "shrink" }); }); foot(s, ++n); }
+    if ((d.analysis || []).length) bulletSlides("บทวิเคราะห์", d.analysis);
     (d.sections || []).filter(shown).forEach(secSlide);
-    if ((d.notes || []).length) { s = p.addSlide(); head(s, "ข้อสังเกตและข้อเสนอแนะ"); bullets(s, d.notes.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
+    if ((d.notes || []).length) bulletSlides("ข้อสังเกตและข้อเสนอแนะ", d.notes);
     await p.writeFile({ fileName: name.replace(/\.pptx$/i, "") + ".pptx" });
   }
   // read an .xlsx in the browser: { sheetName: [[cell text]] }. Only what an import needs: cell values as text (cached results for formulas).
