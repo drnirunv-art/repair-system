@@ -1,5 +1,5 @@
 // ประชุม Bi-Weekly Performance (Chief Engineer Weekly Submission Template, 13 sections): the Chief of each hospital sends
-// by Saturday 10:00, QC checks 10:00-12:00, meeting with GM 14:00-16:00. Data period = the 14 days ending Friday 23:59 before the meeting.
+// by Saturday 10:00, QC checks 10:00-12:00, meeting with Owner 14:00-16:00. Data period = the 14 days ending Friday 23:59 before the meeting.
 // Saved in perf_weekly (data = sections, backlog = uploaded open-job list, ai = Action plan by AI 3 roles with RCA fishbone 4M + 5 Why).
 // "ดึงตัวเลขจากระบบ RS" fills only empty cells, from jobs, kpi_monthly, kpi_auto, qc_daily and energy_monthly.
 (() => {
@@ -34,7 +34,7 @@
       cols: ["วัน", "A ครบกำหนด", "B ปิดจริงทัน", "C ส่ง PR/ขออนุมัติทัน", "% ผ่าน", "หมายเหตุ"], days: true, calc: true },
     { k: "aging", t: "5. Backlog Aging & Root Cause Analysis", sub: "ระบบเติมจากไฟล์ Backlog ที่อัปโหลดในแท็บ Backlog · Action plan AI", cols: ["ช่วงอายุงานค้าง", ...GRP.map(g => g[1]), "รวมทั้งหมด", "ความเสี่ยงสำคัญ"],
       fixed: [...AGE.map(a => [a[0]]), ["รวมงานค้างทั้งหมด"]] },
-    { k: "bap", t: "6. Backlog Action Plan (เร่งรัดงานค้าง)", cols: ["รหัส Ticket / รายการซ่อม", "อายุ (วัน)", "สาเหตุที่ค้าง", "เลขที่ PR / วันที่ส่ง", "Owner ผู้รับเรื่อง", "กำหนดเสร็จจริง", "เรื่องขอ GM ช่วย"], n: 3 },
+    { k: "bap", t: "6. Backlog Action Plan (เร่งรัดงานค้าง)", cols: ["รหัส Ticket / รายการซ่อม", "อายุ (วัน)", "สาเหตุที่ค้าง", "เลขที่ PR / วันที่ส่ง", "Owner ผู้รับเรื่อง", "กำหนดเสร็จจริง", "เรื่องขอ Owner ช่วย"], n: 3 },
     { k: "pm", t: "7. PM ทำเอง (Preventive Maintenance)", cols: ["ระบบงานวิศวกรรม", "แผนงวดนี้", "เสร็จจริง", "% ตรงแผน", "ค้างยกมา/ปิดแล้ว", "ค้างปลายงวด"],
       fixed: [["HVAC (ปรับอากาศ)"], ["Electrical (ไฟฟ้า)"], ["Sanitary (สุขาภิบาล)"], ["Fire Protection (ระบบอัคคีภัย)"], ["Elevator/Building (ลิฟต์/อาคาร)"], ["รวมทุกระบบ PM"]] },
     { k: "ma", t: "8. MA Tracking (ติดตามสัญญาผู้รับเหมา)", cols: ["ผู้รับเหมา / ระบบ MA", "สัญญาต้องตาม", "รอบบริการต้องตาม", "% ติดตามครบ", "ทำจริงตรงเวลา", "เหตุผล / แผนแก้"], n: 2 },
@@ -43,8 +43,8 @@
     { k: "enap", t: "10. Energy Action Plan (มาตรการประหยัด)", cols: ["มาตรการประหยัดพลังงาน/น้ำ", "ระบบ", "งบลงทุน", "ผลประหยัดต่อปี", "ผู้รับผิดชอบ/วันเสร็จ", "สถานะผลจริง"], n: 2 },
     { k: "qc", t: "11. QC, Quality & Risk Management", cols: ["หัวข้อการตรวจสอบ (QC / TOR)", "เป้าหมาย TOR", "ผลรอบนี้", "ข้อบกพร่องที่พบ", "แผนแก้ไข / วันเสร็จ"],
       fixed: [["QC Coverage ตรวจงานซ่อม", "≥ 80% ต่อวัน (สัญญาข้อ 3.20)"], ["Response Time ตาม SLA", "≥ 95%"], ["Occurrence Report", "≤ 5 ครั้ง/ด."], ["ซ้อม Code และอบรม", "100% ตามแผน"], ["รายงานประจำเดือน (Meter)", "ตรงเวลาทุกรายการ"]] },
-    { k: "dec", t: "12. Decision Request (ขอ GM ตัดสินใจ)", sub: "ทุกปัญหาต้องมีทางเลือกและข้อเสนอของ Chief เสมอ", cols: ["ประเด็นปัญหาที่ขอ GM ตัดสินใจ", "ผลกระทบถ้าไม่ตัดสินใจ", "ทางเลือก / ข้อเสนอ Chief", "ผู้มีอำนาจ", "ต้องการภายใน", "มติที่ประชุม"], n: 2 },
-    { k: "next", t: "13. Next Commitment (คำมั่นรอบหน้า)", cols: ["Action ID / สิ่งที่จะสำเร็จ", "ผลเป้าหมาย", "Owner", "วันเสร็จ", "หลักฐานตรวจรับ", "เชื่อมแผน GM"], n: 3 },
+    { k: "dec", t: "12. Decision Request (ขอ Owner ตัดสินใจ)", sub: "ทุกปัญหาต้องมีทางเลือกและข้อเสนอของ Chief เสมอ", cols: ["ประเด็นปัญหาที่ขอ Owner ตัดสินใจ", "ผลกระทบถ้าไม่ตัดสินใจ", "ทางเลือก / ข้อเสนอ Chief", "ผู้มีอำนาจ", "ต้องการภายใน", "มติที่ประชุม"], n: 2 },
+    { k: "next", t: "13. Next Commitment (คำมั่นรอบหน้า)", cols: ["Action ID / สิ่งที่จะสำเร็จ", "ผลเป้าหมาย", "Owner", "วันเสร็จ", "หลักฐานตรวจรับ", "เชื่อมแผน Owner"], n: 3 },
   ];
   const dayRows = () => { const [a] = period(); return [...Array(14)].map((_, i) => { const d = dAdd(a, i); return `${DAYS[dow(d)]} ${thd(d, { day: "numeric", month: "short" })}`; }); };
   function blank(s) {
@@ -461,6 +461,45 @@
       ((sw && sw[k]) || []).slice(0, 5).forEach((t, j) => { s += `<text x="${X + 30}" y="${Y + 98 + j * 48}" font-size="23" fill="#1F2A37">${x("• " + cut(t, 44))}</text>`; }); });
     return s + "</svg>";
   }
+  // ---------- Gantt of the AI plan: each step runs from the previous step's due date (or today) to its own due date ----------
+  const TM = [["ม.ค.", "มกราคม"], ["ก.พ.", "กุมภาพันธ์"], ["มี.ค.", "มีนาคม"], ["เม.ย.", "เมษายน"], ["พ.ค.", "พฤษภาคม"], ["มิ.ย.", "มิถุนายน"], ["ก.ค.", "กรกฎาคม"], ["ส.ค.", "สิงหาคม"], ["ก.ย.", "กันยายน"], ["ต.ค.", "ตุลาคม"], ["พ.ย.", "พฤศจิกายน"], ["ธ.ค.", "ธันวาคม"]];
+  function parseDue(v) {   // "15 ธ.ค. 2569", "15 ธันวาคม 69", "2026-12-15", "15/12/2569" -> ISO (CE); null when no date
+    const t = String(v || "").trim(), pad = n => String(n).padStart(2, "0"); let m, d, mo, y;
+    if ((m = t.match(/(\d{4})-(\d{2})-(\d{2})/))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else if ((m = t.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/))) { d = +m[1]; mo = +m[2]; y = +m[3]; }
+    else { const k = TM.findIndex(([a, b]) => t.includes(b) || t.includes(a) || t.includes(a.replace(/\./g, "")));
+      if (k < 0) return null; const ix = Math.max(...TM[k].map(n => t.indexOf(n))), before = t.slice(0, ix).match(/(\d{1,2})\D*$/), after = t.slice(ix).match(/(\d{2,4})/);
+      mo = k + 1; d = before ? +before[1] : (k === 11 || k === 1 ? 28 : 30); y = after ? +after[1] : 0; if (!before) d = new Date(2026, mo, 0).getDate(); }
+    if (!y) { y = +today().slice(0, 4); if (`${y}-${pad(mo)}-${pad(d)}` < dAdd(today(), -60)) y++; }
+    if (y < 100) y += 2500; if (y > 2400) y -= 543;
+    if (!(mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return null;
+    return `${y}-${pad(mo)}-${pad(Math.min(d, new Date(y, mo, 0).getDate()))}`;
+  }
+  function aiPlan(R) {
+    const out = [], t = today();
+    (R && R.items || []).forEach(it => { let prev = t;
+      it.actions.forEach((a, i) => { const end = parseDue(a.due); if (!end) return;
+        const start = end < prev ? (end < t ? dAdd(end, -7) : t) : prev; out.push({ grp: it.code, step: `${i + 1}. ${a.step}`, owner: a.owner, start, end, due: a.due }); prev = end; }); });
+    return out;
+  }
+  const dDiff = (a, b) => Math.round((new Date(b + "T00:00:00Z") - new Date(a + "T00:00:00Z")) / 864e5);
+  const dmS = iso => new Date(iso + "T00:00:00").toLocaleDateString("th-TH", { day: "numeric", month: "short" });
+  const GCOL = ["#0B5CAD", "#14632F", "#9A5B00", "#6B3FA0", "#B42318", "#0E7C86"];
+  function ganttSvg(rows) {
+    const W = 1400, L = 640, R = 1340, top = 58, rh = 34, H = top + rows.length * rh + 16, x = v => esc(v), t = today(), codes = [...new Set(rows.map(r => r.grp))];
+    const d0 = rows.reduce((m, r) => r.start < m ? r.start : m, rows[0].start), d1 = rows.reduce((m, r) => r.end > m ? r.end : m, rows[0].end);
+    const span = Math.max(7, dDiff(d0, d1) + 1), px = d => L + (R - L) * dDiff(d0, d) / span;
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>` +
+      `<text x="20" y="34" font-size="17" font-weight="bold" fill="#1F2A37">กลุ่ม · ขั้นตอน</text><text x="${L - 10}" y="34" text-anchor="end" font-size="15" fill="#5B6776">วางเสร็จ</text>`;
+    for (let k = 0; k <= span; k += 7) { const d = dAdd(d0, k), xx = px(d); s += `<line x1="${xx}" y1="${top - 8}" x2="${xx}" y2="${H - 12}" stroke="#E3E9F1" stroke-width="1"/><text x="${xx + 3}" y="34" font-size="14" fill="#5B6776">${x(dmS(d))}</text>`; }
+    rows.forEach((r, i) => { const y = top + i * rh, late = r.end < t, col = late ? "#B42318" : GCOL[codes.indexOf(r.grp) % GCOL.length];
+      if (i % 2) s += `<rect x="10" y="${y}" width="${W - 20}" height="${rh}" fill="#F6F8FB"/>`;
+      s += `<text x="20" y="${y + 22}" font-size="15" font-weight="bold" fill="${col}">${x(r.grp)}</text><text x="70" y="${y + 22}" font-size="15" fill="#1F2A37">${x(cut(r.step, 46))}</text><text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="14" fill="${late ? "#B42318" : "#1F2A37"}">${x(dmS(r.end))}</text>` +
+        `<rect x="${px(r.start)}" y="${y + 7}" width="${Math.max(6, px(dAdd(r.end, 1)) - px(r.start))}" height="${rh - 14}" rx="5" fill="${col}"/>`; });
+    if (t >= d0 && t <= d1) s += `<line x1="${px(t)}" y1="${top - 8}" x2="${px(t)}" y2="${H - 12}" stroke="#B42318" stroke-width="2"/><text x="${px(t) + 4}" y="${top - 12}" font-size="13" fill="#B42318">วันนี้</text>`;
+    return { svg: s + "</svg>", w: W, h: H };
+  }
+  const ganttChunks = R => { const P = aiPlan(R), out = []; for (let i = 0; i < P.length; i += 14) out.push(P.slice(i, i + 14)); return { P, out }; };
   const toPng = (svg, w, h) => new Promise(ok => { const img = new Image();
     img.onload = () => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0); try { ok(cv.toDataURL("image/png")); } catch (e) { ok(null); } };
     img.onerror = () => ok(null); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
@@ -509,6 +548,7 @@
         `<p><b>โครงการแก้ไข:</b> ${esc(it.project.name)} · <b>เป้าหมาย:</b> ${esc(it.project.goal)} · <b>งบประมาณ:</b> ${esc(it.project.budget)}</p><div class="tw"><table><thead><tr><th>วิธีการ / ขั้นตอน</th><th>ผู้รับผิดชอบ</th><th>กำหนดเสร็จ</th><th>วัดผล</th></tr></thead><tbody>` +
         it.actions.map(a => `<tr><td>${esc(a.step)}</td><td>${esc(a.owner)}</td><td>${esc(a.due)}</td><td>${esc(a.measure)}</td></tr>`).join("") + `</tbody></table></div><p><b>ผลที่คาดหวัง:</b> ${esc(it.expected_result)}</p>`).join("") +
       (R.swot ? `<h3>SWOT ของงานวิศวกรรมรอบนี้</h3><div class="fish">${swotSvg(R.swot)}</div>` : "") +
+      (() => { const P = aiPlan(R); return P.length ? `<h3>แผนงานและวันวางเสร็จ (Gantt)</h3><p class="sub">${P.length} ขั้นตอน วางเสร็จทั้งหมด ${esc(thd(P.reduce((m, p) => p.end > m ? p.end : m, P[0].end)))} · แถบสีแดง = เลยกำหนดแล้ว</p><div class="fish">${ganttSvg(P).svg}</div>` : ""; })() +
       `<h3>แผนเวลา</h3><div class="tw"><table><thead><tr><th>ช่วงเวลา</th><th>กิจกรรม</th></tr></thead><tbody>${R.timeline.map(x => `<tr><td>${esc(x.when)}</td><td>${esc(x.activity)}</td></tr>`).join("")}</tbody></table></div>` +
       `<h3>ความเสี่ยงของแผน</h3><ul>${R.risks.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       `<h3>การตรวจวนของ AI 3</h3><div class="tw"><table><thead><tr><th>รอบ</th><th>ผลตรวจ</th><th>สิ่งที่สั่งแก้ / สรุป</th></tr></thead><tbody>${logRows().map(r => `<tr><td>${esc(r[0])}</td><td><b class="${r[1] === "ผ่าน" ? "ok" : "bad"}">${esc(r[1])}</b></td><td>${esc(r[2]).replace(/\n/g, "<br>")}</td></tr>`).join("")}</tbody></table></div>` +
@@ -528,9 +568,11 @@
     return [{ name: "Action plan AI", rows, header: 0 },
       { name: "RCA ก้างปลา 4M", rows: [["กลุ่ม", "ปัญหา", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก", "ชื่อโครงการ", "เป้าหมาย", "งบประมาณ"], ...R.items.map(it => [it.code, it.title, ...M4.map(m => ((it.m4 || {})[m[0]] || []).join("\n")), (it.why5 || []).join("\n"), it.root_cause, it.project.name, it.project.goal, it.project.budget])], header: 0 },
       ...(R.swot ? [{ name: "SWOT", rows: [["หัวข้อ", "รายการ"], ...SW.flatMap(([k, lab]) => (R.swot[k] || []).map((t, i) => [i ? "" : lab, t]))], header: 0 }] : []),
+      ...(aiPlan(R).length ? [{ name: "แผนงาน Gantt", rows: [["กลุ่ม", "ขั้นตอน", "ผู้รับผิดชอบ", "เริ่ม", "วางเสร็จ", "กำหนดเสร็จ (AI)", "สถานะ"], ...aiPlan(R).map(p => [p.grp, p.step, p.owner, thd(p.start), thd(p.end), p.due, p.end < today() ? "เลยกำหนด" : "ตามแผน"])], header: 0 }] : []),
       { name: "แผนเวลา", rows: [["ช่วงเวลา", "กิจกรรม"], ...R.timeline.map(x => [x.when, x.activity])], header: 0 },
       { name: "การตรวจวน AI 3", rows: [["รอบ", "ผลตรวจ", "สิ่งที่สั่งแก้ / สรุป"], ...logRows()], header: 0 }]; }
   async function aiSlides() { const R = AI.report; if (!R) return [];
+    const GC = ganttChunks(R), gant = await Promise.all(GC.out.map(ch => { const g = ganttSvg(ch); return toPng(g.svg, g.w, g.h).then(img => ({ ...g, img })); }));
     const pics = await Promise.all(R.items.map(it => toPng(fishSvg(it.code, it.title, it.m4), 1400, 600))), swPic = R.swot ? await toPng(swotSvg(R.swot), 1400, 700) : null;
     return [{ title: "Action plan โดย AI 3 คน: บทสรุป", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 13, rows: [["บทสรุปผู้บริหาร", R.summary], ...R.analysis.slice(0, 6).map((x, i) => [i ? "" : "บทวิเคราะห์", x])] },
       ...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M · ${it.code} ${it.title}`.slice(0, 80), img: pics[k], svg: fishSvg(it.code, it.title, it.m4), note: "สาเหตุราก: " + it.root_cause }] : []),
@@ -539,6 +581,8 @@
         { title: `Action plan · ${it.code} ${it.title}`.slice(0, 80), head: ["วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล"], chart: false, left: true, colW: [5.6, 2.4, 1.7, 2.6], fs: 12,
           rows: [...it.actions.map(a => [a.step, a.owner, a.due, a.measure]), ["ผลที่คาดหวัง: " + it.expected_result, "", "", ""]] }]),
       ...(R.swot ? [{ title: "SWOT ของงานวิศวกรรมรอบนี้", img: swPic, imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : []),
+      ...gant.map((g, i) => ({ title: `แผนงานและวันวางเสร็จ (Gantt)${gant.length > 1 ? ` ${i + 1}/${gant.length}` : ""}`, img: g.img, imgR: g.h / g.w, svg: g.svg,
+        note: `ทั้งหมด ${GC.P.length} ขั้นตอน วางเสร็จทั้งหมด ${thd(GC.P.reduce((m, p) => p.end > m ? p.end : m, GC.P[0].end))} · แถบสีแดง = เลยกำหนด` })),
       { title: "แผนเวลาถึงสิ้นเดือนธันวาคม", head: ["ช่วงเวลา", "กิจกรรม"], chart: false, left: true, colW: [2.8, 9.5], fs: 13, rows: R.timeline.map(x => [x.when, x.activity]) },
       { title: "การตรวจวนของ AI 3 และความเสี่ยง", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 12, rows: [...logRows().map(r => [r[0] + " " + r[1], r[2]]), ...R.risks.map((x, i) => [i ? "" : "ความเสี่ยง", x])] }]; }
   async function aiDeck() { const H = hosp(), R = AI.report;
@@ -553,7 +597,7 @@
     k24calc(); const H = hosp(), S = tbl("sum"), [a, b] = period();
     const find = S.filter(r => String(r[3]).trim()).map(r => `${r[0]}: ${r[3]} (เป้าหมาย ${r[1]})${String(r[4]).trim() ? " · " + r[4] : ""}`);
     if (BL.rows.length) find.push(`งานค้าง ${BL.rows.length} ใบ เกิน 60 วัน ${BL.rows.filter(r => +r.age > 60).length} ใบ (จาก ${BL.file})`);
-    const dec = tbl("dec").filter(r => String(r[0]).trim()).map(r => `ขอ GM ตัดสินใจ: ${r[0]}${r[2] ? " · ข้อเสนอ: " + r[2] : ""}`);
+    const dec = tbl("dec").filter(r => String(r[0]).trim()).map(r => `ขอ Owner ตัดสินใจ: ${r[0]}${r[2] ? " · ข้อเสนอ: " + r[2] : ""}`);
     return { title: `Chief Engineer Bi-Weekly Performance ${H.code}`, org: H.name, period: `ประชุม ${thd(meet())} 14:00–16:00 น. · ข้อมูล ${thd(a)} – ${thd(b)} · ผู้รายงาน ${D.site.chief || "-"}${D.site.qc ? " · " + D.site.qc : ""}`,
       findings: find.length ? find.slice(0, 8) : ["ยังไม่ได้กรอกผลรอบนี้"], kpis: [["งานค้าง (ใบ)", BL.rows.length || S[2][3] || "-"], ["ค้าง > 60 วัน", BL.rows.length ? BL.rows.filter(r => +r.age > 60).length : S[3][3] || "-"], ["CM 24 ชม.", tbl("k24")[14][4] || "-"], ["TOR", S[0][3] || S[0][2] || "-"]],
       analysis: dec.slice(0, 6),
@@ -580,7 +624,7 @@
       return [h.code, h.name, st, x && x.submitted_at ? new Date(x.submitted_at).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" }) : "-",
         bl.length || g("sum", 2, 3) || "-", bl.length ? bl.filter(v => +v.age > 60).length : g("sum", 3, 3) || "-", g("k24", 14, 4) || g("sum", 1, 3) || "-", g("sum", 0, 3) || g("tor", 8, 3) || "-", g("sum", 4, 3) || "-",
         x && x.ai && x.ai.report ? `ทำแล้ว ${x.ai.report.items.length} กลุ่มปัญหา` : "-", (t.dec || []).filter(v => String(v[0] || "").trim()).length || "-"]; });
-    const head = ["รหัส", "โรงพยาบาล", "สถานะ", "ส่งเมื่อ", "งานค้าง", "> 60 วัน", "CM 24 ชม.", "TOR", "PM ตรงแผน", "Action plan AI", "ขอ GM ตัดสินใจ"];
+    const head = ["รหัส", "โรงพยาบาล", "สถานะ", "ส่งเมื่อ", "งานค้าง", "> 60 วัน", "CM 24 ชม.", "TOR", "PM ตรงแผน", "Action plan AI", "ขอ Owner ตัดสินใจ"];
     const cls = v => v === "ส่งตรงเวลา" ? "c-ok" : v === "ส่งเลยเวลา" ? "c-bad" : v === "ร่าง ยังไม่ส่ง" ? "c-mid" : "";
     $("#aTable").innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${allRows.map(r => `<tr>${r.map((v, i) => `<td class="${i === 2 ? cls(v) : i > 3 ? "num" : ""}">${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody>`;
     allDeck.head = head;
