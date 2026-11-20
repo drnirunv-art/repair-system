@@ -138,14 +138,16 @@ window.Office = (() => {
   let lib;
   const loadPptx = () => lib || (lib = new Promise((ok, bad) => { if (window.PptxGenJS) return ok();
     const s = document.createElement("script"); s.src = "assets/vendor/pptxgen.bundle.js"; s.onload = ok; s.onerror = () => { lib = null; bad(new Error("โหลดตัวสร้าง PowerPoint ไม่สำเร็จ ลองใหม่อีกครั้ง")); }; document.head.appendChild(s); }));
-  // deck: { title, org, period, findings: [], analysis: [], notes: [], kpis: [[label, value]], sections: [{ title, head, rows, chart: true|false, note }] }
+  // deck: { title, org, period, findings: [], lead: [sections shown right after the summary], analysis: [], notes: [], kpis: [[label, value]], sections: [{ title, head, rows, chart: true|false, note }] }
   // the same deck as Word (.docx) and PDF, so every executive summary comes as Excel + PPT + Word + PDF
   let mode = null;
   const deckParts = d => { const out = [];
+    const sec = x => out.push({ h: x.title, head: x.head, rows: x.rows && x.rows.length ? x.rows : null, note: x.note, img: x.img, imgR: x.imgR, svg: x.svg }), shown = x => (x.rows && x.rows.length) || x.img || x.svg;
     if ((d.findings || []).length) out.push({ h: "บทสรุปผู้บริหาร", list: d.findings });
+    (d.lead || []).filter(shown).forEach(sec);
     if ((d.kpis || []).length) out.push({ h: "ตัวเลขสำคัญ", head: ["ตัวชี้วัด", "ค่า"], rows: d.kpis });
     if ((d.analysis || []).length) out.push({ h: "บทวิเคราะห์", list: d.analysis });
-    (d.sections || []).filter(x => (x.rows && x.rows.length) || x.img || x.svg).forEach(x => out.push({ h: x.title, head: x.head, rows: x.rows && x.rows.length ? x.rows : null, note: x.note, img: x.img, imgR: x.imgR, svg: x.svg }));
+    (d.sections || []).filter(shown).forEach(sec);
     if ((d.notes || []).length) out.push({ h: "ข้อสังเกตและข้อเสนอแนะ", list: d.notes });
     return out; };
   function docx(name, d) {
@@ -239,13 +241,6 @@ window.Office = (() => {
     s.addText(d.title, { x: 0.7, y: 2.3, w: 12, h: 1.2, fontFace: F, fontSize: 38, bold: true, color: INK });
     s.addText([d.org, d.period].filter(Boolean).join(" · "), { x: 0.7, y: 3.5, w: 12, h: 0.6, fontFace: F, fontSize: 22, color: ACC });
     s.addText("ออกรายงานเมื่อ " + now(), { x: 0.7, y: 4.2, w: 12, h: 0.4, fontFace: F, fontSize: 14, color: MUT });
-    if ((d.findings || []).length) { s = p.addSlide(); head(s, "บทสรุปผู้บริหาร"); bullets(s, d.findings.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
-    if ((d.kpis || []).length) { s = p.addSlide(); head(s, "ตัวเลขสำคัญ");
-      d.kpis.slice(0, 12).forEach(([k, v], i) => { const cx = 0.5 + (i % 4) * 3.1, cy = 1.5 + Math.floor(i / 4) * 1.8;
-        s.addShape(p.ShapeType.roundRect, { x: cx, y: cy, w: 2.9, h: 1.55, fill: { color: "F4F7FB" }, line: { color: "D5DEE9" }, rectRadius: 0.08 });
-        s.addText(String(v), { x: cx + 0.15, y: cy + 0.15, w: 2.6, h: 0.75, fontFace: F, fontSize: 26, bold: true, color: ACC });
-        s.addText(String(k), { x: cx + 0.15, y: cy + 0.9, w: 2.6, h: 0.5, fontFace: F, fontSize: 12, color: MUT }); }); foot(s, ++n); }
-    if ((d.analysis || []).length) { s = p.addSlide(); head(s, "บทวิเคราะห์"); bullets(s, d.analysis.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
     // drawing as native PowerPoint shapes: every line and text box can be moved and edited
     const shapes = (s, svg, X, Y, Wd, Hm) => { const G = svgShapes(svg), k = Math.min(Wd / G.W, Hm / G.H), pt = u => u * k * 72; X += (Wd - G.W * k) / 2;
       G.items.forEach(it => {
@@ -255,7 +250,7 @@ window.Office = (() => {
           fill: it.fill ? { color: it.fill } : { type: "none" }, line: it.stroke && it.sw ? { color: it.stroke, width: pt(it.sw) } : { type: "none" } });
         else if (it.t === "tri") s.addShape(p.ShapeType.triangle, { x: X + (it.x + it.w / 2 - it.h / 2) * k, y: Y + (it.y + it.h / 2 - it.w / 2) * k, w: it.h * k, h: it.w * k, rotate: 90, fill: { color: it.fill }, line: { type: "none" } });
         else if (it.t === "text") s.addText(it.text, { x: X + it.x * k, y: Y + it.y * k, w: it.w * k, h: it.h * k, fontFace: F, fontSize: Math.round(pt(it.fs) * 10) / 10, bold: it.bold, color: it.color, align: it.al, valign: "middle", margin: 0, wrap: false }); }); };
-    (d.sections || []).filter(x => (x.rows && x.rows.length) || x.img || x.svg).forEach(sec => { s = p.addSlide(); head(s, sec.title);
+    const secSlide = sec => { s = p.addSlide(); head(s, sec.title);
       if (!(sec.rows && sec.rows.length) && sec.svg) { shapes(s, sec.svg, 0.5, 1.3, 12.3, 5.25); if (sec.note) s.addText(sec.note, { x: 0.5, y: 6.62, w: 12.3, h: 0.35, fontFace: F, fontSize: 12, color: ACC, italic: true }); foot(s, ++n); return; }
       if (!(sec.rows && sec.rows.length)) { { const r = sec.imgR || 600 / 1400, w = Math.min(12.3, 5.27 / r); s.addImage({ data: sec.img, x: 0.5, y: 1.35, w, h: w * r }); } if (sec.note) s.addText(sec.note, { x: 0.5, y: 6.62, w: 12.3, h: 0.35, fontFace: F, fontSize: 12, color: ACC, italic: true }); foot(s, ++n); return; }
       const rows = sec.rows.slice(0, 12), withChart = sec.chart !== false && rows.length > 1 && rows.every(r => isNum(r[1]));
@@ -265,7 +260,17 @@ window.Office = (() => {
       if (withChart) s.addChart(p.ChartType.bar, [{ name: sec.head[1], labels: rows.map(r => String(r[0])).reverse(), values: rows.map(r => +r[1]).reverse() }],
         { x: 7.0, y: 1.4, w: 5.8, h: 4.6, barDir: "bar", valAxisMinVal: 0, chartColors: [ACC], catAxisLabelFontFace: F, catAxisLabelFontSize: 11, valAxisLabelFontSize: 10, showValue: true, dataLabelFontSize: 10, showLegend: false });
       if (sec.note) s.addText(sec.note, { x: 0.5, y: 6.3, w: 12.3, h: 0.55, fontFace: F, fontSize: 14, color: ACC, italic: true });
-      foot(s, ++n); });
+      foot(s, ++n); };
+    const shown = x => (x.rows && x.rows.length) || x.img || x.svg;
+    if ((d.findings || []).length) { s = p.addSlide(); head(s, "บทสรุปผู้บริหาร"); bullets(s, d.findings.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
+    (d.lead || []).filter(shown).forEach(secSlide);   // lead: drawings that belong to the executive summary (SWOT 4 boxes), right after it
+    if ((d.kpis || []).length) { s = p.addSlide(); head(s, "ตัวเลขสำคัญ");
+      d.kpis.slice(0, 12).forEach(([k, v], i) => { const cx = 0.5 + (i % 4) * 3.1, cy = 1.5 + Math.floor(i / 4) * 1.8;
+        s.addShape(p.ShapeType.roundRect, { x: cx, y: cy, w: 2.9, h: 1.55, fill: { color: "F4F7FB" }, line: { color: "D5DEE9" }, rectRadius: 0.08 });
+        s.addText(String(v), { x: cx + 0.15, y: cy + 0.15, w: 2.6, h: 0.75, fontFace: F, fontSize: 26, bold: true, color: ACC });
+        s.addText(String(k), { x: cx + 0.15, y: cy + 0.9, w: 2.6, h: 0.5, fontFace: F, fontSize: 12, color: MUT }); }); foot(s, ++n); }
+    if ((d.analysis || []).length) { s = p.addSlide(); head(s, "บทวิเคราะห์"); bullets(s, d.analysis.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
+    (d.sections || []).filter(shown).forEach(secSlide);
     if ((d.notes || []).length) { s = p.addSlide(); head(s, "ข้อสังเกตและข้อเสนอแนะ"); bullets(s, d.notes.slice(0, 9), 1.4, 5.4); foot(s, ++n); }
     await p.writeFile({ fileName: name.replace(/\.pptx$/i, "") + ".pptx" });
   }
@@ -303,6 +308,6 @@ window.Office = (() => {
     return out;
   }
   // Excel sheets for the drawings of a deck (fishbone, SWOT): one sheet each, editable shapes under a title row
-  const drawSheets = d => (d.sections || []).filter(x => x.svg).map(x => ({ name: x.title.replace(/^RCA ก้างปลา 4M\s*[·:]?\s*/, "ก้างปลา "), rows: [[x.title], ...(x.note ? [[x.note]] : [])], styles: { 0: 2 }, svg: x.svg }));
+  const drawSheets = d => [...(d.lead || []), ...(d.sections || [])].filter(x => x.svg).map(x => ({ name: x.title.replace(/^RCA ก้างปลา 4M\s*[·:]?\s*/, "ก้างปลา "), rows: [[x.title], ...(x.note ? [[x.note]] : [])], styles: { 0: 2 }, svg: x.svg }));
   return { xlsx, table, analyze, summarySheet, pptx, docx, pdf, zip, xlsxParts, readXlsx, svgShapes, drawSheets };
 })();

@@ -326,14 +326,14 @@
       ...(mid ? [`งานอายุ 30–60 วัน ${mid} ใบ จะกลายเป็นงานเกิน 60 วันภายใน 1 เดือนถ้าไม่เร่งปิด`] : [])];
     const top = [...R].sort((a, b) => (+b.age || 0) - (+a.age || 0)).slice(0, 12);
     const A = AI.report, last = it => it.actions.map(a => a.due).filter(Boolean).slice(-1)[0] || "-";
-    if (A) { findings.push("วิธีแก้โดย AI 3 คน: " + A.summary, swotOne(A)); analysis.splice(5); analysis.push(...swotLines(A)); }
+    if (A) { findings.push("วิธีแก้โดย AI 3 คน: " + A.summary, ...swotNote(A)); }
     else findings.push("ยังไม่มีวิธีแก้และแผนจาก AI 3 คน: กดปุ่ม 🤖 ด้านล่างก่อน แล้วดาวน์โหลดรายงานนี้ใหม่");
     const extra = [{ title: "แผนทำให้เสร็จ: เป้าหมายงานค้างคงเหลือรายสัปดาห์ถึง 31 ธ.ค.", head: ["สัปดาห์", "งานค้างคงเหลือไม่เกิน (ใบ)", "งานเกิน 60 วันคงเหลือ (ใบ)", "จุดเน้น"], chart: false, left: true, colW: [4.2, 2.6, 2.6, 2.9], fs: 12, rows: blBurn() },
       ...(A ? [{ title: "วิธีแก้ไขและกำหนดเสร็จ (AI 3 คน)", head: ["กลุ่ม", "ปัญหา / สาเหตุราก", "วิธีแก้ไข", "ผู้รับผิดชอบ", "เสร็จภายใน"], chart: false, left: true, colW: [0.9, 3.4, 5.2, 1.6, 1.2], fs: 10,
         rows: A.items.map(it => [it.code, `${it.title}\nสาเหตุราก: ${it.root_cause}`, it.actions.map((a, i) => `${i + 1}. ${a.step}`).join("\n"), [...new Set(it.actions.map(a => a.owner))].join(", "), last(it)]) }] : [])];
     const more = A ? (await aiSlides()).slice(1) : [];
     return { title: `รายงานงานค้าง (Backlog) ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${thd(meet())} · ที่มา: ${BL.file || "งานค้างในระบบ RS"}`,
-      findings, kpis: [["งานค้างทั้งหมด", n], ["ค้างเกิน 60 วัน", over], ["อายุเฉลี่ย (วัน)", nf(avg, 1)], ["เก่าสุด (วัน)", old]], analysis,
+      findings, lead: await swotLead(A, "SWOT ของงานค้างรอบนี้ (AI 3 คน)"), kpis: [["งานค้างทั้งหมด", n], ["ค้างเกิน 60 วัน", over], ["อายุเฉลี่ย (วัน)", nf(avg, 1)], ["เก่าสุด (วัน)", old]], analysis,
       sections: [{ title: "งานค้างตามอายุและกลุ่ม", head: ["ช่วงอายุ", ...GRP.map(g => g[1]), "รวม"], chart: false, rows: [...AGE.map((a, i) => [a[0], ...GRP.map(g => M[i][g[0]]), GRP.reduce((s, g) => s + M[i][g[0]], 0)]), ["รวม", ...GRP.map(g => M.reduce((s, r) => s + r[g[0]], 0)), n]] },
         { title: "เหตุผลที่ค้าง", head: ["เหตุผล / สถานะค้าง", "ใบ", "%"], rows: RS.slice(0, 12).map(([k, v]) => [k, v, pc(v)]) },
         { title: "งานค้างนานที่สุด 12 ใบ", head: ["เลขใบงาน", "อายุ (วัน)", "ประเภท", "รายละเอียด", "เหตุผล"], chart: false, left: true, colW: [1.8, 1.1, 1.6, 5.3, 2.5], fs: 11, rows: top.map(r => [r.no, r.age ?? "", r.type || "", String(r.detail || "").slice(0, 70), r.reason || r.status || ""]) }, ...extra, ...more],
@@ -456,7 +456,9 @@
   const SW = [["strengths", "S จุดแข็ง", "14632F", "E3F3E8"], ["weaknesses", "W จุดอ่อน", "B42318", "FDE8E6"], ["opportunities", "O โอกาส", "0B5CAD", "E3EEFA"], ["threats", "T อุปสรรค", "8A5A00", "FCEFD2"]];
   // SWOT always goes into the executive summary and the analysis of every AI 3-role report
   const swotLines = R => R && R.swot ? SW.map(([k, lab]) => `SWOT ${lab}: ${(R.swot[k] || []).join("; ") || "-"}`) : ["SWOT: รายงาน AI รอบนี้ทำก่อนมี SWOT กดปุ่ม 🤖 ใหม่เพื่อให้ AI 3 คนทำ SWOT"];
-  const swotOne = R => R && R.swot ? `SWOT: จุดแข็ง ${(R.swot.strengths || [])[0] || "-"} · จุดอ่อน ${(R.swot.weaknesses || [])[0] || "-"} · โอกาส ${(R.swot.opportunities || [])[0] || "-"} · อุปสรรค ${(R.swot.threats || [])[0] || "-"}` : swotLines(R)[0];
+  const swotNote = R => R && R.swot ? [] : [swotLines(R)[0]];   // old reports made before SWOT: tell the user to run 🤖 again
+  // SWOT is always the 4-box chart, placed right after the executive summary (screen, PPT, Word, PDF, Excel)
+  const swotLead = async (R, title = "SWOT") => R && R.swot ? [{ title, img: await toPng(swotSvg(R.swot), 1400, 700), imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : [];
   function swotSvg(sw) {
     const W = 1400, H = 700, x = v => esc(v);
     let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
@@ -546,8 +548,9 @@
     const box = $("#aiBox"), R = AI.report; if (!R) { box.hidden = true; return; }
     box.hidden = false;
     box.innerHTML = `<h3>Action plan โดย AI 3 คน</h3>${ROLES}<p class="sub">ทำเมื่อ ${new Date(AI.at).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" })} · AI 3 ตรวจวน ${(AI.log || []).length} รอบ · ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
-      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p><h3>บทวิเคราะห์</h3><ul>${R.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
+      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p>` +
       (R.swot ? `<h3>SWOT ของงานวิศวกรรมรอบนี้</h3><div class="fish">${swotSvg(R.swot)}</div>` : `<p class="note">${esc(swotLines(R)[0])}</p>`) +
+      `<h3>บทวิเคราะห์</h3><ul>${R.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       R.items.map(it => `<h3>${esc(it.code)} ${esc(it.title)}</h3>${(it.tickets || []).length ? `<p class="sub">ใบงาน: ${esc(it.tickets.join(", "))}</p>` : ""}<div class="fish">${fishSvg(it.code, it.title, it.m4)}</div>` +
         `<p><b>5 Why:</b></p><ol>${(it.why5 || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><p><b>สาเหตุราก:</b> ${esc(it.root_cause)}</p>` +
         `<p><b>โครงการแก้ไข:</b> ${esc(it.project.name)} · <b>เป้าหมาย:</b> ${esc(it.project.goal)} · <b>งบประมาณ:</b> ${esc(it.project.budget)}</p><div class="tw"><table><thead><tr><th>วิธีการ / ขั้นตอน</th><th>ผู้รับผิดชอบ</th><th>กำหนดเสร็จ</th><th>วัดผล</th></tr></thead><tbody>` +
@@ -577,9 +580,8 @@
       { name: "การตรวจวน AI 3", rows: [["รอบ", "ผลตรวจ", "สิ่งที่สั่งแก้ / สรุป"], ...logRows()], header: 0 }]; }
   async function aiSlides() { const R = AI.report; if (!R) return [];
     const GC = ganttChunks(R), gant = await Promise.all(GC.out.map(ch => { const g = ganttSvg(ch); return toPng(g.svg, g.w, g.h).then(img => ({ ...g, img })); }));
-    const pics = await Promise.all(R.items.map(it => toPng(fishSvg(it.code, it.title, it.m4), 1400, 600))), swPic = R.swot ? await toPng(swotSvg(R.swot), 1400, 700) : null;
-    return [{ title: "Action plan โดย AI 3 คน: บทสรุป", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 13, rows: [["บทสรุปผู้บริหาร", R.summary], ...R.analysis.slice(0, 6).map((x, i) => [i ? "" : "บทวิเคราะห์", x]), ...swotLines(R).map((x, i) => [i ? "" : "SWOT", x.replace(/^SWOT /, "")])] },
-      ...(R.swot ? [{ title: "SWOT ของงานวิศวกรรมรอบนี้", img: swPic, imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : []),
+    const pics = await Promise.all(R.items.map(it => toPng(fishSvg(it.code, it.title, it.m4), 1400, 600)));
+    return [{ title: "Action plan โดย AI 3 คน: บทสรุป", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 13, rows: [["บทสรุปผู้บริหาร", R.summary], ...R.analysis.slice(0, 6).map((x, i) => [i ? "" : "บทวิเคราะห์", x])] },
       ...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M · ${it.code} ${it.title}`.slice(0, 80), img: pics[k], svg: fishSvg(it.code, it.title, it.m4), note: "สาเหตุราก: " + it.root_cause }] : []),
         { title: `5 Why และโครงการแก้ไข · ${it.code}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 13,
           rows: [...(it.why5 || []).slice(0, 5).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", it.root_cause], ["โครงการ", it.project.name], ["เป้าหมาย", it.project.goal], ["งบประมาณ", it.project.budget], ...((it.tickets || []).length ? [["ใบงาน", it.tickets.join(", ")]] : [])] },
@@ -591,8 +593,8 @@
       { title: "การตรวจวนของ AI 3 และความเสี่ยง", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 12, rows: [...logRows().map(r => [r[0] + " " + r[1], r[2]]), ...R.risks.map((x, i) => [i ? "" : "ความเสี่ยง", x])] }]; }
   async function aiDeck() { const H = hosp(), R = AI.report;
     return { title: `Action plan แก้ปัญหา (RCA 4M + 5 Why) ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${thd(meet())} · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)`,
-      findings: [R.summary, swotOne(R)], kpis: [["งานค้างทั้งหมด", BL.rows.length], ["ค้างเกิน 60 วัน", BL.rows.filter(r => +r.age > 60).length], ["กลุ่มปัญหา", R.items.length], ["ขั้นตอนแก้ไข", R.items.reduce((s, it) => s + it.actions.length, 0)]],
-      analysis: [...R.analysis.slice(0, 5), ...swotLines(R)], sections: await aiSlides(), notes: R.follow_up.slice(0, 9) }; }
+      findings: [R.summary, ...swotNote(R)], lead: await swotLead(R, "SWOT ของงานวิศวกรรมรอบนี้"), kpis: [["งานค้างทั้งหมด", BL.rows.length], ["ค้างเกิน 60 วัน", BL.rows.filter(r => +r.age > 60).length], ["กลุ่มปัญหา", R.items.length], ["ขั้นตอนแก้ไข", R.items.reduce((s, it) => s + it.actions.length, 0)]],
+      analysis: R.analysis.slice(0, 9), sections: await aiSlides(), notes: R.follow_up.slice(0, 9) }; }
 
   // ---------- exports of the Chief report (template order) ----------
   const fname = p => `${p}_${hosp().code}_${meet().replace(/^(\d{4})/, y => +y + 543)}`;
@@ -604,7 +606,7 @@
     const dec = tbl("dec").filter(r => String(r[0]).trim()).map(r => `ขอ Owner ตัดสินใจ: ${r[0]}${r[2] ? " · ข้อเสนอ: " + r[2] : ""}`);
     return { title: `Chief Engineer Bi-Weekly Performance ${H.code}`, org: H.name, period: `ประชุม ${thd(meet())} 14:00–16:00 น. · ข้อมูล ${thd(a)} – ${thd(b)} · ผู้รายงาน ${D.site.chief || "-"}${D.site.qc ? " · " + D.site.qc : ""}`,
       findings: find.length ? find.slice(0, 8) : ["ยังไม่ได้กรอกผลรอบนี้"], kpis: [["งานค้าง (ใบ)", BL.rows.length || S[2][3] || "-"], ["ค้าง > 60 วัน", BL.rows.length ? BL.rows.filter(r => +r.age > 60).length : S[3][3] || "-"], ["CM 24 ชม.", tbl("k24")[14][4] || "-"], ["TOR", S[0][3] || S[0][2] || "-"]],
-      analysis: [...dec.slice(0, AI.report ? 5 : 6), ...(AI.report ? swotLines(AI.report) : [])],
+      lead: await swotLead(AI.report, "SWOT ของงานวิศวกรรมรอบนี้ (AI 3 คน)"), analysis: dec.slice(0, 6),
       sections: [...SEC.map(s => ({ title: s.t, head: s.cols, rows: filled(tbl(s.k)), chart: false, left: true, fs: s.days || s.k === "bap" ? 9 : 11, ...(s.k === "bap" ? { colW: [4.4, 0.9, 2.4, 1.2, 1.1, 1.1, 1.2] } : {}) })), ...(await aiSlides())],
       notes: ["รายงานนี้ต้องมีทางเลือกและข้อเสนอของ Chief ทุกปัญหา", "ตัวเลข PR / ขออนุมัติภายใน 24 ชม. นับผ่าน KPI แต่ใบงานยังอยู่ใน Backlog จนปิดจริง"] }; }
   const repRun = fn => () => repDeck().then(fn).catch(e => toast(errText(e), true));

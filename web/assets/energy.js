@@ -335,7 +335,7 @@
         { title: "2.4 มาตรการดำเนินการ", head: ["มาตรการ", "ระยะเวลา", "ก่อน kWh/วัน", "หลัง kWh/วัน", "ประหยัด kWh/วัน", "บาท/เดือน"], rows: wData.meas.map(m => [m.n || "", m.per || "", nf(m.b), nf(m.a), nf(m.b != null && m.a != null ? m.b - m.a : null), nf(m.b != null && m.a != null ? (m.b - m.a) * 30 * (C.cost || 0) : null)]) },
         { title: "2.5 – 5. มาตรการเชิงรุก · กิจกรรมส่วนกลาง · ขอสนับสนุน · ข้อเสนอแนะ", head: ["หัวข้อ", "รายละเอียด"], rows: [...txt("2.5 มาตรการเชิงรุกภายในพื้นที่", wData.proactive), ...txt("3. กิจกรรมส่วนกลาง", wData.central), ...txt("4. ขอสนับสนุนทางโรงพยาบาล", wData.support), ...txt("5. ข้อเสนอแนะ", wData.suggest)] },
         { title: `รายการข้อมูลที่โรงต้องใส่ · ครบ ${wScore(wData, C).pct}%`, head: ["ข้อมูล", "ใครใส่", "สถานะ"], rows: wItems(wData, C).map(i => [i.t, i.who, i.ok ? "ครบ" : i.req ? "ยังไม่มี" : "-"]) },
-        ...(wData.ai && wData.ai.report ? [{ title: "บทสรุปโดย AI 3 คน", head: ["บทสรุปผู้บริหาร"], rows: [[wData.ai.report.summary]] }, ...aiSections(wData.ai)] : [])],
+        ...(wData.ai && wData.ai.report ? [{ title: "บทสรุปโดย AI 3 คน", head: ["บทสรุปผู้บริหาร"], rows: [[wData.ai.report.summary]] }, ...(wData.ai.report.swot ? [{ title: "SWOT (AI 3 คน)", img: swImg, imgR: 0.5, svg: swotSvg(wData.ai.report.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : []), ...aiSections(wData.ai)] : [])],
       notes: ["ตัวเลขรายวันรวมจากมิเตอร์ที่ตั้งเป็น \"ไฟเข้า\" ในบันทึก OP · ค่าเดือนเดียวกันปีก่อนจากบิลค่าไฟ (บันทึกรายเดือน)"] };
     return Office.pptx(`ประชุมEnergy_${H.code}_${$("#wk").value}`, d).catch(e => toast(errText(e), true));
   };
@@ -385,7 +385,9 @@
   const SW = [["strengths", "S จุดแข็ง", "14632F", "E3F3E8"], ["weaknesses", "W จุดอ่อน", "B42318", "FDE8E6"], ["opportunities", "O โอกาส", "0B5CAD", "E3EEFA"], ["threats", "T อุปสรรค", "8A5A00", "FCEFD2"]];
   // SWOT always goes into the executive summary and the analysis of every AI 3-role report
   const swotLines = R => R && R.swot ? SW.map(([k, lab]) => `SWOT ${lab}: ${(R.swot[k] || []).join("; ") || "-"}`) : ["SWOT: รายงาน AI รอบนี้ทำก่อนมี SWOT กดปุ่ม 🤖 ใหม่เพื่อให้ AI 3 คนทำ SWOT"];
-  const swotOne = R => R && R.swot ? `SWOT: จุดแข็ง ${(R.swot.strengths || [])[0] || "-"} · จุดอ่อน ${(R.swot.weaknesses || [])[0] || "-"} · โอกาส ${(R.swot.opportunities || [])[0] || "-"} · อุปสรรค ${(R.swot.threats || [])[0] || "-"}` : swotLines(R)[0];
+  const swotNote = R => R && R.swot ? [] : [swotLines(R)[0]];   // old reports made before SWOT: tell the user to run 🤖 again
+  // SWOT is always the 4-box chart, placed right after the executive summary (screen, PPT, Word, PDF, Excel)
+  const swotLead = async (R, title = "SWOT") => R && R.swot ? [{ title, img: await toPng(swotSvg(R.swot), 1400, 700), imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : [];
   function swotSvg(sw) {
     const W = 1400, H = 700, x = v => esc(v);
     let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
@@ -509,13 +511,16 @@
     } catch (e) { if (!e.shown) box.insertAdjacentHTML("beforeend", `<p class="note bad">ทำไม่สำเร็จ: ${esc(errText(e))}</p>`); }
   });
   const aiLogRows = A => A.log.map(x => [`รอบ ${x.r}`, x.who, x.what, x.issues && x.issues.length ? x.issues.join("\n") : (x.who.startsWith("AI 3") ? x.text : "")]);
+  let swImg = null;
   function drawAi() {
     const A = wData.ai, box = $("#aiBox"); if (!A || !A.report) { box.hidden = true; box.innerHTML = ""; return; }
+    if (A.report.swot) toPng(swotSvg(A.report.swot), 1400, 700).then(x => { swImg = x; });
     const R = A.report, li = a => `<ul>${(a || []).map(x => `<li>${esc(x)}</li>`).join("") || "<li>-</li>"}</ul>`, tb = (h, rows) => `<div class="tw"><table><tr>${h.map(x => `<th>${esc(x)}</th>`).join("")}</tr>${rows.map(r => `<tr>${r.map(x => `<td>${esc(x)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${h.length}">-</td></tr>`}</table></div>`;
     box.hidden = false;
     box.innerHTML = `<h3>รายงานโดย AI 3 คน</h3>${AI_ROLES}<p class="sub">ทำเมื่อ ${new Date(A.at).toLocaleString("th-TH")} · ${A.rounds} รอบ · AI 3 ${A.approved ? "ให้ผ่าน" : "ยังมีข้อสังเกต (ดูตารางการตรวจ)"}${A.model ? ` · ${esc(A.model)}` : ""} · ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
-      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p><p>${esc(swotOne(R))}</p><h3>บทวิเคราะห์ตัวเลข</h3>${li(R.analysis)}` +
+      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p>` +
       (R.swot ? `<h3>SWOT</h3><div class="fish">${swotSvg(R.swot)}</div>` : `<p class="note">${esc(swotLines(R)[0])}</p>`) +
+      `<h3>บทวิเคราะห์ตัวเลข</h3>${li(R.analysis)}` +
       (R.rca ? `<h3>RCA ก้างปลา 4M</h3><div class="fish">${fishSvg("ปัญหา", R.rca.problem, aiRca(R))}</div><p><b>5 Why:</b></p><ol>${(R.rca.why5 || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><p><b>สาเหตุราก:</b> ${esc(R.rca.root_cause)}</p>` : "") +
       `<h3>ปัจจัยที่มีผล</h3>${tb(["ปัจจัย", "ผลต่อการใช้ไฟ"], R.factors.map(f => [f.factor, f.impact]))}` +
       `<h3>มาตรการที่เสนอ</h3>${tb(["มาตรการ", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "ผลประหยัด"], R.actions.map(a => [a.action, a.owner, a.due, a.saving]))}` +
@@ -538,13 +543,13 @@
       ...(R.swot ? [{ name: "SWOT", rows: [["หัวข้อ", "รายการ"], ...SW.flatMap(([kk, lab]) => (R.swot[kk] || []).map((t, i) => [i ? "" : lab, t]))], header: 0 }] : []),
       ...(R.rca ? [{ name: "RCA ก้างปลา 4M", rows: [["ปัญหา", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก"], [R.rca.problem, ...M4.map(m => ((R.rca.m4 || {})[m[0]] || []).join("\n")), (R.rca.why5 || []).join("\n"), R.rca.root_cause]], header: 0 }] : []),
       ...(aiPlanRows(R).length ? [{ name: "แผนงาน Gantt", rows: [["ลำดับ", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "วางเสร็จ", "กำหนดเสร็จ (AI)"], ...aiPlanRows(R).map(p => [p.grp, p.step, p.owner, thd(p.start), thd(p.end), p.due])], header: 0 }] : []),
-      { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...R.analysis.map(x => [x]), ...swotLines(R).map(x => [x]), [], ["ขอสนับสนุน"], ...R.support.map(x => [x]), [], ["ข้อมูลที่ยังขาด"], ...R.data_gaps.map(x => [x]), [], ["AI 2 / AI 3 ทักและแก้แล้ว"], ...R.review_notes.map(x => [x])], header: 0 }, ...Office.drawSheets(d)]));
+      { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...R.analysis.map(x => [x]), [], ["ขอสนับสนุน"], ...R.support.map(x => [x]), [], ["ข้อมูลที่ยังขาด"], ...R.data_gaps.map(x => [x]), [], ["AI 2 / AI 3 ทักและแก้แล้ว"], ...R.review_notes.map(x => [x])], header: 0 }, ...Office.drawSheets(d)]));
     if ($("#aiUse")) $("#aiUse").onclick = () => { R.actions.forEach(a => wData.meas.push({ n: a.action, per: a.due, note: `${a.owner} · คาดประหยัด ${a.saving} (เสนอโดย AI)` }));
       rows2("meas"); drawChk(); toast(`เพิ่ม ${R.actions.length} มาตรการแล้ว ใส่ค่าก่อน/หลังทำ แล้วกด บันทึกร่าง`); $("#wMeas").scrollIntoView({ behavior: "smooth", block: "center" }); };
   }
   const aiName = () => `ประชุมEnergy_AI_${hosp().code || ""}_${$("#wk").value}`;
   const aiSections = A => { const R = A.report; return [
-    { title: "บทวิเคราะห์ตัวเลข และ SWOT (AI)", head: ["บทวิเคราะห์"], rows: [...R.analysis, ...swotLines(R)].map(x => [x]) },
+    { title: "บทวิเคราะห์ตัวเลข (AI)", head: ["บทวิเคราะห์"], rows: R.analysis.map(x => [x]) },
     ...(R.rca ? [{ title: "5 Why และสาเหตุราก (AI)", head: ["หัวข้อ", "รายละเอียด"], rows: [["ปัญหา", R.rca.problem], ...(R.rca.why5 || []).slice(0, 5).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", R.rca.root_cause]] }] : []),
     { title: "ปัจจัยที่มีผล (AI)", head: ["ปัจจัย", "ผลต่อการใช้ไฟ"], rows: R.factors.map(f => [f.factor, f.impact]) },
     { title: "มาตรการที่เสนอ (AI)", head: ["มาตรการ", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "ผลประหยัด"], rows: R.actions.map(a => [a.action, a.owner, a.due, a.saving]) },
@@ -552,14 +557,13 @@
     { title: "การทำงานของ AI 3 คน", head: ["รอบ", "AI", "ทำอะไร", "สิ่งที่สั่งแก้ / สรุปผลตรวจ"], rows: aiLogRows(A) }]; };
   async function aiDeck() {
     const A = wData.ai, R = A.report, H = hosp(), C = wCalc || {};
-    const swPic = R.swot ? await toPng(swotSvg(R.swot), 1400, 700) : null, fsv = R.rca ? fishSvg("ปัญหา", R.rca.problem, aiRca(R)) : null, fPic = fsv ? await toPng(fsv, 1400, 600) : null;
+    const fsv = R.rca ? fishSvg("ปัญหา", R.rca.problem, aiRca(R)) : null, fPic = fsv ? await toPng(fsv, 1400, 600) : null;
     const PR = aiPlanRows(R), ch = []; for (let i = 0; i < PR.length; i += 14) ch.push(PR.slice(i, i + 14));
     const gp = await Promise.all(ch.map(c => { const g = ganttSvg(c); return toPng(g.svg, g.w, g.h).then(img => ({ ...g, img })); }));
     return { title: `รายงานพลังงานโดย AI 3 คน · ${H.code}`, org: H.name, period: `ประชุมวันเสาร์ที่ ${dTH($("#wk").value)} · ${C.month || ""}`,
-      findings: [R.summary, swotOne(R), ...R.analysis.slice(0, 3)], kpis: [["kWh เดือนนี้", nf(C.mtd)], ["เฉลี่ย kWh/วัน", nf(C.avg)], ["เป้าหมาย kWh/วัน", nf(C.tDay)], ["ปีก่อน kWh/วัน", nf(C.bDay)], ["ข้อมูลครบ", wScore(wData, C).pct + "%"], ["รอบที่ AI ตรวจ", String(A.rounds)]],
-      analysis: [...R.analysis.slice(0, 5), ...swotLines(R)],
-      sections: [...(R.swot ? [{ title: "SWOT", img: swPic, imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : []),
-        ...(fsv ? [{ title: "RCA ก้างปลา 4M", img: fPic, svg: fsv, note: "สาเหตุราก: " + R.rca.root_cause }] : []),
+      findings: [R.summary, ...swotNote(R), ...R.analysis.slice(0, 3)], lead: await swotLead(R), kpis: [["kWh เดือนนี้", nf(C.mtd)], ["เฉลี่ย kWh/วัน", nf(C.avg)], ["เป้าหมาย kWh/วัน", nf(C.tDay)], ["ปีก่อน kWh/วัน", nf(C.bDay)], ["ข้อมูลครบ", wScore(wData, C).pct + "%"], ["รอบที่ AI ตรวจ", String(A.rounds)]],
+      analysis: R.analysis.slice(0, 9),
+      sections: [...(fsv ? [{ title: "RCA ก้างปลา 4M", img: fPic, svg: fsv, note: "สาเหตุราก: " + R.rca.root_cause }] : []),
         ...gp.map((g, i) => ({ title: `แผนงานและวันวางเสร็จ (Gantt)${gp.length > 1 ? ` ${i + 1}/${gp.length}` : ""}`, img: g.img, imgR: g.h / g.w, svg: g.svg, note: `ทั้งหมด ${PR.length} มาตรการ วางเสร็จทั้งหมด ${thd(PR.reduce((m, p) => p.end > m ? p.end : m, PR[0].end))}` })),
         ...aiSections(A), { title: "สิ่งที่ AI 2 และ AI 3 ทักและแก้แล้ว", head: ["ทบทวนแล้ว"], rows: R.review_notes.map(x => [x]) }],
       notes: ["AI 1 นำเสนอ · AI 2 วิเคราะห์ทบทวน · AI 3 ตรวจสอบ ถ้า AI 3 สั่งแก้ AI 1 และ AI 2 แก้อีก 1 รอบ", "ตัวเลขทั้งหมดมาจากรายงานของโรงในหน้านี้ ผู้นำเสนอต้องตรวจทานก่อนใช้"] };

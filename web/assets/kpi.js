@@ -145,7 +145,9 @@
   const SW = [["strengths", "S จุดแข็ง", "14632F", "E3F3E8"], ["weaknesses", "W จุดอ่อน", "B42318", "FDE8E6"], ["opportunities", "O โอกาส", "0B5CAD", "E3EEFA"], ["threats", "T อุปสรรค", "8A5A00", "FCEFD2"]];
   // SWOT always goes into the executive summary and the analysis of every AI 3-role report
   const swotLines = R => R && R.swot ? SW.map(([k, lab]) => `SWOT ${lab}: ${(R.swot[k] || []).join("; ") || "-"}`) : ["SWOT: รายงาน AI รอบนี้ทำก่อนมี SWOT กดปุ่ม 🤖 ใหม่เพื่อให้ AI 3 คนทำ SWOT"];
-  const swotOne = R => R && R.swot ? `SWOT: จุดแข็ง ${(R.swot.strengths || [])[0] || "-"} · จุดอ่อน ${(R.swot.weaknesses || [])[0] || "-"} · โอกาส ${(R.swot.opportunities || [])[0] || "-"} · อุปสรรค ${(R.swot.threats || [])[0] || "-"}` : swotLines(R)[0];
+  const swotNote = R => R && R.swot ? [] : [swotLines(R)[0]];   // old reports made before SWOT: tell the user to run 🤖 again
+  // SWOT is always the 4-box chart, placed right after the executive summary (screen, PPT, Word, PDF, Excel)
+  const swotLead = async (R, title = "SWOT") => R && R.swot ? [{ title, img: await toPng(swotSvg(R.swot), 1400, 700), imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : [];
   function swotSvg(sw) {
     const W = 1400, H = 700, x = v => esc(v);
     let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
@@ -442,8 +444,9 @@
   function drawAi() {
     const R = aiRep, w = canWrite();
     $("#aiBox").innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2>${ROLES}<p class="meta">AI 1 เสนอ → AI 2 วิเคราะห์ทบทวน → AI 3 ตรวจ ถ้าสั่งแก้ AI 1 แก้และ AI 2 ทบทวนใหม่ วนจน AI 3 ให้ผ่าน (${aiLog.length} รอบ) แล้ว AI 3 เรียบเรียงรายงาน ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
-      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p><p>${esc(swotOne(R))}</p><h3>บทวิเคราะห์</h3><ul>${R.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
+      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p>` +
       (R.swot ? `<h3>SWOT</h3><div class="fish">${swotSvg(R.swot)}</div>` : `<p class="note">${esc(swotLines(R)[0])}</p>`) +
+      `<h3>บทวิเคราะห์</h3><ul>${R.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       R.items.map(it => `<h3>ข้อ ${esc(it.code)} ${esc(it.title)}</h3><div class="fish">${fishSvg(it.code, it.title, aiRca(it))}</div>` +
         `<p><b>5 Why:</b></p><ol>${(it.why5 || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><p><b>สาเหตุราก:</b> ${esc(it.root_cause)}</p>` +
         `<p><b>โครงการแก้ไข:</b> ${esc(it.project.name)} · <b>เป้าหมาย:</b> ${esc(it.project.goal)} · <b>งบประมาณ:</b> ${esc(it.project.budget)}</p><div class="tw"><table><thead><tr><th>วิธีการ / ขั้นตอน</th><th>ผู้รับผิดชอบ</th><th>กำหนดเสร็จ</th><th>วัดผล</th></tr></thead><tbody>` +
@@ -475,13 +478,12 @@
   const aiName = () => { const [y, m] = ym(); return `ActionPlan_AI_KPI_${hosp().code}_${y + 543}-${String(m).padStart(2, "0")}`; };
   const aiRca = it => Object.fromEntries(M4.map(m => [m[0], (it.m4 && it.m4[m[0]] || []).join("\n")]));
   async function aiDeck() { const [y, m] = ym(), H = hosp(), R = aiRep, pics = await Promise.all(R.items.map(it => fishPng(fishSvg(it.code, it.title, aiRca(it)))));
-    const swPic = R.swot ? await toPng(swotSvg(R.swot), 1400, 700) : null, PR = aiPlanRows(R), ch = []; for (let i = 0; i < PR.length; i += 14) ch.push(PR.slice(i, i + 14));
+    const PR = aiPlanRows(R), ch = []; for (let i = 0; i < PR.length; i += 14) ch.push(PR.slice(i, i + 14));
     const gp = await Promise.all(ch.map(c => { const g = ganttSvg(c); return toPng(g.svg, g.w, g.h).then(img => ({ ...g, img })); }));
     return { title: `รายงาน Action plan แก้ไข KPI ${H.code}`, org: H.name, period: mName(y, m) + " · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)",
-      findings: [R.summary, swotOne(R)], kpis: [["คะแนนรวม", r1(total())], ["ข้อที่ตก", R.items.length], ["ขั้นตอนแก้ไขทั้งหมด", R.items.reduce((s, it) => s + it.actions.length, 0)]],
-      analysis: [...R.analysis.slice(0, 5), ...swotLines(R)],
-      sections: [...(R.swot ? [{ title: "SWOT", img: swPic, imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : []),
-        ...gp.map((g, i) => ({ title: `แผนงานและวันวางเสร็จ (Gantt)${gp.length > 1 ? ` ${i + 1}/${gp.length}` : ""}`, img: g.img, imgR: g.h / g.w, svg: g.svg, note: `ทั้งหมด ${PR.length} ขั้นตอน วางเสร็จทั้งหมด ${thd(PR.reduce((m, p) => p.end > m ? p.end : m, PR[0].end))}` })),
+      findings: [R.summary, ...swotNote(R)], lead: await swotLead(R), kpis: [["คะแนนรวม", r1(total())], ["ข้อที่ตก", R.items.length], ["ขั้นตอนแก้ไขทั้งหมด", R.items.reduce((s, it) => s + it.actions.length, 0)]],
+      analysis: R.analysis.slice(0, 9),
+      sections: [...gp.map((g, i) => ({ title: `แผนงานและวันวางเสร็จ (Gantt)${gp.length > 1 ? ` ${i + 1}/${gp.length}` : ""}`, img: g.img, imgR: g.h / g.w, svg: g.svg, note: `ทั้งหมด ${PR.length} ขั้นตอน วางเสร็จทั้งหมด ${thd(PR.reduce((m, p) => p.end > m ? p.end : m, PR[0].end))}` })),
         ...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M ข้อ ${it.code}`, img: pics[k], svg: fishSvg(it.code, it.title, aiRca(it)), note: "สาเหตุราก: " + it.root_cause }] : []),
         { title: `5 Why และโครงการแก้ไข ข้อ ${it.code}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 14,
           rows: [...(it.why5 || []).slice(0, 5).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", it.root_cause], ["ชื่อโครงการ", it.project.name], ["เป้าหมาย", it.project.goal], ["งบประมาณ", it.project.budget]] },
