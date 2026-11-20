@@ -95,7 +95,7 @@ async function altModel(key: string, cur: string) {
 
 // The free plan stops a function after 150 s, so each Gemini call gets a 110 s limit and light thinking to answer in time.
 let THINK: Record<string, unknown> | null = { thinkingLevel: "minimal" };
-async function gem(key: string, system: string, user: string, json = false, again = true, tries = 0, maxTok = json ? 9000 : 5000): Promise<string> {
+async function gem(key: string, system: string, user: string, json = false, again = true, tries = 0, maxTok = json ? 12000 : 5000): Promise<string> {
   const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 110000);
   let r: Response;
   try {
