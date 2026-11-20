@@ -219,6 +219,7 @@
     const urls = editing ? {} : await signed((t.answers || []).flatMap(a => a.ph || []));
     const head = `<div class="panel"><div class="row" style="justify-content:space-between"><div><h2 style="margin:0"><span style="font-family:'IBM Plex Mono',monospace">${esc(e.tag || "")}</span> · ${esc(e.name)}</h2>
       <div class="meta">${esc(e.eq_type || "ไม่ระบุชนิด")}${hasOwnTpl(e.eq_type) ? "" : " (ใช้ check sheet ทั่วไป)"} · ${esc(where(e) || "-")} · แผน ${monthLabel(`${t.year}-${String(t.month).padStart(2, "0")}`)} W${t.week}${roundOf(e, t) ? " · รอบ " + esc(roundOf(e, t)) : ""} · ${esc(e.pm_by || "TW")}</div></div>${RS.pill(STC[t.status], ST[t.status])}</div>
+      <div style="margin-top:8px"><a class="btn small" href="jci.html?h=${encodeURIComponent(H.code)}&tag=${encodeURIComponent(e.tag || "")}">📁 แฟ้มเครื่อง JCI (PM ใบสอบเทียบ งานซ่อม)</a></div>
       ${t.status === "returned" ? `<div class="note bad" style="margin-top:10px">หัวหน้าส่งกลับให้แก้: ${esc(t.return_reason || "")}</div>` : ""}
       ${editing && !cur.scanned ? `<div class="note" style="margin-top:10px">เปิดจากรายการ ไม่ได้สแกน QR ที่ตัวเครื่อง ระบบจะติดป้าย “ไม่ได้สแกน QR” ในผลตรวจ</div>` : ""}</div>`;
     if (editing) {

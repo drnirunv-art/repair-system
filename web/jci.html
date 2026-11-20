@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>แฟ้มพร้อมตรวจ JCI | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .hsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+  .hsel select,.hsel input,form.tf select,form.tf input,form.tf textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:#17212b;background:#fff}
+  .hsel select,.hsel input{width:auto}
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#fff;margin:8px 0}
+  table.tt td,table.tt th{padding:6px 8px;color:#17212b;text-align:left;vertical-align:top}
+  table.tt th{background:#eef3f8;font-size:13px;white-space:nowrap}
+  table.tt td.n{text-align:right;white-space:nowrap}
+  table.tt td.c{text-align:center}
+  .ok{background:#d5f0df}.soon{background:#fcefd2}.exp{background:#f8d7d3}.none{background:#f3f4f6;color:#4b5563}
+  .kpi b.good{color:#14632f}.kpi b.bad{color:#9b1c13}.kpi b.mid{color:#8a5a00}
+  form.tf{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;align-items:end;margin:8px 0}
+  form.tf label{font-size:13px;font-weight:600;display:flex;flex-direction:column;gap:4px;color:#17212b}
+  form.tf .wide{grid-column:1/-1}
+  .chk{display:flex;flex-wrap:wrap;gap:6px}
+  .chk input{width:auto!important;margin:0}
+  .chk label{display:inline-flex!important;flex-direction:row!important;gap:6px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:#fff;font-weight:500!important}
+  .note{border-left:4px solid #0b5cad;background:#f4f9ff;padding:8px 12px;border-radius:8px;color:#17212b;margin:8px 0}
+  .note.bad{border-color:#b42318;background:#fdf1f0}.note.good{border-color:#14632f;background:#eefaf2}
+  .acts{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  .timer{font:600 34px 'IBM Plex Mono',monospace;color:#17212b;padding:6px 14px;border-radius:10px;background:#eef3f8;display:inline-block}
+  .timer.over{background:#f8d7d3;color:#9b1c13}
+  .eqh{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px 14px;margin:6px 0}
+  .eqh div{color:#17212b}.eqh small{display:block;color:#4b5563;font-size:12px}
+  @media print{header,nav,.hsel,.acts,form,.noprint{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">JCI</span><h1>แฟ้มพร้อมตรวจ JCI</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าเจ้าหน้าที่</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="sum" aria-selected="true">ภาพรวม</button>
+    <button role="tab" data-tab="eq" aria-selected="false">แฟ้มเครื่อง (Reverse-Tracer)</button>
+    <button role="tab" data-tab="cert" aria-selected="false">ใบรับรอง · สอบเทียบ</button>
+    <button role="tab" data-tab="ilsm" aria-selected="false">ILSM</button>
+    <button role="tab" data-tab="drill" aria-selected="false">ซ้อม Code 3 กะ</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="home.html">หน้าหลัก</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <div id="body" hidden>
+    <div class="hsel"><label for="h">โรงพยาบาล</label><select id="h"></select><span class="sub" id="ro"></span></div>
+
+    <section id="tab-sum">
+      <p class="sub">สรุปความพร้อมของหลักฐานที่ผู้ตรวจ JCI ขอดูบ่อย: ใบรับรอง/สอบเทียบที่ยังไม่หมดอายุ, ILSM ที่ยังเปิดอยู่, การซ้อม Code ครบทุกกะในไตรมาส และผลซ้อม Reverse-Tracer ที่ต้องหาเอกสารให้ได้ภายใน 15 นาที</p>
+      <div class="kpis" id="tot"></div>
+      <div id="finds"></div>
+      <h2>ซ้อม Code ไตรมาสนี้ แยกตามกะ</h2>
+      <div class="tw"><table class="tt" id="qMx"></table></div>
+      <h2>ใบรับรองที่หมดอายุ หรือจะหมดใน 60 วัน</h2>
+      <div class="tw"><table class="tt" id="dueC"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="oX">ดาวน์โหลด Excel (บทสรุปความพร้อม JCI)</button></div>
+    </section>
+
+    <section id="tab-eq" hidden>
+      <div class="note">ซ้อมแบบผู้ตรวจ: ชี้เครื่องจริง 1 เครื่อง แล้วกด "เริ่มจับเวลา" ให้ทีมเปิดประวัติ PM ใบสอบเทียบ และงานซ่อมของเครื่องนั้น ถ้าเกิน 15 นาทีถือเป็น Gap ที่ต้องแก้ สแกน QR ที่ตัวเครื่องก็เปิดแฟ้มนี้ได้จากหน้า PM</div>
+      <div class="hsel"><label for="eT">TAG เครื่อง</label><input id="eT" list="tags" placeholder="พิมพ์ TAG หรือชื่อเครื่อง" style="min-width:260px"><datalist id="tags"></datalist>
+        <button class="btn primary" type="button" id="eOpen">เปิดแฟ้มเครื่อง</button><button class="btn" type="button" id="ePrint">พิมพ์แฟ้ม</button></div>
+      <div id="eBody"></div>
+      <h2>ผลซ้อม Reverse-Tracer ล่าสุด</h2>
+      <div class="tw"><table class="tt" id="tList"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="tX">ดาวน์โหลด Excel (ผลซ้อม Reverse-Tracer)</button></div>
+    </section>
+
+    <section id="tab-cert" hidden>
+      <div class="panel" id="certForm">
+        <h2 id="cTitle">เพิ่มใบรับรอง / ใบสอบเทียบ</h2>
+        <form class="tf" id="fC">
+          <label class="wide">รายการ<input id="cItem" required placeholder="เช่น เกจวัดความดันห้อง AIIR ICU 1, ถังแรงดัน Boiler, ลิฟต์ตัวที่ 1"></label>
+          <label>TAG เครื่อง (ถ้ามี)<input id="cTag" list="tags" placeholder="เว้นว่างได้"></label>
+          <label>ประเภท<select id="cKind"><option>สอบเทียบ</option><option>ตรวจรับรองตามกฎหมาย</option><option>ทดสอบประจำปี</option><option>ใบอนุญาต</option><option>อื่น ๆ</option></select></label>
+          <label>หน่วยงานที่ออก<input id="cIss" placeholder="บริษัท / หน่วยงาน"></label>
+          <label>เลขที่ใบรับรอง<input id="cNo"></label>
+          <label>วันที่ออก<input type="date" id="cOn"></label>
+          <label>วันหมดอายุ<input type="date" id="cExp"></label>
+          <label>อ้างอิงมาตรฐาน<input id="cRef" list="refs" placeholder="เช่น FMS.08.03"></label>
+          <label class="wide">แนบไฟล์ใบรับรอง (PDF / รูป, ไม่เกิน 20 MB ต่อไฟล์)<input type="file" id="cFile" multiple accept=".pdf,image/*"></label>
+          <label class="wide">หมายเหตุ<input id="cNote"></label>
+          <div class="wide"><button class="btn primary" type="submit" id="cSave">บันทึก</button> <button class="btn" type="button" id="cCancel" hidden>ยกเลิกการแก้ไข</button> <span class="sub" id="cMsg" role="status"></span></div>
+        </form>
+      </div>
+      <div class="hsel"><label for="cF">แสดง</label><select id="cF"><option value="">ทั้งหมด</option><option value="exp">หมดอายุแล้ว</option><option value="soon">จะหมดใน 60 วัน</option><option value="ok">ยังไม่หมดอายุ</option><option value="none">ไม่ระบุวันหมดอายุ</option></select></div>
+      <div class="tw"><table class="tt" id="cList"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="cX">ดาวน์โหลด Excel (ทะเบียนใบรับรอง)</button></div>
+    </section>
+
+    <section id="tab-ilsm" hidden>
+      <p class="sub">ILSM (Interim Life Safety Measures) คือมาตรการชั่วคราวเมื่อระบบป้องกันอัคคีภัยหรือทางหนีไฟบกพร่อง หรือระหว่างก่อสร้าง/ปรับปรุง ต้องบันทึกตั้งแต่วันเริ่มจนวันปิด</p>
+      <div class="panel" id="ilsmForm">
+        <h2>เปิด ILSM ใหม่</h2>
+        <form class="tf" id="fI">
+          <label class="wide">ข้อบกพร่อง / งานที่ทำให้ความปลอดภัยลดลง<input id="iT" required placeholder="เช่น Fire alarm โซน 3 ชั้น 5 ใช้งานไม่ได้ระหว่างเปลี่ยนสาย"></label>
+          <label>พื้นที่<input id="iA"></label>
+          <label>อ้างอิงมาตรฐาน<input id="iRef" list="refs" value="FMS.10.00"></label>
+          <label>ระดับความเสี่ยง<select id="iR"><option>สูง</option><option selected>กลาง</option><option>ต่ำ</option></select></label>
+          <label>วันเริ่ม<input type="date" id="iS" required></label>
+          <label>กำหนดปิด<input type="date" id="iE"></label>
+          <label>ผู้รับผิดชอบ<input id="iO"></label>
+          <div class="wide"><b>มาตรการชั่วคราวที่ใช้</b><div class="chk" id="iM"></div></div>
+          <label class="wide">หมายเหตุ<input id="iN"></label>
+          <div class="wide"><button class="btn primary" type="submit">บันทึก ILSM</button> <span class="sub" id="iMsg" role="status"></span></div>
+        </form>
+      </div>
+      <div class="tw"><table class="tt" id="iList"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="iX">ดาวน์โหลด Excel (ทะเบียน ILSM)</button></div>
+    </section>
+
+    <section id="tab-drill" hidden>
+      <p class="sub">ซ้อม Code ให้ครบทั้ง 3 กะ (เช้า บ่าย ดึก) ทุกไตรมาส รวมช่าง แม่บ้าน รปภ. และผู้รับเหมา ใช้เป็นหลักฐาน JCI FMS.06.01 / FMS.09.01 และ KPI ข้อ 6 ของสัญญา</p>
+      <div class="panel" id="drillForm">
+        <h2>บันทึกการซ้อม</h2>
+        <form class="tf" id="fD">
+          <label>Code / เหตุการณ์<input id="dC" list="codes" required placeholder="เช่น Code Red"></label>
+          <label>วันที่ซ้อม<input type="date" id="dD" required></label>
+          <label>กะ<select id="dS"><option>เช้า</option><option>บ่าย</option><option>ดึก</option></select></label>
+          <label>สถานที่<input id="dP"></label>
+          <label>จำนวนผู้เข้าร่วม (คน)<input type="number" id="dN" min="0"></label>
+          <label>เวลาตอบสนอง / ใช้เวลาซ้อม (นาที)<input type="number" id="dMin" min="0"></label>
+          <label>ผลการซ้อม<select id="dR"><option>ผ่าน</option><option>ต้องปรับปรุง</option></select></label>
+          <div class="wide"><b>กลุ่มที่เข้าร่วม</b><div class="chk" id="dG"></div></div>
+          <label class="wide">สิ่งที่พบ<input id="dF"></label>
+          <label class="wide">สิ่งที่ต้องแก้ไข / ผู้รับผิดชอบ<input id="dA"></label>
+          <div class="wide"><button class="btn primary" type="submit">บันทึกการซ้อม</button> <span class="sub" id="dMsg" role="status"></span></div>
+        </form>
+      </div>
+      <div class="hsel"><label for="dy">ปี</label><select id="dy"></select></div>
+      <h2>ครบทุกกะหรือยัง (ตามไตรมาส)</h2>
+      <div class="tw"><table class="tt" id="dMx"></table></div>
+      <h2>ประวัติการซ้อม</h2>
+      <div class="tw"><table class="tt" id="dList"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="dX">ดาวน์โหลด Excel (บันทึกการซ้อม Code)</button></div>
+    </section>
+  </div>
+  <datalist id="refs"><option>FMS.05.00</option><option>FMS.06.00</option><option>FMS.06.01</option><option>FMS.06.02</option><option>FMS.07.00</option><option>FMS.08.00</option><option>FMS.08.01</option><option>FMS.08.02</option><option>FMS.08.03</option><option>FMS.08.04</option><option>FMS.09.01</option><option>FMS.10.00</option></datalist>
+  <datalist id="codes"><option>Code Red (อัคคีภัย)</option><option>Code Blue (ช่วยชีวิต)</option><option>Code Pink (เด็กหาย / ลักพาตัว)</option><option>Code Grey (ความรุนแรง)</option><option>Code Orange (สารเคมี / ภัยพิบัติ)</option><option>ไฟฟ้าดับ (Utility failure)</option><option>ช่วยผู้ติดค้างในลิฟต์</option><option>ก๊าซทางการแพทย์ขัดข้อง</option><option>สารเคมีหก (Spill)</option><option>อพยพ</option></datalist>
+</main>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+<script src="assets/jci.js"></script>
+</body>
+</html>
