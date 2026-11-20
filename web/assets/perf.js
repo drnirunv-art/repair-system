@@ -341,6 +341,7 @@
   }
   function drawBl() {
     const R = BL.rows;
+    if (!R.length) ["bP", "bW", "bF", "bX"].forEach(k => $("#" + k).hidden = true);
     if (!R.length) { $("#blSum").innerHTML = `<p class="note">ยังไม่มีข้อมูลงานค้างของรอบนี้ อัปโหลดไฟล์ Backlog ด้านบน</p>`; $("#blList").innerHTML = ""; drawAi(); return; }
     const M = blMatrix(), tot = g => M.reduce((s, r) => s + r[g], 0), over = R.filter(r => +r.age > 60).length;
     const reasons = {}; R.forEach(r => { const k = r.reason || r.status || "ไม่ระบุ"; reasons[k] = (reasons[k] || 0) + 1; });
@@ -349,8 +350,8 @@
       <div class="kpi"><span>อายุเฉลี่ย (วัน)</span><b>${nf(R.reduce((s, r) => s + (+r.age || 0), 0) / R.length, 1)}</b></div><div class="kpi"><span>เก่าสุด (วัน)</span><b>${Math.max(...R.map(r => +r.age || 0))}</b></div></div>
       <div class="tw"><table class="pt"><thead><tr><th>ช่วงอายุงานค้าง</th>${GRP.map(g => `<th>${g[1]}</th>`).join("")}<th>รวม</th></tr></thead><tbody>${AGE.map((a, i) => `<tr><td class="lab">${esc(a[0])}</td>${GRP.map(g => `<td class="num">${M[i][g[0]]}</td>`).join("")}<td class="num"><b>${GRP.reduce((s, g) => s + M[i][g[0]], 0)}</b></td></tr>`).join("")}
       <tr class="sum"><td>รวม</td>${GRP.map(g => `<td class="num">${tot(g[0])}</td>`).join("")}<td class="num">${R.length}</td></tr></tbody></table></div>
-      <h3>เหตุผลที่ค้าง</h3><div class="tw"><table class="pt"><thead><tr><th>เหตุผล / สถานะค้าง</th><th>ใบ</th><th>%</th></tr></thead><tbody>${Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td><td class="num">${nf(v * 100 / R.length, 1)}%</td></tr>`).join("")}</tbody></table></div>` +
-      `<div class="acts"><button class="btn primary" type="button" id="bP">รายงานงานค้าง (PPT บทสรุป + วิเคราะห์)</button><button class="btn" type="button" id="bW">Word</button><button class="btn" type="button" id="bF">PDF</button><button class="btn" type="button" id="bX">Excel</button></div>`;
+      <h3>เหตุผลที่ค้าง</h3><div class="tw"><table class="pt"><thead><tr><th>เหตุผล / สถานะค้าง</th><th>ใบ</th><th>%</th></tr></thead><tbody>${Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td><td class="num">${nf(v * 100 / R.length, 1)}%</td></tr>`).join("")}</tbody></table></div><p class="note">ปุ่มรายงานงานค้าง (PPT บทสรุปผู้บริหาร + วิเคราะห์, Word, PDF, Excel) อยู่ข้างปุ่ม 🤖 ด้านล่าง</p>`;
+    ["bP", "bW", "bF", "bX"].forEach(k => $("#" + k).hidden = false);
     const bRun = fn => () => { if (!AI.report) toast("ยังไม่มีวิธีแก้จาก AI 3 คน รายงานนี้จะมีแค่ข้อมูลงานค้างและแผนรายสัปดาห์ กด 🤖 ด้านล่างก่อนเพื่อให้มีวิธีแก้ครบ", true); blDeck().then(fn).catch(e => toast(errText(e), true)); };
     $("#bP").onclick = bRun(d => Office.pptx(fname("Backlog"), d)); $("#bW").onclick = bRun(d => Office.docx(fname("Backlog"), d)); $("#bF").onclick = bRun(d => Office.pdf(fname("Backlog"), d));
     $("#bX").onclick = bRun(d => Office.xlsx(fname("Backlog"), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: [...d.findings, ...d.analysis], notes: d.notes, figures: d.kpis }),
