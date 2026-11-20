@@ -27,6 +27,7 @@ const Report = z.object({
     actions: z.array(z.object({ step: z.string(), owner: z.string(), due: z.string(), measure: z.string() })),
     expected_result: z.string(),
   })),
+  swot: z.object({ strengths: z.array(z.string()), weaknesses: z.array(z.string()), opportunities: z.array(z.string()), threats: z.array(z.string()) }),
   timeline: z.array(z.object({ when: z.string(), activity: z.string() })),
   risks: z.array(z.string()),
   review_notes: z.array(z.string()),
@@ -44,8 +45,9 @@ const Check = z.object({ approved: z.boolean(), issues: z.array(z.string()), sum
 const CHECK_SHAPE = `ตอบเป็น JSON อย่างเดียว รูปแบบ: {"approved":true,"issues":["สิ่งที่ต้องแก้ 1"],"summary":"สรุปผลการตรวจ 1-2 ประโยค"}
 approved = true เมื่อไม่มีสิ่งที่ต้องแก้แล้วเท่านั้น ถ้า approved = false ต้องมี issues อย่างน้อย 1 ข้อ เขียนแต่ละข้อให้ AI 1 แก้ได้ทันที`;
 const SHAPE = `ตอบเป็น JSON อย่างเดียว ไม่มีข้อความอื่น รูปแบบ:
-{"summary":"","analysis":[""],"items":[{"code":"","title":"","m4":{"man":[""],"machine":[""],"method":[""],"material":[""]},"why5":["ทำไม 1: ...","ทำไม 2: ..."],"root_cause":"","project":{"name":"","goal":"","budget":""},"actions":[{"step":"","owner":"","due":"","measure":""}],"expected_result":""}],"timeline":[{"when":"","activity":""}],"risks":[""],"review_notes":[""],"follow_up":[""]}
-m4 แต่ละด้านไม่เกิน 4 สาเหตุ แต่ละสาเหตุสั้นไม่เกิน 25 ตัวอักษร`;
+{"summary":"","analysis":[""],"items":[{"code":"","title":"","m4":{"man":[""],"machine":[""],"method":[""],"material":[""]},"why5":["ทำไม 1: ...","ทำไม 2: ..."],"root_cause":"","project":{"name":"","goal":"","budget":""},"actions":[{"step":"","owner":"","due":"","measure":""}],"expected_result":""}],"swot":{"strengths":[""],"weaknesses":[""],"opportunities":[""],"threats":[""]},"timeline":[{"when":"","activity":""}],"risks":[""],"review_notes":[""],"follow_up":[""]}
+m4 แต่ละด้านไม่เกิน 4 สาเหตุ แต่ละสาเหตุสั้นไม่เกิน 25 ตัวอักษร
+swot แต่ละช่อง 3-5 ข้อ แต่ละข้อสั้นไม่เกิน 40 ตัวอักษร`;
 // Google retires model names over time, so the model is picked from the key's own model list when the preferred one is gone.
 let GEMINI = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
 const G = "https://generativelanguage.googleapis.com/v1beta";
@@ -146,7 +148,7 @@ Deno.serve(async (req) => {
     const S2 = `${CONTEXT}\nบทบาทของคุณ: AI 2 ผู้วิเคราะห์และทบทวน ให้ตรวจ RCA ก้างปลา 4M และ 5 Why ว่าถึงสาเหตุรากจริง และทบทวนข้อเสนอของ AI 1 อย่างตรงไปตรงมา`;
     const U2 = (p1: string) => `ข้อมูล KPI (JSON):\n${data}\n\nข้อเสนอของ AI 1:\n${p1}\n\nวิเคราะห์: สาเหตุใน 4M ครบหรือขาดด้านใด 5 Why หยุดเร็วเกินไปหรือไม่ ข้อใดเกี่ยวโยงกัน โครงการและวิธีแก้ใดยังไม่ตรงสาเหตุราก ทำไม่ได้จริง ขาดผู้รับผิดชอบ กำหนดเวลาไม่สมเหตุผล หรือวัดผลไม่ได้ ความเสี่ยงของแผน และสิ่งที่ควรเพิ่มหรือตัดออก`;
     const S3 = `${CONTEXT}\nบทบาทของคุณ: AI 3 ผู้ตรวจสอบแก้ไขและนำเสนอ ให้แก้ข้อเสนอของ AI 1 ตามผลทบทวนของ AI 2 ตรวจว่าครบทุกข้อที่ตก แล้วเรียบเรียงเป็นรายงาน Action plan ฉบับสุดท้าย`;
-    const U3 = (p1: string, p2: string) => `ข้อมูล KPI (JSON):\n${data}\n\nข้อเสนอของ AI 1:\n${p1}\n\nผลวิเคราะห์และทบทวนของ AI 2:\n${p2}\n\nเขียนรายงานฉบับสุดท้าย: summary = บทสรุปผู้บริหาร 3-5 ประโยค, analysis = บทวิเคราะห์, items = ทุกข้อที่ตกพร้อมก้างปลา 4M, 5 Why, สาเหตุราก, โครงการแก้ไข และขั้นตอนแก้ไข (due เป็นวันที่ เช่น 15 ธ.ค. 2569), timeline = แผนรายสัปดาห์, risks = ความเสี่ยงของแผน, review_notes = สิ่งที่ AI 2 พบและ AI 3 แก้แล้ว, follow_up = วิธีติดตามผล`;
+    const U3 = (p1: string, p2: string) => `ข้อมูล KPI (JSON):\n${data}\n\nข้อเสนอของ AI 1:\n${p1}\n\nผลวิเคราะห์และทบทวนของ AI 2:\n${p2}\n\nเขียนรายงานฉบับสุดท้าย: summary = บทสรุปผู้บริหาร 3-5 ประโยค, analysis = บทวิเคราะห์, items = ทุกข้อที่ตกพร้อมก้างปลา 4M, 5 Why, สาเหตุราก, โครงการแก้ไข และขั้นตอนแก้ไข (due เป็นวันที่ เช่น 15 ธ.ค. 2569), swot = SWOT ของงานวิศวกรรมอาคารของโรงนี้ในเดือนนี้ (strengths จุดแข็ง และ weaknesses จุดอ่อน คือปัจจัยภายในทีมผู้รับจ้าง, opportunities โอกาส และ threats อุปสรรค คือปัจจัยภายนอก เช่น โรงพยาบาล ผู้รับเหมา งบ การตรวจ JCI) อิงจากข้อมูลจริงเท่านั้น, timeline = แผนรายสัปดาห์, risks = ความเสี่ยงของแผน, review_notes = สิ่งที่ AI 2 พบและ AI 3 แก้แล้ว, follow_up = วิธีติดตามผล`;
 
     // ---- one step per call; the page loops: propose -> review -> check, again until check passes, then report ----
     if (body.step) {
