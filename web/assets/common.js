@@ -82,7 +82,7 @@ const RS = (() => {
 const RS_PAGES = [["staff.html", "ใบงานแจ้งซ่อม (ใบงาน อะไหล่ ขอซื้อ รายงาน ตั้งค่า)"], ["fms.html", "FMS Round · Tracer JCI"], ["gate.html", "ป้อม รปภ. ผู้รับเหมา"],
   ["pmboard.html", "PM Board · ความพร้อมอาคาร"], ["pm.html", "PM Inhouse / PM MA"], ["ma.html", "สัญญา MA 12 โรง"], ["op.html", "บันทึก OP"], ["book.html", "Monthly Report"],
   ["market.html", "ตลาดอะไหล่"], ["ref.html", "เบอร์ภายใน · ข้อมูลพื้นที่"], ["ac.html", "งานผู้รับเหมาแอร์"], ["survey.html", "แบบสอบถาม"], ["wp.html", "Work Permit"],
-  ["ops.html", "ส่งเวร · รายงานเดือน · คลังวิธีแก้"], ["kpi.html", "KPI ตามสัญญา (แนบ 4)"], ["training.html", "อบรม · แฟ้มสมรรถนะ"], ["energy.html", "รายงานพลังงาน (GHI)"], ["perf.html", "ประชุม Bi-Weekly Performance"]];
+  ["ops.html", "ส่งเวร · รายงานเดือน · คลังวิธีแก้"], ["kpi.html", "KPI ตามสัญญา (แนบ 4)"], ["training.html", "อบรม · แฟ้มสมรรถนะ"], ["energy.html", "รายงานพลังงาน (GHI)"], ["perf.html", "ประชุม Bi-Weekly Performance"], ["opd.html", "Operation Dashboard (รวม)"], ["jci.html", "แฟ้มพร้อมตรวจ JCI"]];
 (() => {
   const here = (location.pathname.split("/").pop() || "index.html").toLowerCase();
   if (!RS_PAGES.some(([p]) => p === here)) return;
