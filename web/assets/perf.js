@@ -295,7 +295,18 @@
     $("#blMsg").innerHTML = `<p class="note ok">ใช้งานค้างในระบบ RS ${rows.length} ใบ</p>`; fillFromBacklog(); drawBl(); if (canWrite) await persist(false);
   });
   // Backlog report: executive summary + analysis from the uploaded backlog rows only (no invented numbers)
-  function blDeck() {
+  // Burn-down target to zero by 31 Dec: >60-day jobs first, then the rest, one row per week (Saturday)
+  function blBurn() {
+    const n = BL.rows.length, over = BL.rows.filter(r => +r.age > 60).length, end = new Date(new Date().getFullYear(), 11, 31), out = [];
+    const d = new Date(); d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7)); const wk = [];
+    for (const x = new Date(d); x <= end; x.setDate(x.getDate() + 7)) wk.push(new Date(x));
+    if (!wk.length || wk[wk.length - 1] < end) wk.push(new Date(end));
+    const w60 = Math.max(1, Math.ceil(wk.length / 2));
+    wk.forEach((x, i) => { const o = Math.max(0, Math.round(over * (1 - (i + 1) / w60))), left = Math.max(0, Math.round(n * (1 - (i + 1) / wk.length)));
+      out.push([`สัปดาห์ ${i + 1} (ถึง ${x.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })})`, Math.max(left, o), o, i + 1 <= w60 ? "เคลียร์งานเกิน 60 วันก่อน" : "ไล่ปิดงานที่เหลือตามอายุ"]); });
+    return out;
+  }
+  async function blDeck() {
     const H = hosp(), R = BL.rows, M = blMatrix(), n = R.length, pc = v => nf(v * 100 / n, 1) + "%";
     const over = R.filter(r => +r.age > 60).length, mid = R.filter(r => +r.age > 30 && +r.age <= 60).length, d1 = R.filter(r => +r.age <= 1).length;
     const avg = R.reduce((s, r) => s + (+r.age || 0), 0) / n, old = Math.max(...R.map(r => +r.age || 0));
@@ -314,12 +325,19 @@
       `ประเภทงานที่ค้างมากที่สุด: ${TS.slice(0, 3).map(([k, v]) => `${k} ${v} ใบ`).join(", ")}`,
       ...(mid ? [`งานอายุ 30–60 วัน ${mid} ใบ จะกลายเป็นงานเกิน 60 วันภายใน 1 เดือนถ้าไม่เร่งปิด`] : [])];
     const top = [...R].sort((a, b) => (+b.age || 0) - (+a.age || 0)).slice(0, 12);
+    const A = AI.report, last = it => it.actions.map(a => a.due).filter(Boolean).slice(-1)[0] || "-";
+    if (A) { findings.push("วิธีแก้โดย AI 3 คน: " + A.summary); analysis.push(...A.analysis.slice(0, 4)); }
+    else findings.push("ยังไม่มีวิธีแก้และแผนจาก AI 3 คน: กดปุ่ม 🤖 ด้านล่างก่อน แล้วดาวน์โหลดรายงานนี้ใหม่");
+    const extra = [{ title: "แผนทำให้เสร็จ: เป้าหมายงานค้างคงเหลือรายสัปดาห์ถึง 31 ธ.ค.", head: ["สัปดาห์", "งานค้างคงเหลือไม่เกิน (ใบ)", "งานเกิน 60 วันคงเหลือ (ใบ)", "จุดเน้น"], chart: false, left: true, colW: [4.2, 2.6, 2.6, 2.9], fs: 12, rows: blBurn() },
+      ...(A ? [{ title: "วิธีแก้ไขและกำหนดเสร็จ (AI 3 คน)", head: ["กลุ่ม", "ปัญหา / สาเหตุราก", "วิธีแก้ไข", "ผู้รับผิดชอบ", "เสร็จภายใน"], chart: false, left: true, colW: [0.9, 3.4, 5.2, 1.6, 1.2], fs: 10,
+        rows: A.items.map(it => [it.code, `${it.title}\nสาเหตุราก: ${it.root_cause}`, it.actions.map((a, i) => `${i + 1}. ${a.step}`).join("\n"), [...new Set(it.actions.map(a => a.owner))].join(", "), last(it)]) }] : [])];
+    const more = A ? (await aiSlides()).slice(1) : [];
     return { title: `รายงานงานค้าง (Backlog) ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${thd(meet())} · ที่มา: ${BL.file || "งานค้างในระบบ RS"}`,
       findings, kpis: [["งานค้างทั้งหมด", n], ["ค้างเกิน 60 วัน", over], ["อายุเฉลี่ย (วัน)", nf(avg, 1)], ["เก่าสุด (วัน)", old]], analysis,
       sections: [{ title: "งานค้างตามอายุและกลุ่ม", head: ["ช่วงอายุ", ...GRP.map(g => g[1]), "รวม"], chart: false, rows: [...AGE.map((a, i) => [a[0], ...GRP.map(g => M[i][g[0]]), GRP.reduce((s, g) => s + M[i][g[0]], 0)]), ["รวม", ...GRP.map(g => M.reduce((s, r) => s + r[g[0]], 0)), n]] },
         { title: "เหตุผลที่ค้าง", head: ["เหตุผล / สถานะค้าง", "ใบ", "%"], rows: RS.slice(0, 12).map(([k, v]) => [k, v, pc(v)]) },
-        { title: "งานค้างนานที่สุด 12 ใบ", head: ["เลขใบงาน", "อายุ (วัน)", "ประเภท", "รายละเอียด", "เหตุผล"], chart: false, left: true, colW: [1.8, 1.1, 1.6, 5.3, 2.5], fs: 11, rows: top.map(r => [r.no, r.age ?? "", r.type || "", String(r.detail || "").slice(0, 70), r.reason || r.status || ""]) }],
-      notes: ["เคลียร์งานเกิน 60 วันก่อน แล้วไล่ตามอายุ", "งานรออะไหล่ / ผู้รับเหมา / พื้นที่ ต้องมี PR หรือ Memo ภายใน 24 ชม. และวันวางเสร็จทุกใบ", "ให้ AI 3 คนทำ Action plan (RCA) ต่อจากรายงานนี้ได้ที่ปุ่ม 🤖 ด้านบน"] };
+        { title: "งานค้างนานที่สุด 12 ใบ", head: ["เลขใบงาน", "อายุ (วัน)", "ประเภท", "รายละเอียด", "เหตุผล"], chart: false, left: true, colW: [1.8, 1.1, 1.6, 5.3, 2.5], fs: 11, rows: top.map(r => [r.no, r.age ?? "", r.type || "", String(r.detail || "").slice(0, 70), r.reason || r.status || ""]) }, ...extra, ...more],
+      notes: ["เคลียร์งานเกิน 60 วันก่อน แล้วไล่ตามอายุ", "งานรออะไหล่ / ผู้รับเหมา / พื้นที่ ต้องมี PR หรือ Memo ภายใน 24 ชม. และวันวางเสร็จทุกใบ", ...(A ? A.follow_up.slice(0, 5).map(x => "ติดตามผล: " + x) : ["ให้ AI 3 คนทำวิธีแก้และแผน (RCA) ได้ที่ปุ่ม 🤖 ด้านล่าง แล้วดาวน์โหลดรายงานนี้ใหม่"])] };
   }
   function drawBl() {
     const R = BL.rows;
@@ -333,10 +351,11 @@
       <tr class="sum"><td>รวม</td>${GRP.map(g => `<td class="num">${tot(g[0])}</td>`).join("")}<td class="num">${R.length}</td></tr></tbody></table></div>
       <h3>เหตุผลที่ค้าง</h3><div class="tw"><table class="pt"><thead><tr><th>เหตุผล / สถานะค้าง</th><th>ใบ</th><th>%</th></tr></thead><tbody>${Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td><td class="num">${nf(v * 100 / R.length, 1)}%</td></tr>`).join("")}</tbody></table></div>` +
       `<div class="acts"><button class="btn primary" type="button" id="bP">รายงานงานค้าง (PPT บทสรุป + วิเคราะห์)</button><button class="btn" type="button" id="bW">Word</button><button class="btn" type="button" id="bF">PDF</button><button class="btn" type="button" id="bX">Excel</button></div>`;
-    const bRun = fn => () => { try { fn(blDeck()); } catch (e) { toast(errText(e), true); } };
-    $("#bP").onclick = bRun(d => Office.pptx(fname("Backlog"), d)); $("#bW").onclick = bRun(d => Office.docx(fname("Backlog"), d)); $("#bF").onclick = bRun(d => Office.pdf(fname("Backlog"), d).catch(e => toast(errText(e), true)));
+    const bRun = fn => () => { if (!AI.report) toast("ยังไม่มีวิธีแก้จาก AI 3 คน รายงานนี้จะมีแค่ข้อมูลงานค้างและแผนรายสัปดาห์ กด 🤖 ด้านล่างก่อนเพื่อให้มีวิธีแก้ครบ", true); blDeck().then(fn).catch(e => toast(errText(e), true)); };
+    $("#bP").onclick = bRun(d => Office.pptx(fname("Backlog"), d)); $("#bW").onclick = bRun(d => Office.docx(fname("Backlog"), d)); $("#bF").onclick = bRun(d => Office.pdf(fname("Backlog"), d));
     $("#bX").onclick = bRun(d => Office.xlsx(fname("Backlog"), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: [...d.findings, ...d.analysis], notes: d.notes, figures: d.kpis }),
-      ...d.sections.map(x => ({ name: x.title, rows: [x.head, ...x.rows], header: 0 })),
+      ...d.sections.filter(x => x.rows && !x.svg).slice(0, 4 + (AI.report ? 1 : 0)).map(x => ({ name: x.title.slice(0, 31), rows: [x.head, ...x.rows], header: 0 })),
+      ...(AI.report ? aiSheets() : []), ...Office.drawSheets(d),
       { name: "รายการงานค้างทั้งหมด", rows: [["เลขใบงาน", "อายุ (วัน)", "กลุ่ม", "ประเภท", "สถานที่", "รายละเอียด", "สถานะค้าง", "เหตุผล", "ผู้รับผิดชอบ"],
         ...[...R].sort((a, b) => (+b.age || 0) - (+a.age || 0)).map(r => [r.no, r.age ?? "", GRP.find(g => g[0] === grpOf(r))[1], r.type || "", r.loc || "", r.detail || "", r.status || "", r.reason || "", r.owner || ""])], header: 0 }]));
     const list = [...R].sort((a, b) => (+b.age || 0) - (+a.age || 0));
