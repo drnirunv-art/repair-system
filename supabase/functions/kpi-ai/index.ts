@@ -47,8 +47,8 @@ const CHECK_SHAPE = `ตอบเป็น JSON อย่างเดียว �
 approved = true เมื่อไม่มีสิ่งที่ต้องแก้แล้วเท่านั้น ถ้า approved = false ต้องมี issues อย่างน้อย 1 ข้อ เขียนแต่ละข้อให้ AI 1 แก้ได้ทันที`;
 const SHAPE = `ตอบเป็น JSON อย่างเดียว ไม่มีข้อความอื่น รูปแบบ:
 {"summary":"","analysis":[""],"items":[{"code":"","title":"","m4":{"man":[""],"machine":[""],"method":[""],"material":[""]},"why5":["ทำไม 1: ...","ทำไม 2: ..."],"root_cause":"","project":{"name":"","goal":"","budget":""},"actions":[{"step":"","owner":"","due":"","measure":""}],"expected_result":""}],"swot":{"strengths":[""],"weaknesses":[""],"opportunities":[""],"threats":[""]},"timeline":[{"when":"","activity":""}],"risks":[""],"review_notes":[""],"follow_up":[""]}
-m4 แต่ละด้านไม่เกิน 4 สาเหตุ แต่ละสาเหตุสั้นไม่เกิน 25 ตัวอักษร
-swot แต่ละช่อง 3-5 ข้อ แต่ละข้อสั้นไม่เกิน 40 ตัวอักษร`;
+m4 แต่ละด้านไม่เกิน 4 สาเหตุ เขียนกระชับแต่ครบถ้วนเป็นประโยคสมบูรณ์
+swot แต่ละช่อง 3-5 ข้อ ทุกข้อเขียนกระชับแต่ครบถ้วนเป็นประโยคสมบูรณ์ ห้ามตัดคำหรือใส่ ...`;
 // Google retires model names over time, so the model is picked from the key's own model list when the preferred one is gone.
 let GEMINI = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
 const G = "https://generativelanguage.googleapis.com/v1beta";
