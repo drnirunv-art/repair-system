@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Water Management · ตรวจคุณภาพน้ำ | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .hsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+  .hsel select,.hsel input,form.tf select,form.tf input,form.tf textarea,table.tt input,table.tt select,.act textarea,.act input,.act select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:#17212b;background:#fff}
+  .hsel select,.hsel input{width:auto;max-width:100%}
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#fff;margin:8px 0}
+  table.tt td,table.tt th{padding:6px 8px;color:#17212b;text-align:left;vertical-align:top}
+  table.tt th{background:#eef3f8;font-size:13px;white-space:nowrap}
+  table.tt td.n{text-align:right;white-space:nowrap}
+  table.tt input,table.tt select{padding:5px 7px;font-size:14px;width:100%;min-width:80px}
+  table.tt input.sm{width:90px;min-width:70px}
+  table.tt select[data-k=freq]{min-width:130px}
+  .ok{background:#d5f0df}.soon,.warn{background:#fcefd2}.over,.fail{background:#f8d7d3}.never{background:#f3f4f6;color:#4b5563}
+  .kpi b.good{color:#14632f}.kpi b.bad{color:#9b1c13}.kpi b.mid{color:#8a5a00}
+  form.tf{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;align-items:end;margin:8px 0}
+  form.tf label{font-size:13px;font-weight:600;display:flex;flex-direction:column;gap:4px;color:#17212b}
+  form.tf .wide{grid-column:1/-1}
+  .note{border-left:4px solid #0b5cad;background:#f4f9ff;padding:8px 12px;border-radius:8px;color:#17212b;margin:8px 0}
+  .note.bad{border-color:#b42318;background:#fff4f2}
+  .pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:12px;border:1px solid var(--line);background:#fff;color:#17212b;white-space:nowrap}
+  .acts{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  .lgd{display:flex;gap:8px;flex-wrap:wrap;font-size:13px;margin:6px 0}.lgd span{padding:2px 8px;border-radius:6px;color:#17212b}
+  .act{border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px 12px;margin:8px 0;color:#17212b}
+  .act.open{border-left:5px solid #b42318}.act.done{border-left:5px solid #1f7a3d}
+  .act .g{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:8px}
+  .act label{font-size:13px;font-weight:600;display:flex;flex-direction:column;gap:4px}
+  .act textarea{min-height:60px}
+  .pt{border:1px solid var(--line);border-radius:10px;background:#fff;margin:10px 0;padding:8px 10px}
+  .pt h3{margin:4px 0 6px;font-size:16px}
+  svg.trend{width:100%;height:auto;background:#fff;border:1px solid var(--line);border-radius:10px}
+  @media print{header,nav,.hsel,.acts,form,.noprint{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">น้ำ</span><h1>Water Management · ตรวจคุณภาพน้ำ (JCI FMS.08.04)</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าเจ้าหน้าที่</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="sum" aria-selected="true">ภาพรวม</button>
+    <button role="tab" data-tab="due" aria-selected="false">ตารางตรวจตามความถี่</button>
+    <button role="tab" data-tab="rec" aria-selected="false">บันทึกผลตรวจ</button>
+    <button role="tab" data-tab="hist" aria-selected="false">ผลย้อนหลัง · แนวโน้ม</button>
+    <button role="tab" data-tab="act" aria-selected="false">นอกเกณฑ์ · การแก้ไข</button>
+    <button role="tab" data-tab="reg" aria-selected="false">ทะเบียนจุดตรวจ</button>
+    <button role="tab" data-tab="std" aria-selected="false">ค่ามาตรฐาน</button>
+    <button role="tab" data-tab="all" aria-selected="false" id="tabAll" hidden>12 โรง</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="home.html">หน้าหลัก</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <div id="body" hidden>
+    <div class="hsel"><label for="h">โรงพยาบาล</label><select id="h"></select>
+      <label for="sys">ระบบน้ำ</label><select id="sys"></select>
+      <span class="sub" id="ro"></span></div>
+
+    <section id="tab-sum">
+      <div class="hsel"><label for="per">ช่วงผลตรวจ</label><select id="per"><option value="30">30 วันล่าสุด</option><option value="90" selected>90 วันล่าสุด</option><option value="180">6 เดือนล่าสุด</option><option value="365">12 เดือนล่าสุด</option></select></div>
+      <p class="sub">แผนจัดการน้ำ (Water Management Plan) ตาม JCI 8th FMS.08.04: ทุกจุดตรวจต้องตรวจครบตามความถี่ ผลต้องอยู่ในเกณฑ์ และผลที่นอกเกณฑ์ต้องมีการแก้ไขพร้อมผลตรวจซ้ำ</p>
+      <div class="kpis" id="tot"></div>
+      <div id="alert"></div>
+      <h2>บทสรุปผู้บริหาร</h2>
+      <ol id="find"></ol>
+      <h2>บทวิเคราะห์</h2>
+      <ol id="anal"></ol>
+      <h2>แยกตามระบบน้ำ</h2>
+      <div class="tw"><table class="tt" id="bySys"></table></div>
+      <h2>ผลนอกเกณฑ์ในช่วงที่เลือก</h2>
+      <div class="tw"><table class="tt" id="fails"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="oX">ดาวน์โหลด Excel (บทสรุป + ผลตรวจ)</button><button class="btn" type="button" id="wP">PPT (บทสรุป + วิเคราะห์)</button></div>
+    </section>
+
+    <section id="tab-due" hidden>
+      <p class="sub">วันครบกำหนด = วันที่ตรวจครั้งล่าสุด + ความถี่ของรายการ กดปุ่ม "บันทึกผล" เพื่อกรอกผลของจุดนั้น</p>
+      <div class="lgd"><span class="ok">ตรวจแล้ว ยังไม่ถึงกำหนด</span><span class="soon">ใกล้ถึงกำหนด / ถึงกำหนดวันนี้</span><span class="over">เลยกำหนดแล้ว</span><span class="never">ยังไม่เคยตรวจ</span></div>
+      <div class="hsel"><label for="dF">แสดง</label><select id="dF"><option value="">ทุกรายการ</option><option value="todo" selected>ต้องตรวจ (เลยกำหนด / ใกล้ถึง / ยังไม่เคย)</option><option value="over">เฉพาะเลยกำหนด</option></select></div>
+      <div class="tw"><table class="tt" id="dList"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="dX">ดาวน์โหลด Excel (ตารางตรวจ)</button></div>
+    </section>
+
+    <section id="tab-rec" hidden>
+      <div class="panel" id="recPanel">
+        <h2>บันทึกผลตรวจน้ำ</h2>
+        <form class="tf" id="fR">
+          <label>จุดตรวจ<select id="rP" required></select></label>
+          <label>วันที่เก็บตัวอย่าง<input type="date" id="rD" required></label>
+          <label>ผู้ตรวจ / ห้องปฏิบัติการ<input id="rLab" placeholder="เช่น ช่างกะเช้า หรือ ชื่อห้องปฏิบัติการ"></label>
+          <label>เลขที่รายงานผล<input id="rNo" placeholder="ถ้าส่งห้องปฏิบัติการ"></label>
+          <div class="wide"><p class="sub">กรอกเฉพาะรายการที่ตรวจในวันนี้ ช่องที่เว้นว่างจะไม่บันทึก ระบบเทียบเกณฑ์ให้เอง ถ้านอกเกณฑ์จะเปิดรายการแก้ไขให้ทันที</p>
+            <div class="tw"><table class="tt" id="rRows"></table></div></div>
+          <div class="wide"><button class="btn primary" type="submit">บันทึกผล</button> <span class="sub" id="rMsg" role="status"></span></div>
+        </form>
+      </div>
+      <div id="rDone"></div>
+    </section>
+
+    <section id="tab-hist" hidden>
+      <div class="hsel"><label for="hP">จุดตรวจ</label><select id="hP"></select>
+        <label for="hI">รายการ</label><select id="hI"></select>
+        <label for="hF">ตั้งแต่</label><input type="date" id="hF"><label for="hT">ถึง</label><input type="date" id="hT"></div>
+      <div id="trend"></div>
+      <div class="tw"><table class="tt" id="hList"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="hX">ดาวน์โหลด Excel (ผลตรวจย้อนหลัง)</button></div>
+    </section>
+
+    <section id="tab-act" hidden>
+      <p class="sub">ผลตรวจที่นอกเกณฑ์ทุกรายการเปิดเป็นรายการแก้ไขโดยอัตโนมัติ ให้เขียนสาเหตุ การแก้ไข ผู้รับผิดชอบ และวันที่ต้องเสร็จ เปิดใบแจ้งซ่อมได้ทันที ปิดรายการได้เมื่อแก้ไขแล้ว (ควรแนบผลตรวจซ้ำที่ผ่านเกณฑ์)</p>
+      <div class="hsel"><label for="aF">แสดง</label><select id="aF"><option value="open" selected>ยังไม่ปิด</option><option value="done">ปิดแล้ว</option><option value="">ทั้งหมด</option></select></div>
+      <div id="aList"></div>
+      <div class="acts"><button class="btn primary" type="button" id="aX">ดาวน์โหลด Excel (รายการแก้ไข)</button></div>
+    </section>
+
+    <section id="tab-reg" hidden>
+      <div class="panel" id="regPanel">
+        <h2>เพิ่มจุดตรวจ</h2>
+        <form class="tf" id="fP">
+          <label>ระบบน้ำ<select id="pS"></select></label>
+          <label>รหัสจุดตรวจ<input id="pC" required placeholder="เช่น CT-01, RO-HD-1"></label>
+          <label>ชื่อจุดตรวจ<input id="pN" required placeholder="เช่น Cooling tower ชุดที่ 1"></label>
+          <label>ที่ตั้ง<input id="pL" placeholder="เช่น ดาดฟ้าอาคาร A"></label>
+          <label class="wide" style="flex-direction:row;align-items:center"><input type="checkbox" id="pT" checked> ใส่รายการตรวจตามค่ามาตรฐานของระบบนี้ให้เลย</label>
+          <div><button class="btn primary" type="submit">เพิ่มจุดตรวจ</button> <span class="sub" id="pMsg" role="status"></span></div>
+        </form>
+      </div>
+      <div id="pList"></div>
+      <div class="acts"><button class="btn primary" type="button" id="rX">ดาวน์โหลด Excel (ทะเบียนจุดตรวจและแผนการตรวจ)</button></div>
+    </section>
+
+    <section id="tab-std" hidden>
+      <div class="note">ค่าเริ่มต้นตามมาตรฐานที่อ้างอิงในแต่ละแถว ใช้เป็นจุดตั้งต้นเมื่อเพิ่มจุดตรวจ แต่ละโรงต้องปรับเกณฑ์และความถี่ในแท็บ "ทะเบียนจุดตรวจ" ให้ตรงกับแผนจัดการน้ำ (Water Management Plan) ที่คณะกรรมการควบคุมการติดเชื้อ (IC) และคณะกรรมการสิ่งแวดล้อมและความปลอดภัยของโรงพยาบาลอนุมัติ</div>
+      <div class="tw"><table class="tt" id="sList"></table></div>
+    </section>
+
+    <section id="tab-all" hidden>
+      <p class="sub">สถานะการตรวจน้ำของทุกโรงที่บัญชีนี้ดูได้ ผลตรวจและผลนอกเกณฑ์นับ 90 วันล่าสุด</p>
+      <div class="tw"><table class="tt" id="vList"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="vX">ดาวน์โหลด Excel (12 โรง)</button></div>
+    </section>
+  </div>
+</main>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+<script src="assets/water.js"></script>
+</body>
+</html>
