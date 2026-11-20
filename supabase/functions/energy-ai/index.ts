@@ -22,9 +22,12 @@ const Report = z.object({
   support: z.array(z.string()),
   data_gaps: z.array(z.string()),
   review_notes: z.array(z.string()),
+  swot: z.object({ strengths: z.array(z.string()), weaknesses: z.array(z.string()), opportunities: z.array(z.string()), threats: z.array(z.string()) }).optional(),
+  rca: z.object({ problem: z.string(), m4: z.object({ man: z.array(z.string()), machine: z.array(z.string()), method: z.array(z.string()), material: z.array(z.string()) }), why5: z.array(z.string()), root_cause: z.string() }).optional(),
 });
 const SHAPE = `ตอบเป็น JSON อย่างเดียว ไม่มีข้อความอื่น รูปแบบ:
-{"summary":"","analysis":[""],"factors":[{"factor":"","impact":""}],"actions":[{"action":"","owner":"","due":"","saving":""}],"next_agenda":[{"topic":"","target":""}],"support":[""],"data_gaps":[""],"review_notes":[""]}`;
+{"summary":"","analysis":[""],"factors":[{"factor":"","impact":""}],"actions":[{"action":"","owner":"","due":"","saving":""}],"next_agenda":[{"topic":"","target":""}],"support":[""],"data_gaps":[""],"review_notes":[""],"swot":{"strengths":[""],"weaknesses":[""],"opportunities":[""],"threats":[""]},"rca":{"problem":"","m4":{"man":[""],"machine":[""],"method":[""],"material":[""]},"why5":[""],"root_cause":""}}
+swot แต่ละช่อง 3-5 ข้อ แต่ละข้อสั้นไม่เกิน 40 ตัวอักษร · rca.m4 แต่ละช่อง 1-4 ข้อ สั้นไม่เกิน 28 ตัวอักษร`;
 const Check = z.object({ approved: z.boolean(), issues: z.array(z.string()), summary: z.string() });
 const CHECK_SHAPE = `ตอบเป็น JSON อย่างเดียว รูปแบบ: {"approved":true,"issues":["สิ่งที่ต้องแก้ 1"],"summary":"สรุปผลการตรวจ 1-2 ประโยค"}
 approved = true เมื่อไม่มีสิ่งที่ต้องแก้แล้วเท่านั้น ถ้า approved = false ต้องมี issues อย่างน้อย 1 ข้อ เขียนแต่ละข้อให้แก้ได้ทันที`;
@@ -162,7 +165,7 @@ Deno.serve(async (req) => {
     }
     if (body.step === "report") {
       const rep = await obj(`${CONTEXT}\nบทบาทของคุณ: AI 3 ผู้ตรวจสอบ เรียบเรียงรายงานฉบับสุดท้ายจากเนื้อหาของ AI 1 และผลทบทวนของ AI 2`, SHAPE,
-        `ข้อมูล (JSON):\n${data}\n\nเนื้อหาของ AI 1:\n${p1}\n\nผลทบทวนของ AI 2:\n${p2}\n\nผลการตรวจของ AI 3:\n${String(body.log ?? "")}\n\nsummary = บทสรุปผู้บริหาร 3-5 ประโยค, analysis = บทวิเคราะห์ตัวเลข, factors = ปัจจัยและผลต่อการใช้ไฟ, actions = มาตรการ (due เป็นวันที่ เช่น 30 พ.ย. 2569, saving เป็น kWh/วัน หรือบาท/เดือน หรือ "ประเมินไม่ได้"), next_agenda = เรื่องติดตามครั้งหน้าพร้อมเป้าหมาย, support = เรื่องที่ขอสนับสนุนจากโรงพยาบาล, data_gaps = ข้อมูลที่ยังขาด, review_notes = สิ่งที่ AI 2 และ AI 3 ทักและแก้แล้ว`, Report);
+        `ข้อมูล (JSON):\n${data}\n\nเนื้อหาของ AI 1:\n${p1}\n\nผลทบทวนของ AI 2:\n${p2}\n\nผลการตรวจของ AI 3:\n${String(body.log ?? "")}\n\nsummary = บทสรุปผู้บริหาร 3-5 ประโยค, analysis = บทวิเคราะห์ตัวเลข, factors = ปัจจัยและผลต่อการใช้ไฟ, actions = มาตรการ (due เป็นวันที่ เช่น 30 พ.ย. 2569, saving เป็น kWh/วัน หรือบาท/เดือน หรือ "ประเมินไม่ได้"), next_agenda = เรื่องติดตามครั้งหน้าพร้อมเป้าหมาย, support = เรื่องที่ขอสนับสนุนจากโรงพยาบาล, data_gaps = ข้อมูลที่ยังขาด, review_notes = สิ่งที่ AI 2 และ AI 3 ทักและแก้แล้ว, swot = SWOT ของการใช้พลังงานโรงนี้ (S/W ปัจจัยภายในทีม, O/T ปัจจัยภายนอก) ต้องมีทุกครั้ง, rca = ปัญหาหลักด้านพลังงานสัปดาห์นี้ (problem สั้นไม่เกิน 30 ตัวอักษร) พร้อมสาเหตุก้างปลา 4M (คน เครื่องจักร วิธีการ วัสดุ) 5 Why และสาเหตุราก ต้องมีทุกครั้ง`, Report);
       return out({ report: rep, model });
     }
     return out({ error: "step ไม่ถูกต้อง" }, 400);

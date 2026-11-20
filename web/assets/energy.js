@@ -343,6 +343,77 @@
     img.onload = () => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0, w, h); try { ok(cv.toDataURL("image/png")); } catch (e) { ok(null); } };
     img.onerror = () => ok(null); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
 
+  // ---------- SWOT, RCA 4M fishbone + 5 Why and Gantt for the AI 3-role report (same as KPI / Bi-Weekly) ----------
+  const M4 = [["man", "คน (Man)"], ["machine", "เครื่องจักร (Machine)"], ["method", "วิธีการ (Method)"], ["material", "วัสดุ / อะไหล่ (Material)"]];
+  const lines = t => String(t || "").split("\n").map(x => x.replace(/^\s*(?:[-•]|\d+[.)])\s*/, "").trim()).filter(Boolean);
+  // Thai vowel and tone marks take no width, so count only the letters that do
+  const vis = t => t.replace(/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/g, "").length;
+  const cut = (t, n) => { if (vis(t) <= n) return t; let k = t.length; while (k > 0 && vis(t.slice(0, k)) > n - 1) k--; return t.slice(0, k) + "…"; };
+  const short = t => String(t || "").replace(/\s*\(.*$/, "");
+  const wrap = (t, n) => { const out = []; let rest = String(t || ""); while (rest.length > n && out.length < 2) { let k = rest.lastIndexOf(" ", n); if (k < n / 2) k = n; out.push(rest.slice(0, k).trim()); rest = rest.slice(k).trim(); } out.push(cut(rest, n)); return out; };
+  function fishSvg(head, title, r) {
+    const W = 1400, H = 600, Y = 300, x = v => esc(v);
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>` +
+      `<line x1="30" y1="${Y}" x2="1132" y2="${Y}" stroke="#1F2A37" stroke-width="6"/><polygon points="1126,${Y - 24} 1150,${Y} 1126,${Y + 24}" fill="#1F2A37"/>` +
+      `<rect x="1152" y="${Y - 92}" width="236" height="184" rx="14" fill="#FDE8E6" stroke="#B42318" stroke-width="3"/>` +
+      `<text x="1270" y="${Y - 52}" text-anchor="middle" font-size="22" font-weight="bold" fill="#9B1C13">${x(head)}</text>` +
+      wrap(short(title), 17).map((t, i) => `<text x="1270" y="${Y - 14 + i * 30}" text-anchor="middle" font-size="18" fill="#1F2A37">${x(t)}</text>`).join("");
+    M4.forEach(([k, lab], i) => { const J = i % 2 ? 1040 : 560, top = i < 2, ex = J - 220, ey = top ? 70 : 530;
+      s += `<line x1="${ex}" y1="${ey}" x2="${J}" y2="${Y}" stroke="#0B5CAD" stroke-width="4"/>` +
+        `<rect x="${ex - 125}" y="${top ? ey - 52 : ey + 6}" width="250" height="46" rx="9" fill="#0B5CAD"/><text x="${ex}" y="${top ? ey - 21 : ey + 37}" text-anchor="middle" fill="#ffffff" font-size="19" font-weight="bold">${lab}</text>`;
+      lines(r[k]).slice(0, 4).forEach((t, j) => { const yy = top ? 112 + 44 * j : 352 + 44 * j, bx = top ? ex + 220 * (yy - 70) / 230 : ex + 220 * (530 - yy) / 230;
+        s += `<line x1="${bx - 24}" y1="${yy}" x2="${bx}" y2="${yy}" stroke="#0B5CAD" stroke-width="2"/><text x="${bx - 30}" y="${yy + 6}" text-anchor="end" font-size="16" fill="#1F2A37">${x(cut(t, 28))}</text>`; }); });
+    return s + "</svg>";
+  }
+  const dAdd = (iso, n) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const dDiff = (a, b) => Math.round((new Date(b + "T00:00:00Z") - new Date(a + "T00:00:00Z")) / 864e5);
+  const dm = iso => new Date(iso + "T00:00:00").toLocaleDateString("th-TH", { day: "numeric", month: "short" });
+  function ganttSvg(rows) {
+    const W = 1400, L = 600, R = 1330, top = 58, rh = 34, H = top + rows.length * rh + 16, x = v => esc(v);
+    const d0 = rows.reduce((m, r) => r.start < m ? r.start : m, rows[0].start), d1 = rows.reduce((m, r) => r.end > m ? r.end : m, rows[0].end);
+    const span = Math.max(7, dDiff(d0, d1) + 1), px = d => L + (R - L) * dDiff(d0, d) / span, t = today();
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>` +
+      `<text x="20" y="34" font-size="17" font-weight="bold" fill="#1F2A37">ข้อ · ขั้นตอน</text><text x="${L - 10}" y="34" text-anchor="end" font-size="15" fill="#5B6776">วางเสร็จ</text>`;
+    for (let k = 0; k <= span; k += 7) { const d = dAdd(d0, k), xx = px(d); s += `<line x1="${xx}" y1="${top - 8}" x2="${xx}" y2="${H - 12}" stroke="#E3E9F1"/><text x="${xx + 3}" y="34" font-size="14" fill="#5B6776">${x(dm(d))}</text>`; }
+    rows.forEach((r, i) => { const y = top + i * rh, late = r.status !== "เสร็จ" && r.end < t, col = r.status === "เสร็จ" ? "#14632F" : late ? "#B42318" : r.status === "กำลังทำ" ? "#0B5CAD" : "#7F9CC0";
+      if (i % 2) s += `<rect x="10" y="${y}" width="${W - 20}" height="${rh}" fill="#F6F8FB"/>`;
+      s += `<text x="20" y="${y + 22}" font-size="15" fill="#1F2A37"><tspan font-weight="bold">${x(r.grp)}</tspan> ${x(cut(r.step, 44))}</text><text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="14" fill="${late ? "#B42318" : "#1F2A37"}">${x(dm(r.end))}</text>` +
+        `<rect x="${px(r.start)}" y="${y + 7}" width="${Math.max(6, px(dAdd(r.end, 1)) - px(r.start))}" height="${rh - 14}" rx="5" fill="${col}"/>`; });
+    if (t >= d0 && t <= d1) s += `<line x1="${px(t)}" y1="${top - 8}" x2="${px(t)}" y2="${H - 12}" stroke="#B42318" stroke-width="2" stroke-dasharray="6 4"/><text x="${px(t) + 4}" y="${top - 12}" font-size="13" fill="#B42318">วันนี้</text>`;
+    return { svg: s + "</svg>", w: W, h: H };
+  }
+  const SW = [["strengths", "S จุดแข็ง", "14632F", "E3F3E8"], ["weaknesses", "W จุดอ่อน", "B42318", "FDE8E6"], ["opportunities", "O โอกาส", "0B5CAD", "E3EEFA"], ["threats", "T อุปสรรค", "8A5A00", "FCEFD2"]];
+  // SWOT always goes into the executive summary and the analysis of every AI 3-role report
+  const swotLines = R => R && R.swot ? SW.map(([k, lab]) => `SWOT ${lab}: ${(R.swot[k] || []).join("; ") || "-"}`) : ["SWOT: รายงาน AI รอบนี้ทำก่อนมี SWOT กดปุ่ม 🤖 ใหม่เพื่อให้ AI 3 คนทำ SWOT"];
+  const swotOne = R => R && R.swot ? `SWOT: จุดแข็ง ${(R.swot.strengths || [])[0] || "-"} · จุดอ่อน ${(R.swot.weaknesses || [])[0] || "-"} · โอกาส ${(R.swot.opportunities || [])[0] || "-"} · อุปสรรค ${(R.swot.threats || [])[0] || "-"}` : swotLines(R)[0];
+  function swotSvg(sw) {
+    const W = 1400, H = 700, x = v => esc(v);
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
+    SW.forEach(([k, lab, ink, bg], i) => { const X = 20 + (i % 2) * 690, Y = 20 + Math.floor(i / 2) * 340;
+      s += `<rect x="${X}" y="${Y}" width="670" height="320" rx="12" fill="#${bg}" stroke="#${ink}" stroke-width="3"/><text x="${X + 24}" y="${Y + 44}" font-size="26" font-weight="bold" fill="#${ink}">${lab}</text>`;
+      ((sw && sw[k]) || []).slice(0, 5).forEach((t, j) => { s += `<text x="${X + 30}" y="${Y + 98 + j * 48}" font-size="23" fill="#1F2A37">${x("• " + cut(t, 44))}</text>`; }); });
+    return s + "</svg>";
+  }
+  const TM = [["ม.ค.", "มกราคม"], ["ก.พ.", "กุมภาพันธ์"], ["มี.ค.", "มีนาคม"], ["เม.ย.", "เมษายน"], ["พ.ค.", "พฤษภาคม"], ["มิ.ย.", "มิถุนายน"], ["ก.ค.", "กรกฎาคม"], ["ส.ค.", "สิงหาคม"], ["ก.ย.", "กันยายน"], ["ต.ค.", "ตุลาคม"], ["พ.ย.", "พฤศจิกายน"], ["ธ.ค.", "ธันวาคม"]];
+  function parseDue(v) {   // "15 ธ.ค. 2569", "15 ธันวาคม 69", "2026-12-15", "15/12/2569" -> ISO (CE); null when no date
+    const t = String(v || "").trim(), pad = n => String(n).padStart(2, "0"); let m, d, mo, y;
+    if ((m = t.match(/(\d{4})-(\d{2})-(\d{2})/))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else if ((m = t.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/))) { d = +m[1]; mo = +m[2]; y = +m[3]; }
+    else { const k = TM.findIndex(([a, b]) => t.includes(b) || t.includes(a) || t.includes(a.replace(/\./g, "")));
+      if (k < 0) return null; const ix = Math.max(...TM[k].map(n => t.indexOf(n))), before = t.slice(0, ix).match(/(\d{1,2})\D*$/), after = t.slice(ix).match(/(\d{2,4})/);
+      mo = k + 1; d = before ? +before[1] : (k === 11 || k === 1 ? 28 : 30); y = after ? +after[1] : 0; if (!before) d = new Date(2026, mo, 0).getDate(); }
+    if (!y) { y = +today().slice(0, 4); if (`${y}-${pad(mo)}-${pad(d)}` < dAdd(today(), -60)) y++; }
+    if (y < 100) y += 2500; if (y > 2400) y -= 543;
+    if (!(mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return null;
+    return `${y}-${pad(mo)}-${pad(Math.min(d, new Date(y, mo, 0).getDate()))}`;
+  }
+  const thd = d => d ? new Date(d + "T00:00:00").toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }) : "-";
+  // Gantt of the AI measures: each measure runs from the previous due date (or today) to its own due date
+  function aiPlanRows(R) { const out = [], t = today(); let prev = t;
+    (R && R.actions || []).forEach((a, i) => { const end = parseDue(a.due); if (!end) return;
+      out.push({ grp: `${i + 1}.`, step: a.action, owner: a.owner, start: end < prev ? (end < t ? dAdd(end, -7) : t) : prev, end, status: "ยังไม่เริ่ม", due: a.due }); prev = end; });
+    return out; }
+  const aiRca = R => Object.fromEntries(M4.map(m => [m[0], ((R.rca && R.rca.m4 && R.rca.m4[m[0]]) || []).join("\n")]));
   // ---------- รายการข้อมูลที่แต่ละโรงต้องใส่ (checklist of what each hospital must enter before Saturday 10:00) ----------
   // req 1 = needed for the report, 0 = optional. The same list scores every hospital in the 12-hospital table.
   function wItems(D, C) {
@@ -443,16 +514,19 @@
     const R = A.report, li = a => `<ul>${(a || []).map(x => `<li>${esc(x)}</li>`).join("") || "<li>-</li>"}</ul>`, tb = (h, rows) => `<div class="tw"><table><tr>${h.map(x => `<th>${esc(x)}</th>`).join("")}</tr>${rows.map(r => `<tr>${r.map(x => `<td>${esc(x)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${h.length}">-</td></tr>`}</table></div>`;
     box.hidden = false;
     box.innerHTML = `<h3>รายงานโดย AI 3 คน</h3>${AI_ROLES}<p class="sub">ทำเมื่อ ${new Date(A.at).toLocaleString("th-TH")} · ${A.rounds} รอบ · AI 3 ${A.approved ? "ให้ผ่าน" : "ยังมีข้อสังเกต (ดูตารางการตรวจ)"}${A.model ? ` · ${esc(A.model)}` : ""} · ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
-      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p><h3>บทวิเคราะห์ตัวเลข</h3>${li(R.analysis)}` +
+      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p><p>${esc(swotOne(R))}</p><h3>บทวิเคราะห์ตัวเลข</h3>${li(R.analysis)}` +
+      (R.swot ? `<h3>SWOT</h3><div class="fish">${swotSvg(R.swot)}</div>` : `<p class="note">${esc(swotLines(R)[0])}</p>`) +
+      (R.rca ? `<h3>RCA ก้างปลา 4M</h3><div class="fish">${fishSvg("ปัญหา", R.rca.problem, aiRca(R))}</div><p><b>5 Why:</b></p><ol>${(R.rca.why5 || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><p><b>สาเหตุราก:</b> ${esc(R.rca.root_cause)}</p>` : "") +
       `<h3>ปัจจัยที่มีผล</h3>${tb(["ปัจจัย", "ผลต่อการใช้ไฟ"], R.factors.map(f => [f.factor, f.impact]))}` +
       `<h3>มาตรการที่เสนอ</h3>${tb(["มาตรการ", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "ผลประหยัด"], R.actions.map(a => [a.action, a.owner, a.due, a.saving]))}` +
+      (() => { const P = aiPlanRows(R); return P.length ? `<h3>แผนงานและวันวางเสร็จ (Gantt)</h3><div class="fish">${ganttSvg(P).svg}</div>` : ""; })() +
       `<h3>วาระติดตามครั้งหน้า</h3>${tb(["เรื่อง", "เป้าหมาย"], R.next_agenda.map(a => [a.topic, a.target]))}` +
       `<h3>ขอสนับสนุนจากโรงพยาบาล</h3>${li(R.support)}<h3>ข้อมูลที่ยังขาด</h3>${li(R.data_gaps)}` +
       `<h3>การทำงานของ AI 3 คน</h3>${tb(["รอบ", "AI", "ทำอะไร", "สิ่งที่สั่งแก้ / สรุปผลตรวจ"], aiLogRows(A))}<h3>สิ่งที่ AI 2 และ AI 3 ทักและแก้แล้ว</h3>${li(R.review_notes)}` +
       `<details><summary>ดูเนื้อหาเต็มของ AI 1 และ AI 2 แต่ละรอบ</summary>${A.log.filter(x => !x.who.startsWith("AI 3")).map(x => `<p><b>รอบ ${x.r} · ${esc(x.who)}</b></p><div style="white-space:pre-wrap;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px">${esc(x.text)}</div>`).join("")}</details>` +
       `<div class="acts"><button class="btn" type="button" id="aiP">รายงาน AI (PPT)</button><button class="btn" type="button" id="aiW">รายงาน AI (Word)</button><button class="btn" type="button" id="aiF">รายงาน AI (PDF)</button><button class="btn" type="button" id="aiX">รายงาน AI (Excel)</button>` +
       (canWrite ? `<button class="btn" type="button" id="aiUse">เพิ่มมาตรการของ AI ลงข้อ 2.4</button>` : "") + `</div>`;
-    const go = fn => () => { try { const r = fn(aiDeck()); if (r && r.catch) r.catch(e => toast(errText(e), true)); } catch (e) { toast(errText(e), true); } };
+    const go = fn => () => { aiDeck().then(fn).catch(e => toast(errText(e), true)); };
     $("#aiP").onclick = go(d => Office.pptx(aiName(), d));
     $("#aiW").onclick = go(d => Office.docx(aiName(), d));
     $("#aiF").onclick = go(d => Office.pdf(aiName(), d));
@@ -461,22 +535,33 @@
       { name: "ปัจจัย", rows: [["ปัจจัย", "ผลต่อการใช้ไฟ"], ...R.factors.map(f => [f.factor, f.impact])], header: 0 },
       { name: "วาระครั้งหน้า", rows: [["เรื่อง", "เป้าหมาย"], ...R.next_agenda.map(a => [a.topic, a.target])], header: 0 },
       { name: "การทำงานของ AI", rows: [["รอบ", "AI", "ทำอะไร", "สิ่งที่สั่งแก้ / สรุปผลตรวจ"], ...aiLogRows(A)], header: 0 },
-      { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...R.analysis.map(x => [x]), [], ["ขอสนับสนุน"], ...R.support.map(x => [x]), [], ["ข้อมูลที่ยังขาด"], ...R.data_gaps.map(x => [x]), [], ["AI 2 / AI 3 ทักและแก้แล้ว"], ...R.review_notes.map(x => [x])], header: 0 }]));
+      ...(R.swot ? [{ name: "SWOT", rows: [["หัวข้อ", "รายการ"], ...SW.flatMap(([kk, lab]) => (R.swot[kk] || []).map((t, i) => [i ? "" : lab, t]))], header: 0 }] : []),
+      ...(R.rca ? [{ name: "RCA ก้างปลา 4M", rows: [["ปัญหา", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก"], [R.rca.problem, ...M4.map(m => ((R.rca.m4 || {})[m[0]] || []).join("\n")), (R.rca.why5 || []).join("\n"), R.rca.root_cause]], header: 0 }] : []),
+      ...(aiPlanRows(R).length ? [{ name: "แผนงาน Gantt", rows: [["ลำดับ", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "วางเสร็จ", "กำหนดเสร็จ (AI)"], ...aiPlanRows(R).map(p => [p.grp, p.step, p.owner, thd(p.start), thd(p.end), p.due])], header: 0 }] : []),
+      { name: "บทวิเคราะห์", rows: [["บทวิเคราะห์"], ...R.analysis.map(x => [x]), ...swotLines(R).map(x => [x]), [], ["ขอสนับสนุน"], ...R.support.map(x => [x]), [], ["ข้อมูลที่ยังขาด"], ...R.data_gaps.map(x => [x]), [], ["AI 2 / AI 3 ทักและแก้แล้ว"], ...R.review_notes.map(x => [x])], header: 0 }, ...Office.drawSheets(d)]));
     if ($("#aiUse")) $("#aiUse").onclick = () => { R.actions.forEach(a => wData.meas.push({ n: a.action, per: a.due, note: `${a.owner} · คาดประหยัด ${a.saving} (เสนอโดย AI)` }));
       rows2("meas"); drawChk(); toast(`เพิ่ม ${R.actions.length} มาตรการแล้ว ใส่ค่าก่อน/หลังทำ แล้วกด บันทึกร่าง`); $("#wMeas").scrollIntoView({ behavior: "smooth", block: "center" }); };
   }
   const aiName = () => `ประชุมEnergy_AI_${hosp().code || ""}_${$("#wk").value}`;
   const aiSections = A => { const R = A.report; return [
-    { title: "บทวิเคราะห์ตัวเลข (AI)", head: ["บทวิเคราะห์"], rows: R.analysis.map(x => [x]) },
+    { title: "บทวิเคราะห์ตัวเลข และ SWOT (AI)", head: ["บทวิเคราะห์"], rows: [...R.analysis, ...swotLines(R)].map(x => [x]) },
+    ...(R.rca ? [{ title: "5 Why และสาเหตุราก (AI)", head: ["หัวข้อ", "รายละเอียด"], rows: [["ปัญหา", R.rca.problem], ...(R.rca.why5 || []).slice(0, 5).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", R.rca.root_cause]] }] : []),
     { title: "ปัจจัยที่มีผล (AI)", head: ["ปัจจัย", "ผลต่อการใช้ไฟ"], rows: R.factors.map(f => [f.factor, f.impact]) },
     { title: "มาตรการที่เสนอ (AI)", head: ["มาตรการ", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "ผลประหยัด"], rows: R.actions.map(a => [a.action, a.owner, a.due, a.saving]) },
     { title: "วาระติดตามครั้งหน้า · ขอสนับสนุน (AI)", head: ["หัวข้อ", "รายละเอียด"], rows: [...R.next_agenda.map(a => ["ติดตาม: " + a.topic, a.target]), ...R.support.map(x => ["ขอสนับสนุน", x]), ...R.data_gaps.map(x => ["ข้อมูลที่ยังขาด", x])] },
     { title: "การทำงานของ AI 3 คน", head: ["รอบ", "AI", "ทำอะไร", "สิ่งที่สั่งแก้ / สรุปผลตรวจ"], rows: aiLogRows(A) }]; };
-  function aiDeck() {
+  async function aiDeck() {
     const A = wData.ai, R = A.report, H = hosp(), C = wCalc || {};
+    const swPic = R.swot ? await toPng(swotSvg(R.swot), 1400, 700) : null, fsv = R.rca ? fishSvg("ปัญหา", R.rca.problem, aiRca(R)) : null, fPic = fsv ? await toPng(fsv, 1400, 600) : null;
+    const PR = aiPlanRows(R), ch = []; for (let i = 0; i < PR.length; i += 14) ch.push(PR.slice(i, i + 14));
+    const gp = await Promise.all(ch.map(c => { const g = ganttSvg(c); return toPng(g.svg, g.w, g.h).then(img => ({ ...g, img })); }));
     return { title: `รายงานพลังงานโดย AI 3 คน · ${H.code}`, org: H.name, period: `ประชุมวันเสาร์ที่ ${dTH($("#wk").value)} · ${C.month || ""}`,
-      findings: [R.summary, ...R.analysis.slice(0, 4)], kpis: [["kWh เดือนนี้", nf(C.mtd)], ["เฉลี่ย kWh/วัน", nf(C.avg)], ["เป้าหมาย kWh/วัน", nf(C.tDay)], ["ปีก่อน kWh/วัน", nf(C.bDay)], ["ข้อมูลครบ", wScore(wData, C).pct + "%"], ["รอบที่ AI ตรวจ", String(A.rounds)]],
-      analysis: R.review_notes.map(x => "ทบทวนแล้ว: " + x), sections: aiSections(A),
+      findings: [R.summary, swotOne(R), ...R.analysis.slice(0, 3)], kpis: [["kWh เดือนนี้", nf(C.mtd)], ["เฉลี่ย kWh/วัน", nf(C.avg)], ["เป้าหมาย kWh/วัน", nf(C.tDay)], ["ปีก่อน kWh/วัน", nf(C.bDay)], ["ข้อมูลครบ", wScore(wData, C).pct + "%"], ["รอบที่ AI ตรวจ", String(A.rounds)]],
+      analysis: [...R.analysis.slice(0, 5), ...swotLines(R)],
+      sections: [...(R.swot ? [{ title: "SWOT", img: swPic, imgR: 0.5, svg: swotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }] : []),
+        ...(fsv ? [{ title: "RCA ก้างปลา 4M", img: fPic, svg: fsv, note: "สาเหตุราก: " + R.rca.root_cause }] : []),
+        ...gp.map((g, i) => ({ title: `แผนงานและวันวางเสร็จ (Gantt)${gp.length > 1 ? ` ${i + 1}/${gp.length}` : ""}`, img: g.img, imgR: g.h / g.w, svg: g.svg, note: `ทั้งหมด ${PR.length} มาตรการ วางเสร็จทั้งหมด ${thd(PR.reduce((m, p) => p.end > m ? p.end : m, PR[0].end))}` })),
+        ...aiSections(A), { title: "สิ่งที่ AI 2 และ AI 3 ทักและแก้แล้ว", head: ["ทบทวนแล้ว"], rows: R.review_notes.map(x => [x]) }],
       notes: ["AI 1 นำเสนอ · AI 2 วิเคราะห์ทบทวน · AI 3 ตรวจสอบ ถ้า AI 3 สั่งแก้ AI 1 และ AI 2 แก้อีก 1 รอบ", "ตัวเลขทั้งหมดมาจากรายงานของโรงในหน้านี้ ผู้นำเสนอต้องตรวจทานก่อนใช้"] };
   }
 
