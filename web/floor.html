@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>แผนผังอาคาร · ปักหมุดงานซ่อม | Repair System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  .hsel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+  .hsel select,.hsel input,form.tf select,form.tf input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:#17212b;background:#fff}
+  .hsel select,.hsel input{width:auto;max-width:100%}
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#fff;margin:8px 0}
+  table.tt td,table.tt th{padding:6px 8px;color:#17212b;text-align:left;vertical-align:top}
+  table.tt{min-width:760px}
+  table.tt th{background:#eef3f8;font-size:13px;white-space:nowrap}
+  table.tt td.n{text-align:right;white-space:nowrap}
+  form.tf{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 12px;align-items:end;margin:8px 0}
+  form.tf label{font-size:13px;font-weight:600;display:flex;flex-direction:column;gap:4px;color:#17212b}
+  form.tf .wide{grid-column:1/-1}
+  .note{border-left:4px solid #0b5cad;background:#f4f9ff;padding:8px 12px;border-radius:8px;color:#17212b;margin:8px 0}
+  .acts{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;align-items:center}
+  .lay{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;align-items:start}
+  @media (max-width:860px){.lay{grid-template-columns:1fr}.pin .lb{font-size:9px}.pin{min-width:20px;height:20px;font-size:11px}}
+  .stage{scroll-margin-top:130px;position:relative;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;max-height:78vh;touch-action:pan-x pan-y pinch-zoom}
+  .plan{position:relative;width:100%;margin:0;user-select:none}
+  .plan img{display:block;width:100%;height:auto;pointer-events:none}
+  .plan canvas.heat{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.75}
+  .plan.picking{cursor:crosshair;outline:3px dashed #d9620f;outline-offset:-3px}
+  .pin{position:absolute;transform:translate(-50%,-50%);border-radius:999px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45);
+       display:flex;align-items:center;justify-content:center;font:600 12px/1 var(--font);color:#fff;cursor:pointer;min-width:24px;height:24px;padding:0 5px;background:#5b6876}
+  .pin.c0{background:#8a95a1}.pin.c1{background:#1f8a4c}.pin.c2{background:#d08a00}.pin.c3{background:#c2352b}
+  .pin.equip{border-radius:5px}.pin.point{border-style:dashed}
+  .pin.job{min-width:14px;height:14px;padding:0;background:#6b4bb8;font-size:0}
+  .pin.sel{outline:3px solid #0b5cad;outline-offset:2px;z-index:3}
+  .pin .lb{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:2px;background:rgba(255,255,255,.92);color:#17212b;font-size:11px;font-weight:600;
+       padding:0 4px;border-radius:4px;white-space:nowrap;pointer-events:none}
+  .plan.nolabel .pin .lb{display:none}
+  .fside{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-height:78vh;overflow:auto}
+  .fside h3{margin:4px 0 6px;font-size:15px}
+  .fside .jl{list-style:none;margin:0;padding:0}
+  .fside .jl li{border-top:1px solid var(--line);padding:6px 0;font-size:13px;color:#17212b}
+  .lgd{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;margin:6px 0;align-items:center;color:#17212b}
+  .lgd i{display:inline-block;width:14px;height:14px;border-radius:999px;vertical-align:-2px;margin-right:4px}
+  .zoom{display:flex;gap:4px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin:8px 0}
+  .pc{border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px;color:#17212b}
+  .pc img{width:100%;height:130px;object-fit:contain;background:#f3f5f7;border-radius:6px}
+  .pc b{display:block;margin-top:4px}
+  .steps{margin:6px 0 6px 18px;padding:0;color:#17212b}.steps li{margin:3px 0}
+  .bad{color:#9b1c13}.mid{color:#8a5a00}.good{color:#14632f}
+  @media print{header,nav,.hsel,.acts,form,.noprint{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="top"><span class="tag">แผนผัง</span><h1>แผนผังอาคาร · ปักหมุดงานซ่อม</h1>
+    <div class="who"><span id="who"></span><a class="btn small" href="staff.html">← กลับหน้าเจ้าหน้าที่</a></div></div>
+  <nav role="tablist" id="tabs" hidden>
+    <button role="tab" data-tab="map" aria-selected="true">ดูแผนผัง</button>
+    <button role="tab" data-tab="hot" aria-selected="false">จุดเสียบ่อย</button>
+    <button role="tab" data-tab="plans" aria-selected="false">จัดการแผนผัง</button>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="home.html">หน้าหลัก</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
+  <div id="body" hidden>
+    <div class="hsel"><label for="h">โรงพยาบาล</label><select id="h"></select>
+      <label for="d1">งานซ่อมตั้งแต่</label><input type="date" id="d1"><label for="d2">ถึง</label><input type="date" id="d2">
+      <select id="qr" aria-label="ช่วงเวลาด่วน"><option value="">เลือกช่วงเร็ว</option><option value="30">30 วันล่าสุด</option><option value="90">90 วันล่าสุด</option><option value="180">6 เดือนล่าสุด</option><option value="365">1 ปีล่าสุด</option></select>
+      <span class="sub" id="ro"></span></div>
+
+    <section id="tab-map">
+      <div class="hsel"><label for="pl">แผนผัง</label><select id="pl"></select>
+        <label for="only">แสดงงาน</label><select id="only"><option value="">ทุกงาน (ยกเว้นยกเลิก)</option><option value="open">เฉพาะงานที่ยังไม่ปิด</option></select>
+        <label class="ck noprint" style="width:auto"><input type="checkbox" id="heat"> แสดงความร้อน (Heatmap)</label>
+        <label class="ck noprint" style="width:auto"><input type="checkbox" id="lbl" checked> แสดงชื่อหมุด</label>
+        <span class="zoom"><button class="btn small" type="button" id="zo" aria-label="ย่อ">−</button><button class="btn small" type="button" id="zr">100%</button><button class="btn small" type="button" id="zi" aria-label="ขยาย">+</button></span></div>
+      <div class="lgd"><span><i style="background:#8a95a1"></i>ยังไม่มีงาน</span><span><i style="background:#1f8a4c"></i>1-2 งาน</span><span><i style="background:#d08a00"></i>3-4 งาน</span><span><i style="background:#c2352b"></i>5 งานขึ้นไป (เสียบ่อย)</span>
+        <span>● วงกลม = แผนก</span><span>■ สี่เหลี่ยม = เครื่องจักร</span><span>◌ เส้นประ = จุดอื่น</span><span><i style="background:#6b4bb8;width:10px;height:10px"></i>งานที่ปักจุดเอง</span></div>
+      <div id="noPlan" class="note" hidden></div>
+      <div class="lay" id="lay">
+        <div>
+          <div class="acts noprint" id="editBar" hidden>
+            <b>หัวหน้า:</b>
+            <button class="btn" type="button" id="addDept">+ หมุดแผนก</button>
+            <button class="btn" type="button" id="addEq">+ หมุดเครื่องจักร</button>
+            <button class="btn" type="button" id="addPt">+ หมุดจุดอื่น</button>
+            <span class="sub" id="pickMsg" role="status"></span>
+            <button class="btn small" type="button" id="pickCancel" hidden>ยกเลิกการปัก</button>
+          </div>
+          <div class="stage" id="stage"><div class="plan" id="plan"><img id="pimg" alt="แผนผัง"><canvas class="heat" id="hc"></canvas></div></div>
+        </div>
+        <aside class="fside" id="side"></aside>
+      </div>
+      <h2>สรุปแผนผังนี้</h2>
+      <div class="kpis" id="pk"></div>
+      <div class="tw"><table class="tt" id="pTab"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="mX">ดาวน์โหลด Excel (แผนผังนี้)</button><button class="btn" type="button" id="mP">PPT (บทสรุป + วิเคราะห์)</button><button class="btn" type="button" id="mW">Word (บทสรุป + วิเคราะห์)</button><button class="btn" type="button" id="mF">PDF</button></div>
+    </section>
+
+    <section id="tab-hot" hidden>
+      <p class="sub">จัดอันดับจุดที่มีงานซ่อมมากที่สุดในช่วงวันที่เลือก ของทุกแผนผังของโรงนี้ รวมแผนก/เครื่องที่ยังไม่มีแผนผัง เพื่อวางแผนแก้ที่ต้นเหตุ (เปลี่ยนเครื่อง ปรับปรุงระบบ เพิ่มรอบ PM)</p>
+      <div class="kpis" id="hk"></div>
+      <div class="note" id="hNote"></div>
+      <h2>10 จุดที่เสียบ่อยที่สุด</h2>
+      <div class="tw"><table class="tt" id="hTop"></table></div>
+      <h2>ทุกจุดบนแผนผัง</h2>
+      <div class="tw"><table class="tt" id="hAll"></table></div>
+      <h2>งานที่ยังไม่อยู่บนแผนผัง (ตามอาคาร ชั้น แผนก)</h2>
+      <p class="sub">งานเหล่านี้ยังไม่มีแผนผังของชั้นนั้น หรือยังไม่มีหมุดของแผนกนั้น หัวหน้าเพิ่มแผนผังหรือหมุดได้ งานจะขึ้นบนแผนผังเอง</p>
+      <div class="tw"><table class="tt" id="hOff"></table></div>
+      <div class="acts"><button class="btn primary" type="button" id="hX">ดาวน์โหลด Excel (จุดเสียบ่อย)</button><button class="btn" type="button" id="hP">PPT (บทสรุป + วิเคราะห์)</button><button class="btn" type="button" id="hW">Word (บทสรุป + วิเคราะห์)</button><button class="btn" type="button" id="hF">PDF</button></div>
+    </section>
+
+    <section id="tab-plans" hidden>
+      <div class="panel" id="upForm">
+        <h2>เพิ่มแผนผังใหม่</h2>
+        <ol class="steps">
+          <li>เลือก อาคาร และ ชั้น (พิมพ์ให้ตรงกับที่ใช้ในใบแจ้งซ่อม ระบบจะเสนอชื่อที่มีอยู่แล้วให้เลือก)</li>
+          <li>กด เลือกไฟล์ แล้วเลือกรูปแผนผัง (JPG, PNG) หรือไฟล์ PDF (ระบบใช้หน้าแรกของ PDF)</li>
+          <li>กด อัปโหลดแผนผัง รอจนขึ้นว่า อัปโหลดแล้ว จากนั้นไปแท็บ ดูแผนผัง เพื่อปักหมุด</li>
+        </ol>
+        <form class="tf" id="fU">
+          <label>อาคาร<input id="uB" list="blist" required autocomplete="off"></label>
+          <label>ชั้น<input id="uF" list="flist" required autocomplete="off"></label>
+          <label>ชื่อแผนผัง (ไม่บังคับ)<input id="uT" placeholder="เช่น ชั้น 1 โซนฉุกเฉิน"></label>
+          <label>ไฟล์แผนผัง<input type="file" id="uFile" accept="image/jpeg,image/png,image/webp,application/pdf" required></label>
+          <label class="wide">หมายเหตุ<input id="uN"></label>
+          <div class="wide"><button class="btn primary" type="submit">อัปโหลดแผนผัง</button> <span class="sub" id="uMsg" role="status"></span></div>
+        </form>
+        <datalist id="blist"></datalist><datalist id="flist"></datalist>
+      </div>
+      <h2>แผนผังของโรงนี้</h2>
+      <div class="cards" id="pCards"></div>
+    </section>
+  </div>
+</main>
+<dialog class="pop" id="dlg"><form method="dialog" id="dlgF"></form></dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+<script src="assets/floor.js"></script>
+</body>
+</html>
