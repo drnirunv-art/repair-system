@@ -287,10 +287,10 @@
     fillFromBacklog(); drawBl(); if (canWrite) await persist(false);
   });
   $("#blSys").onclick = guard(async () => {
-    const H = hosp(), J = await sb.from("jobs").select("job_no,created_at,detail,status,hold_reason,job_types(name),locations(name)").eq("hospital_id", H.id).not("status", "in", "(clear,evaluated,close,cancel)").order("created_at").limit(5000);
+    const H = hosp(), J = await sb.from("jobs").select("job_no,created_at,updated_at,detail,status,hold_reason,job_types(name),locations(name)").eq("hospital_id", H.id).not("status", "in", "(clear,evaluated,close,cancel)").order("created_at").limit(5000);
     if (J.error) throw J.error;
     const now = Date.now(), ST = { register: "รอรับงาน", assign: "มอบหมายแล้ว", work_on: "กำลังทำ", on_hold: "หยุดรอ" };
-    const rows = (J.data || []).map(j => ({ no: j.job_no, date: j.created_at.slice(0, 10), type: (j.job_types && j.job_types.name) || "", loc: (j.locations && j.locations.name) || "", detail: j.detail, status: ST[j.status] || j.status, reason: j.hold_reason || "", age: Math.floor((now - new Date(j.created_at)) / 864e5) }));
+    const rows = (J.data || []).map(j => ({ no: j.job_no, date: j.created_at.slice(0, 10), type: (j.job_types && j.job_types.name) || "", loc: (j.locations && j.locations.name) || "", detail: j.detail, status: ST[j.status] || j.status, reason: j.hold_reason || "", age: Math.floor((now - new Date(j.created_at)) / 864e5), stale: j.updated_at ? Math.floor((now - new Date(j.updated_at)) / 864e5) : "" }));
     BL = { rows, file: "ระบบ RS", sheet: "", at: new Date().toISOString(), src: "system" };
     $("#blMsg").innerHTML = `<p class="note ok">ใช้งานค้างในระบบ RS ${rows.length} ใบ</p>`; fillFromBacklog(); drawBl(); if (canWrite) await persist(false);
   });
@@ -331,7 +331,7 @@
     const extra = [{ title: "แผนทำให้เสร็จ: เป้าหมายงานค้างคงเหลือรายสัปดาห์ถึง 31 ธ.ค.", head: ["สัปดาห์", "งานค้างคงเหลือไม่เกิน (ใบ)", "งานเกิน 60 วันคงเหลือ (ใบ)", "จุดเน้น"], chart: false, left: true, colW: [4.2, 2.6, 2.6, 2.9], fs: 12, rows: blBurn() },
       ...(A ? [{ title: "วิธีแก้ไขและกำหนดเสร็จ (AI 3 คน)", head: ["กลุ่ม", "ปัญหา / สาเหตุราก", "วิธีแก้ไข", "ผู้รับผิดชอบ", "เสร็จภายใน"], chart: false, left: true, colW: [0.9, 3.4, 5.2, 1.6, 1.2], fs: 10,
         rows: A.items.map(it => [it.code, `${it.title}\nสาเหตุราก: ${it.root_cause}`, it.actions.map((a, i) => `${i + 1}. ${a.step}`).join("\n"), [...new Set(it.actions.map(a => a.owner))].join(", "), last(it)]) }] : [])];
-    const more = A ? (await aiSlides()).slice(1) : [];
+    const more = A ? (await aiSlides()).slice(1) : trSecs(null);
     return { title: `รายงานงานค้าง (Backlog) ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${thd(meet())} · ที่มา: ${BL.file || "งานค้างในระบบ RS"}`,
       findings, lead: await swotLead(A, "SWOT ของงานค้างรอบนี้ (AI 3 คน)"), kpis: [["งานค้างทั้งหมด", n], ["ค้างเกิน 60 วัน", over], ["อายุเฉลี่ย (วัน)", nf(avg, 1)], ["เก่าสุด (วัน)", old]], analysis,
       sections: [{ title: "งานค้างตามอายุและกลุ่ม", head: ["ช่วงอายุ", ...GRP.map(g => g[1]), "รวม"], chart: false, rows: [...AGE.map((a, i) => [a[0], ...GRP.map(g => M[i][g[0]]), GRP.reduce((s, g) => s + M[i][g[0]], 0)]), ["รวม", ...GRP.map(g => M.reduce((s, r) => s + r[g[0]], 0)), n]] },
@@ -380,13 +380,21 @@
   const AI_MAX = 4;
   const ROLES = '<div class="who3"><span>🤖 AI 1 ผู้เสนอวิธีแก้</span><span>🤖 AI 2 ผู้วิเคราะห์ ทบทวน</span><span>🤖 AI 3 ผู้ตรวจสอบ แก้ไข และนำเสนอ</span></div>';
   const logRows = () => (AI.log || []).map(h => [`รอบ ${h.round}`, h.approved ? "ผ่าน" : "สั่งแก้", h.approved ? (h.summary || "ไม่มีสิ่งที่ต้องแก้") : h.issues.join("\n")]);
+  // counts the page can check itself in every ticket (real numbers for the AI and the report)
+  function blChecks(R) { const t = v => String(v || "").trim(), wait = r => /รอ|hold|pending/i.test(t(r.status) + " " + t(r.reason));
+    return { total: R.length, no_reason: R.filter(r => !t(r.reason)).length, waiting: R.filter(wait).length,
+      waiting_no_pr_memo: R.filter(r => wait(r) && !/PR|memo|เมโม|ขออนุมัติ|ใบขอซื้อ/i.test(t(r.status) + " " + t(r.reason))).length,
+      over_24h: R.filter(r => +r.age >= 1).length, not_updated_over_1_day: R.some(r => r.stale !== "" && r.stale != null) ? R.filter(r => +r.stale > 1).length : null, no_type: R.filter(r => !t(r.type)).length }; }
   function aiInput() {
     const H = hosp(), [a, b] = period(), R = BL.rows, M = blMatrix(), pick = k => tbl(k).filter(r => r.slice(1).some(v => String(v).trim()));
     const reasons = {}; R.forEach(r => { const k = r.reason || r.status || "ไม่ระบุ"; reasons[k] = (reasons[k] || 0) + 1; });
     return { hospital_id: H.id, hospital: H.name, meeting: thd(meet()) + " 14:00–16:00 น.", period: `${thd(a)} – ${thd(b)}`,
       figures: { summary: pick("sum"), tor: pick("tor"), cm_24h: tbl("k24")[14], pm: pick("pm"), ma: pick("ma"), qc: pick("qc"), energy: pick("en") },
       backlog: { total: R.length, over_60_days: R.filter(r => +r.age > 60).length, aging_by_group: AGE.map((x, i) => ({ age: x[0], ...Object.fromEntries(GRP.map(g => [g[1], M[i][g[0]]])) })), reasons,
-        oldest: [...R].sort((x, y) => (+y.age || 0) - (+x.age || 0)).slice(0, 40).map(r => ({ no: r.no, age: r.age, type: r.type, place: String(r.loc || "").slice(0, 40), detail: String(r.detail || "").slice(0, 90), status: r.status, reason: r.reason })) },
+        checks: blChecks(R),
+        // every open ticket, oldest first, so the AI reads each one (wrong category, no PR/Memo in 24 h, not updated daily, small jobs still open)
+        ticket_columns: ["เลขใบงาน", "อายุ (วัน)", "ไม่อัปเดต (วัน)", "ประเภท/หมวด", "สถานที่", "รายละเอียด", "สถานะ", "เหตุผลที่ค้าง"],
+        tickets: [...R].sort((x, y) => (+y.age || 0) - (+x.age || 0)).slice(0, 400).map(r => [r.no, r.age ?? "", r.stale ?? "", r.type || "", String(r.loc || "").slice(0, 30), String(r.detail || "").replace(/\s+/g, " ").slice(0, 80), r.status || "", r.reason || ""]) },
       notes: { decisions: pick("dec"), backlog_plan: tbl("bap").filter(r => r.some(v => String(v).trim())).map(r => [r[0], r[1], r[2], r[3], r[5], r[6]]) } };
   }
   $("#aiGo").onclick = guard(async () => {
@@ -551,6 +559,8 @@
       `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p>` +
       (R.swot ? `<h3>SWOT ของงานวิศวกรรมรอบนี้</h3><div class="fish">${swotSvg(R.swot)}</div>` : `<p class="note">${esc(swotLines(R)[0])}</p>`) +
       `<h3>บทวิเคราะห์</h3><ul>${R.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
+      `<h3>อ่านใบงานค้างทุกใบ (${BL.rows.length} ใบ)</h3><div class="tw"><table><tr><th>รายการตรวจ</th><th>จำนวนใบ</th></tr>${chkRows().map(r => `<tr><td>${esc(r[0])}</td><td>${r[1]}</td></tr>`).join("")}</table></div>` +
+      (trRows(R).length ? `<div class="tw"><table><tr><th>ปัญหาการทำงาน (AI 3 คน)</th><th>ใบ</th><th>เลขใบงาน</th><th>วิธีแก้</th></tr>${(R.ticket_review || []).map(x => `<tr><td>${esc(x.issue)}</td><td>${(x.tickets || []).length}</td><td style="white-space:normal">${esc((x.tickets || []).join(", "))}</td><td style="white-space:normal">${esc(x.fix)}</td></tr>`).join("")}</table></div>` : `<p class="note">รายงาน AI รอบนี้ทำก่อนกฎอ่านใบงานทุกใบ กดปุ่ม 🤖 ใหม่เพื่อให้ AI 3 คนอ่านและวิเคราะห์ทุกใบ</p>`) +
       R.items.map(it => `<h3>${esc(it.code)} ${esc(it.title)}</h3>${(it.tickets || []).length ? `<p class="sub">ใบงาน: ${esc(it.tickets.join(", "))}</p>` : ""}<div class="fish">${fishSvg(it.code, it.title, it.m4)}</div>` +
         `<p><b>5 Why:</b></p><ol>${(it.why5 || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><p><b>สาเหตุราก:</b> ${esc(it.root_cause)}</p>` +
         `<p><b>โครงการแก้ไข:</b> ${esc(it.project.name)} · <b>เป้าหมาย:</b> ${esc(it.project.goal)} · <b>งบประมาณ:</b> ${esc(it.project.budget)}</p><div class="tw"><table><thead><tr><th>วิธีการ / ขั้นตอน</th><th>ผู้รับผิดชอบ</th><th>กำหนดเสร็จ</th><th>วัดผล</th></tr></thead><tbody>` +
@@ -570,9 +580,16 @@
       R.items.forEach(it => it.actions.forEach(a => { k++; keep.push([`ACT-${String(k).padStart(2, "0")} / ${it.code} ${a.step}`, a.measure, a.owner, a.due, "", it.project.name]); }));
       D.t.next = keep; toast("ใส่แผนของ AI ลงข้อ 13 แล้ว ตรวจทานในแท็บรายงานแล้วกด บันทึกร่าง"); };
   }
+  // ผลอ่านใบงานค้างทุกใบ (rule for the AI 3 roles): page counts + the AI's review of each ticket
+  const CHK = [["total", "งานค้างทั้งหมด"], ["over_24h", "ค้างเกิน 24 ชม. (ยังไม่ปิด)"], ["waiting", "อยู่ระหว่างรอ (อะไหล่/ผู้รับเหมา/อนุมัติ/พื้นที่)"], ["waiting_no_pr_memo", "รอ แต่ไม่พบ PR/Memo ในสถานะหรือเหตุผล"], ["no_reason", "ไม่ระบุเหตุผลที่ค้าง"], ["not_updated_over_1_day", "ไม่อัปเดตเกิน 1 วัน (Sup ไม่ได้ตรวจทุกวัน)"], ["no_type", "ไม่ระบุประเภท/หมวด"]];
+  const chkRows = () => { const c = blChecks(BL.rows); return CHK.map(([k, lab]) => [lab, c[k] == null ? "ไม่มีข้อมูลในไฟล์ (ต้องมีคอลัมน์ ไม่อัปเดต)" : c[k]]); };
+  const trRows = R => ((R && R.ticket_review) || []).map(x => [x.issue, (x.tickets || []).length, (x.tickets || []).slice(0, 25).join(", ") + ((x.tickets || []).length > 25 ? " …" : ""), x.fix]);
+  const trSecs = R => [{ title: "ผลตรวจนับจากใบงานค้างทุกใบ", head: ["รายการตรวจ", "จำนวนใบ"], chart: false, left: true, colW: [9.3, 3.0], fs: 13, rows: chkRows() },
+    ...(trRows(R).length ? [{ title: "AI 3 คนอ่านใบงานค้างทุกใบ: ปัญหาการทำงานและวิธีแก้", head: ["ปัญหา", "ใบ", "เลขใบงาน", "วิธีแก้"], chart: false, left: true, colW: [2.8, 0.7, 4.6, 4.2], fs: 10, rows: trRows(R) }] : [])];
   function aiSheets() { const R = AI.report, rows = [["กลุ่ม", "ปัญหา", "ใบงาน", "สาเหตุราก", "วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล", "ผลที่คาดหวัง"]];
     R.items.forEach(it => it.actions.forEach((a, i) => rows.push([i ? "" : it.code, i ? "" : it.title, i ? "" : (it.tickets || []).join(", "), i ? "" : it.root_cause, a.step, a.owner, a.due, a.measure, i ? "" : it.expected_result])));
     return [{ name: "Action plan AI", rows, header: 0 },
+      { name: "อ่านใบงานทุกใบ", rows: [["รายการตรวจ", "จำนวนใบ"], ...chkRows(), [], ["ปัญหา (AI 3 คน)", "จำนวนใบ", "เลขใบงาน", "วิธีแก้"], ...(R.ticket_review || []).map(x => [x.issue, (x.tickets || []).length, (x.tickets || []).join(", "), x.fix])], header: 0 },
       { name: "RCA ก้างปลา 4M", rows: [["กลุ่ม", "ปัญหา", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก", "ชื่อโครงการ", "เป้าหมาย", "งบประมาณ"], ...R.items.map(it => [it.code, it.title, ...M4.map(m => ((it.m4 || {})[m[0]] || []).join("\n")), (it.why5 || []).join("\n"), it.root_cause, it.project.name, it.project.goal, it.project.budget])], header: 0 },
       ...(R.swot ? [{ name: "SWOT", rows: [["หัวข้อ", "รายการ"], ...SW.flatMap(([k, lab]) => (R.swot[k] || []).map((t, i) => [i ? "" : lab, t]))], header: 0 }] : []),
       ...(aiPlan(R).length ? [{ name: "แผนงาน Gantt", rows: [["กลุ่ม", "ขั้นตอน", "ผู้รับผิดชอบ", "เริ่ม", "วางเสร็จ", "กำหนดเสร็จ (AI)", "สถานะ"], ...aiPlan(R).map(p => [p.grp, p.step, p.owner, thd(p.start), thd(p.end), p.due, p.end < today() ? "เลยกำหนด" : "ตามแผน"])], header: 0 }] : []),
@@ -581,7 +598,7 @@
   async function aiSlides() { const R = AI.report; if (!R) return [];
     const GC = ganttChunks(R), gant = await Promise.all(GC.out.map(ch => { const g = ganttSvg(ch); return toPng(g.svg, g.w, g.h).then(img => ({ ...g, img })); }));
     const pics = await Promise.all(R.items.map(it => toPng(fishSvg(it.code, it.title, it.m4), 1400, 600)));
-    return [{ title: "Action plan โดย AI 3 คน: บทสรุป", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 13, rows: [["บทสรุปผู้บริหาร", R.summary], ...R.analysis.slice(0, 6).map((x, i) => [i ? "" : "บทวิเคราะห์", x])] },
+    return [{ title: "Action plan โดย AI 3 คน: บทสรุป", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 13, rows: [["บทสรุปผู้บริหาร", R.summary], ...R.analysis.slice(0, 6).map((x, i) => [i ? "" : "บทวิเคราะห์", x])] }, ...trSecs(R),
       ...R.items.flatMap((it, k) => [...(pics[k] ? [{ title: `RCA ก้างปลา 4M · ${it.code} ${it.title}`.slice(0, 80), img: pics[k], svg: fishSvg(it.code, it.title, it.m4), note: "สาเหตุราก: " + it.root_cause }] : []),
         { title: `5 Why และโครงการแก้ไข · ${it.code}`, head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 13,
           rows: [...(it.why5 || []).slice(0, 5).map((x, i) => [i ? "" : "5 Why", x]), ["สาเหตุราก", it.root_cause], ["โครงการ", it.project.name], ["เป้าหมาย", it.project.goal], ["งบประมาณ", it.project.budget], ...((it.tickets || []).length ? [["ใบงาน", it.tickets.join(", ")]] : [])] },
