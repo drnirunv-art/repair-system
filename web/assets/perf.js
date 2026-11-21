@@ -723,7 +723,10 @@
     return { a, b, rounds, days };
   }
   async function drawMon() {
-    const H = hosp(), ym = $("#mm").value, M = await monthData(H.id, ym); MON = { H, ym, ...M };
+    const H = hosp(), ym = $("#mm").value, M = await monthData(H.id, ym);
+    const pm = await sb.from("perf_monthly").select("ai").eq("hospital_id", H.id).eq("month", ym + "-01").maybeSingle();   // before migration 0057 there is no table: no monthly AI
+    MON = { H, ym, ...M, mai: (!pm.error && pm.data && pm.data.ai) || {} };
+    $("#mAi").hidden = !(canWrite && M.rounds.length && !pm.error); drawMai(); if (MON.mai.job && MON.mai.job.status === "running") watchMai();
     if (!M.rounds.length) { $("#monBox").innerHTML = `<p class="note">ยังไม่มีรายงานของ ${esc(H.name)} ในเดือน${esc(ymTh(ym))}</p>`; $("#monActs").hidden = true; return; }
     const d = await monDeck(); $("#monActs").hidden = false;
     $("#monBox").innerHTML = `<div class="kpis">${d.kpis.map(([k, v]) => `<div class="kpi"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div><h3>บทสรุป</h3><ul>${d.findings.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
@@ -743,12 +746,20 @@
       A ? `CM ดำเนินการภายใน 24 ชม. ทั้งเดือน ${pctOf(A, B + C)} (A ${A} ใบ, ปิดจริงทัน B ${B} ใบ, ส่ง PR/ขออนุมัติทัน C ${C} ใบ) เป้าหมาย 100%` : "ยังไม่มีตัวเลข KPI 24 ชม. ในเดือนนี้",
       `คะแนน TOR: รอบแรก ${first.tor} รอบล่าสุด ${last.tor} (เป้าหมาย ≥ 90) · งานค้าง: รอบแรก ${first.bl} ใบ รอบล่าสุด ${last.bl} ใบ · เกิน 60 วัน: รอบแรก ${first.o60} ใบ รอบล่าสุด ${last.o60} ใบ`,
       `PM ทำเองตรงแผนรอบล่าสุด ${last.pm} (เป้าหมาย ≥ 95%) · MA ติดตามสัญญารอบล่าสุด ${last.ma} (เป้าหมาย 100%)`];
-    const lastAI = [...F].reverse().find(f => f.ai);
+    // AI part: the AI 3-role analysis of the whole month when it has been run, otherwise the latest round that has one
+    const mR = MON.mai && MON.mai.report, rAI = [...F].reverse().find(f => f.ai);
+    const lastAI = mR ? { ai: mR, date: null, month: true } : rAI, lastAIx = mR ? { ai: MON.mai, backlog: (rounds[rounds.length - 1] || {}).backlog } : rAI ? rounds.find(x => x.meet_date === rAI.date) : null;
+    const aiWhen = a => a.month ? `ทั้งเดือน${ymTh(ym)}` : `รอบ ${thd(a.date, { day: "numeric", month: "short" })}`;
     const aiRows = F.filter(f => f.ai).map(f => [thd(f.date, { day: "numeric", month: "short" }), f.ai.summary]);
+    // the full AI 3-role part (analysis, RCA fishbone 4M, 5 Why, Action plan, Gantt, AI 3 checks) of the latest round that has one, same slides as the round report
+    let aiPart = [];
+    if (lastAIx) { const keep = [AI, BL]; AI = lastAIx.ai; BL = lastAIx.backlog && lastAIx.backlog.rows ? lastAIx.backlog : { rows: [] }; try { aiPart = await aiSlides(); } finally { [AI, BL] = keep; } }
+    if (lastAI) findings.push(`AI 3 คน (${aiWhen(lastAI)}): ${lastAI.ai.summary}`);
+    else findings.push("ยังไม่มี Action plan ของ AI 3 คนในเดือนนี้: กดปุ่ม 🤖 วิเคราะห์ทั้งเดือน ด้านบน แล้วดาวน์โหลดรายงานรวมรายเดือนนี้ใหม่");
     const out = { title: `รวมรายงานประจำเดือน ${ymTh(ym)} ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${rounds.length} รอบ · ใช้ฉบับล่าสุดของแต่ละรอบ · รอบล่าสุด ${lastD}`,
       findings, kpis: [["รอบประชุม", rounds.length], ["CM 24 ชม. ทั้งเดือน", A ? pctOf(A, B + C) : "-"], ["งานค้างรอบล่าสุด", last.bl], ["TOR รอบล่าสุด", last.tor]],
-      lead: await swotLead(lastAI && lastAI.ai, `SWOT ของงานวิศวกรรมรอบล่าสุดที่มี AI 3 คน (${lastAI ? thd(lastAI.date, { day: "numeric", month: "short" }) : "-"})`),
-      analysis: dec.filter(r => !/^รวม/.test(r[1])).length ? dec.filter(r => !/^รวม/.test(r[1])).map(r => `${r[0]} ขอ Owner ตัดสินใจ: ${r[1]} · ข้อเสนอ: ${r[3] || "-"} · มติ: ${r[6] || "ยังไม่มีมติ"}`) : ["ไม่มีเรื่องขอ Owner ตัดสินใจในเดือนนี้"],
+      lead: await swotLead(lastAI && lastAI.ai, `SWOT ของงานวิศวกรรม (AI 3 คน ${lastAI ? aiWhen(lastAI) : "-"})`),
+      analysis: [...(lastAI ? lastAI.ai.analysis : []), ...(dec.filter(r => !/^รวม/.test(r[1])).length ? dec.filter(r => !/^รวม/.test(r[1])).map(r => `${r[0]} ขอ Owner ตัดสินใจ: ${r[1]} · ข้อเสนอ: ${r[3] || "-"} · มติ: ${r[6] || "ยังไม่มีมติ"}`) : ["ไม่มีเรื่องขอ Owner ตัดสินใจในเดือนนี้"])],
       sections: [{ title: "ผลแต่ละรอบประชุมในเดือน", head: ["รอบประชุม", "สถานะ", "TOR", "CM 24 ชม.", "งานค้าง", "> 60 วัน", "PM ตรงแผน", "MA ติดตาม", "ไฟฟ้า kWh", "QC Coverage"], chart: false, left: true, fs: 10, colW: [1.9, 1.4, 0.9, 1.1, 1.0, 0.9, 1.2, 1.2, 1.3, 1.4],
           rows: F.map(f => [thd(f.date), f.st, f.tor, f.cm24, String(f.bl), String(f.o60), f.pm, f.ma, f.kwh, f.qc]) },
         ...(cmRows.length ? [{ title: "CM รายวันทั้งเดือน (วันละ 1 แถว ไม่นับซ้ำ)", head: ["วัน", "คนจริง/สัญญา", "ชม. CM", "ค้างต้นวัน", "รับใหม่", "เปิดซ้ำ", "ปิดจริง", "ค้างปลายวัน", "A ครบกำหนด", "B ปิดจริงทัน", "C ส่ง PR ทัน", "% ผ่าน", "จากรอบ"], chart: false, left: true, fs: 9, colW: [1.8, 1.1, 0.7, 0.8, 0.8, 0.7, 0.8, 0.8, 0.9, 0.9, 0.9, 0.8, 0.8],
@@ -756,8 +767,8 @@
         sec("aging", "รอบล่าสุด " + lastD), sec("bap", "รอบล่าสุด " + lastD), sec("pm", "รอบล่าสุด " + lastD), sec("ma", "รอบล่าสุด " + lastD), sec("en", "รอบล่าสุด " + lastD), sec("qc", "รอบล่าสุด " + lastD),
         ...(dec.length ? [{ title: "เรื่องขอ Owner ตัดสินใจ ทุกรอบในเดือน", head: ["รอบ", ...SEC.find(z => z.k === "dec").cols], chart: false, left: true, fs: 9, colW: [0.9, 3.0, 2.0, 2.6, 1.2, 1.3, 1.3], rows: dec }] : []),
         ...(nxt.length ? [{ title: "คำมั่นรอบหน้า ทุกรอบในเดือน", head: ["รอบ", ...SEC.find(z => z.k === "next").cols], chart: false, left: true, fs: 9, colW: [0.9, 3.0, 1.6, 1.6, 1.4, 1.9, 1.9], rows: nxt }] : []),
-        ...(aiRows.length ? [{ title: "บทสรุปของ AI 3 คน แต่ละรอบ", head: ["รอบ", "บทสรุปผู้บริหาร"], chart: false, left: true, colW: [1.6, 10.7], fs: 12, rows: aiRows }] : [])].filter(s => !s.rows || s.rows.length),
-      notes: ["รายงานรายเดือนนี้รวมจากรายงานทุกรอบในเดือน ทุกฉบับที่เคยบันทึกยังเก็บไว้ เปิดดูได้ที่แท็บ รายงาน Chief หัวข้อ ฉบับที่บันทึกไว้", "ตัวเลขรายวันวันเดียวกันใช้จากรอบล่าสุดที่มีวันนั้น"] };
+        ...(aiRows.length ? [{ title: "บทสรุปของ AI 3 คน แต่ละรอบ", head: ["รอบ", "บทสรุปผู้บริหาร"], chart: false, left: true, colW: [1.6, 10.7], fs: 12, rows: aiRows }] : []), ...aiPart].filter(s => !s.rows || s.rows.length),
+      notes: [...(lastAI ? lastAI.ai.follow_up.map(x => "ติดตามผล: " + x) : []), "รายงานรายเดือนนี้รวมจากรายงานทุกรอบในเดือน ทุกฉบับที่เคยบันทึกยังเก็บไว้ เปิดดูได้ที่แท็บ รายงาน Chief หัวข้อ ฉบับที่บันทึกไว้", "ตัวเลขรายวันวันเดียวกันใช้จากรอบล่าสุดที่มีวันนั้น"] };
     if (exec) { const [r, Hs] = await Promise.all([sb.from("perf_weekly").select("hospital_id,meet_date,submitted_at,data,backlog,ai").gte("meet_date", MON.a).lte("meet_date", MON.b).order("meet_date"), sb.from("hospitals").select("id,code,name").order("code")]);
       const ORDER = ["PT1", "PT2", "PT3", "PTN", "PTW", "PTS", "PTP", "PLD", "PLR", "PLS", "PLK", "PLC"], hs = (Hs.data || []).sort((x, y) => ORDER.indexOf(x.code) - ORDER.indexOf(y.code));
       const rows = hs.map(h => { const xs = (r.data || []).filter(v => v.hospital_id === h.id).map(roundFig), l = xs[xs.length - 1];
@@ -765,11 +776,44 @@
       out.sections.push({ title: `ภาพรวม 12 โรง เดือน${ymTh(ym)} (รอบล่าสุดของแต่ละโรง)`, head: ["รหัส", "โรงพยาบาล", "รอบที่มีรายงาน", "ส่งตรงเวลา", "TOR", "CM 24 ชม.", "งานค้าง", "> 60 วัน", "PM ตรงแผน"], chart: false, left: true, fs: 10, colW: [0.8, 1.8, 1.2, 1.1, 1.0, 1.2, 1.0, 1.0, 1.2], rows }); }
     return out;
   }
+  // ---------- AI 3 roles for the whole month (perf-ai with month, result in perf_monthly.ai; runs on the server like the round AI) ----------
+  let mPoll = null;
+  function drawMai() {
+    const box = $("#mAiBox"), A = MON && MON.mai || {}, j = A.job;
+    if (j && j.status === "running") { box.hidden = false; box.innerHTML = `<h3>AI 3 คนกำลังวิเคราะห์ทั้งเดือน${esc(ymTh(MON.ym))}</h3>${ROLES}<ol>${(j.events || []).map(e => `<li>${esc(e.text)} ✓</li>`).join("")}<li>${esc(STEP_LAB(j))} … กำลังทำงาน</li></ol><p class="note">ปิดหน้านี้หรือไปทำอย่างอื่นได้ AI ทำงานต่อที่เซิร์ฟเวอร์ กลับมาเปิดแท็บนี้ (โรงและเดือนเดิม) เพื่อดูผล</p>`; return; }
+    if (j && j.status === "error") { box.hidden = false; box.innerHTML = `<p class="note bad">AI วิเคราะห์ทั้งเดือนไม่สำเร็จ: ${esc(j.error || "")} · กดปุ่ม 🤖 อีกครั้ง</p>`; return; }
+    if (!A.report) { box.hidden = true; return; }
+    box.hidden = false; box.innerHTML = `<h3>Action plan ทั้งเดือนโดย AI 3 คน</h3>${ROLES}<p class="sub">ทำเมื่อ ${esc(tsT(A.at))} น. · AI 3 ตรวจวน ${(A.log || []).length} รอบ · รายละเอียดเต็ม (SWOT, ก้างปลา 4M, 5 Why, Action plan, Gantt) อยู่ในไฟล์ PPT / Word / PDF / Excel ด้านล่าง</p><h3>บทสรุปผู้บริหาร</h3><p>${esc(A.report.summary)}</p>` +
+      (A.report.swot ? `<div class="fish">${swotSvg(A.report.swot)}</div>` : "") + `<h3>บทวิเคราะห์</h3><ul>${A.report.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+  }
+  $("#mAi").onclick = guard(async () => {
+    const { H, ym, rounds, a, b } = MON, L = rounds[rounds.length - 1], F = rounds.map(roundFig);
+    // the input is built like a round's input, from the latest round of the month, plus the figures of every round of the month
+    const keep = [D, BL]; let body;
+    try { D = JSON.parse(JSON.stringify(L.data || {})); BL = L.backlog && L.backlog.rows ? L.backlog : { rows: [] }; body = aiInput(); } finally { [D, BL] = keep; }
+    body.meeting = `รวมรายงานประจำเดือน${ymTh(ym)} (${rounds.length} รอบประชุม)`; body.period = `${thd(a)} – ${thd(b)}`;
+    body.figures = { ...body.figures, every_round_of_month: F.map(f => ({ meeting: thd(f.date), status: f.st, tor: f.tor, cm_24h: f.cm24, backlog: f.bl, over_60_days: f.o60, pm: f.pm, ma: f.ma, kwh: f.kwh, qc: f.qc, ai_summary: f.ai ? f.ai.summary : "" })) };
+    await sb.auth.refreshSession().catch(() => null);
+    const { data, error } = await sb.functions.invoke("perf-ai", { body: { ...body, hospital_id: H.id, month: ym + "-01", job: "start" } });
+    let msg = data && data.error; if (error) { const j = error.context && typeof error.context.json === "function" ? await error.context.json().catch(() => ({})) : {}; msg = j.error || error.message; }
+    if (msg) return toast("เริ่มให้ AI ทำงานไม่ได้: " + msg, true);
+    MON.mai = { ...MON.mai, job: { id: data.id, status: "running", round: 1, step: "propose", events: [] } }; drawMai(); watchMai();
+    toast("AI เริ่มวิเคราะห์ทั้งเดือนที่เซิร์ฟเวอร์แล้ว ปิดหน้านี้หรือไปทำอย่างอื่นได้");
+  });
+  function watchMai() {
+    if (mPoll) clearInterval(mPoll); const h = MON.H.id, ym = MON.ym;
+    mPoll = setInterval(async () => {
+      if (!MON || MON.H.id !== h || MON.ym !== ym || cur !== "mon") { clearInterval(mPoll); mPoll = null; return; }
+      const r = await sb.from("perf_monthly").select("ai").eq("hospital_id", h).eq("month", ym + "-01").maybeSingle(); if (r.error || !r.data) return;
+      MON.mai = r.data.ai || {}; const j = MON.mai.job;
+      if (!j || j.status !== "running") { clearInterval(mPoll); mPoll = null; await drawMon(); if (j && j.status === "done") toast("AI วิเคราะห์ทั้งเดือนเสร็จแล้ว ดาวน์โหลด PPT รวมรายเดือนได้เลย"); return; }
+      drawMai(); }, 8000);
+  }
   const fM = () => `BiWeekly_Monthly_${hosp().code}_${+$("#mm").value.slice(0, 4) + 543}${$("#mm").value.slice(4)}`;
   const monRun = fn => guard(async () => { if (!MON) return; fn(await monDeck()); });
   $("#mP").onclick = monRun(d => Office.pptx(fM(), d)); $("#mW").onclick = monRun(d => Office.docx(fM(), d)); $("#mF").onclick = monRun(d => Office.pdf(fM(), d));
   $("#mX").onclick = monRun(d => Office.xlsx(fM(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: [...d.findings, ...d.analysis], notes: d.notes, figures: d.kpis }),
-    ...d.sections.filter(x => x.rows).map(x => ({ name: x.title.replace(/[\\/?*[\]:]/g, " ").slice(0, 31), rows: [x.head, ...x.rows], header: 0 })), ...Office.drawSheets(d)]));
+    ...d.sections.filter(x => x.rows && !x.svg).map(x => ({ name: x.title.replace(/[\\/?*[\]:]/g, " ").slice(0, 31), rows: [x.head, ...x.rows], header: 0 })), ...Office.drawSheets(d)]));
 
   // ---------- 12 hospitals ----------
   let allRows = [];

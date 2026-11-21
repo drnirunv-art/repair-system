@@ -160,8 +160,11 @@ Deno.serve(async (req) => {
     // and the state lives in perf_weekly.ai.job, so the person can close the page and come back for the result.
     // deno-lint-ignore no-explicit-any
     let J: any = null, base: any = {};
+    // the month-end roll-up (body.month = first day of the month) keeps its AI in perf_monthly; a meeting round keeps it in perf_weekly
+    const TB = body.month ? "perf_monthly" : "perf_weekly", KC = body.month ? "month" : "meet_date", KV = body.month ? String(body.month) : body.meet_date;
+    const keyOf = body.month ? { month: KV } : { meet_date: KV };
     if (body.job === "run" || body.job === "start") {
-      const r = await db.from("perf_weekly").select("ai").eq("hospital_id", hospital_id).eq("meet_date", body.meet_date).maybeSingle();
+      const r = await db.from(TB).select("ai").eq("hospital_id", hospital_id).eq(KC, KV).maybeSingle();
       // keep the last finished Action plan visible until the new one is done
       base = { ...(r.data?.ai ?? {}) }; delete base.job;
       if (body.job === "run") {
@@ -228,17 +231,17 @@ Deno.serve(async (req) => {
       .then((r) => r.text()).catch((e) => console.error("chain", e));
     const now = () => new Date().toISOString();
     // deno-lint-ignore no-explicit-any
-    const save = (ai: any) => db.from("perf_weekly").update({ ai: ai.report ? ai : { ...base, ...ai }, updated_at: now() }).eq("hospital_id", hospital_id).eq("meet_date", body.meet_date);
+    const save = (ai: any) => db.from(TB).update({ ai: ai.report ? ai : { ...base, ...ai }, updated_at: now() }).eq("hospital_id", hospital_id).eq(KC, KV);
     if (body.job === "start") {
       const id = crypto.randomUUID(), input = { hospital: body.hospital, meeting: body.meeting, period: body.period, figures: body.figures, backlog: body.backlog, notes: body.notes };
       const job = { id, status: "running", round: 1, step: "propose", p1: "", p2: "", issues: [], log: [], tries: 0, n: 0, input, events: [], started_at: now(), updated_at: now(), by: u.user.id };
-      const { error } = await db.from("perf_weekly").upsert({ hospital_id, meet_date: body.meet_date, ai: { ...base, job }, updated_by: u.user.id, updated_at: now() }, { onConflict: "hospital_id,meet_date" });
+      const { error } = await db.from(TB).upsert({ hospital_id, ...keyOf, ai: { ...base, job }, updated_by: u.user.id, updated_at: now() }, { onConflict: `hospital_id,${KC}` });
       if (error) return out({ error: "เริ่มงานไม่ได้ (ต้องเป็นหัวหน้าของโรงนี้): " + error.message }, 403);
-      EdgeRuntime.waitUntil(chain({ job: "run", hospital_id, meet_date: body.meet_date, id }));
+      EdgeRuntime.waitUntil(chain({ job: "run", hospital_id, ...keyOf, id }));
       return out({ started: true, id });
     }
     if (body.job === "run") {
-      const next = { job: "run", hospital_id, meet_date: body.meet_date, id: J.id };
+      const next = { job: "run", hospital_id, ...keyOf, id: J.id };
       const r = J.round, lab: Record<string, string> = { propose: r === 1 ? "รอบ 1: AI 1 เสนอ RCA และวิธีแก้" : `รอบ ${r}: AI 1 แก้ตามที่ AI 3 สั่ง`, review: `รอบ ${r}: AI 2 วิเคราะห์ ทบทวน`, check: `รอบ ${r}: AI 3 ตรวจสอบ`, report: "AI 3 เรียบเรียงรายงานฉบับสุดท้าย" };
       EdgeRuntime.waitUntil((async () => {
         const label = lab[J.step] ?? J.step;
