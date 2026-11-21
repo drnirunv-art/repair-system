@@ -34,7 +34,7 @@ const Report = z.object({
   risks: z.array(z.string()),
   review_notes: z.array(z.string()),
   follow_up: z.array(z.string()),
-  // month-end roll-up only: the 8 TOR KPI categories, each with its result, risk, Action plan, owner and finish date
+  // the 8 TOR KPI categories, each with its result, risk, Action plan, owner and finish date
   kpi8: z.array(z.object({ category: z.string(), result: z.string(), risk: z.string(), action: z.string(), owner: z.string(), due: z.string() })).default([]),
 });
 const KPI8_SHAPE = `\nเพิ่ม key "kpi8" ใน JSON เดียวกัน: [{"category":"1. PM (บำรุงรักษาเชิงป้องกัน)","result":"ลงนามล่าสุด 18 / 20 · Forecast 18.5","risk":"","action":"","owner":"","due":"15 ธ.ค. 2569"}] ครบทั้ง 8 หมวดของ TOR (1 PM, 2 คุณภาพงาน, 3 CM, 4 รายงานประจำเดือน, 5 ESG, 6 การซ้อม Code, 7 การฝึกอบรม, 8 CEG / KPI Engineering) เรียงตามหมวด ใช้ตัวเลขจาก figures.tor เท่านั้น action = วิธีทำให้หมวดนี้ไม่เสียคะแนน owner = ตำแหน่ง due = วันทำเสร็จ เช่น 15 ธ.ค. 2569`;
