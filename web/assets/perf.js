@@ -114,7 +114,7 @@
       h += `<div class="sec"><h2>${esc(s.t)}</h2>${s.sub ? `<p class="sub">${esc(s.sub)}</p>` : ""}<div class="tw"><table class="pt"><thead><tr>${s.cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
         T.map((r, ri) => `<tr${(s.fixed && ri === T.length - 1 && /รวม/.test(r[0])) || (s.days && ri === 14) ? ' class="sum"' : ""}>${r.map((v, ci) => lockedCell(s, ri, ci) || (s.days && ri === 14 && s.calc) ? `<td class="${ci ? "num" : "lab"}">${esc(v)}</td>`
           : `<td>${ci === s.cols.length - 1 || /ปัญหา|ความเสี่ยง|แผน|เหตุผล|ทางเลือก|ผลกระทบ|ประเด็น|มาตรการ|ข้อเสี่ยง|สิ่งที่จะ|หลักฐาน|สาเหตุ|ข้อบกพร่อง/.test(s.cols[ci]) ? `<textarea data-k="${s.k}" data-r="${ri}" data-c="${ci}"${ro}>${esc(v)}</textarea>` : `<input data-k="${s.k}" data-r="${ri}" data-c="${ci}" value="${esc(v)}"${ro}>`}</td>`).join("")}</tr>`).join("") +
-        `</tbody></table></div>${canWrite && !s.fixed && !s.days ? `<div class="acts"><button class="btn small" type="button" data-add="${s.k}">+ เพิ่มแถว</button></div>` : ""}${s.k === "pm" ? pmBox() : ""}</div>`; });
+        `</tbody></table></div>${canWrite && !s.fixed && !s.days ? `<div class="acts"><button class="btn small" type="button" data-add="${s.k}">+ เพิ่มแถว</button></div>` : ""}${s.k === "pm" ? pmBox() : ""}${(() => { const P = secPlan(s.k, T); return P.length ? `<p class="sub"><b>แผนงาน (Gantt)</b> จากวันในตารางนี้ · แถบสีแดง = เลยกำหนด</p><div class="fish">${ganttSvg(P).svg}</div>` : ""; })()}</div>`; });
     $("#secs").innerHTML = h;
     if ($("#pmFile")) $("#pmFile").onchange = guard(pmUpload);
     $("#secs").querySelectorAll("[data-k]").forEach(i => i.oninput = () => { tbl(i.dataset.k)[+i.dataset.r][+i.dataset.c] = i.value; if (i.dataset.k === "k24") { k24calc(); const T = tbl("k24");
@@ -328,7 +328,11 @@
     const A = AI.report, last = it => it.actions.map(a => a.due).filter(Boolean).slice(-1)[0] || "-";
     if (A) { findings.push("วิธีแก้โดย AI 3 คน: " + A.summary, ...swotNote(A)); }
     else findings.push("ยังไม่มีวิธีแก้และแผนจาก AI 3 คน: กดปุ่ม 🤖 ด้านล่างก่อน แล้วดาวน์โหลดรายงานนี้ใหม่");
-    const extra = [{ title: "แผนทำให้เสร็จ: เป้าหมายงานค้างคงเหลือรายสัปดาห์ถึง 31 ธ.ค.", head: ["สัปดาห์", "งานค้างคงเหลือไม่เกิน (ใบ)", "งานเกิน 60 วันคงเหลือ (ใบ)", "จุดเน้น"], chart: false, left: true, colW: [4.2, 2.6, 2.6, 2.9], fs: 12, rows: blBurn() },
+    const bb = blBurn(), ph = f => bb.filter(r => r[3] === f), endOf = r => parseDue(String(r[0]).replace(/^.*\(ถึง\s*|\)$/g, ""));
+    const burnP = [["เคลียร์งานเกิน 60 วันก่อน", "1"], ["ไล่ปิดงานที่เหลือตามอายุ", "2"]].map(([f, k]) => { const L = ph(f); if (!L.length) return null; const e = endOf(L[L.length - 1]), s0 = k === "1" ? today() : dAdd(endOf(ph("เคลียร์งานเกิน 60 วันก่อน").slice(-1)[0] || L[0]) || today(), 1);
+      return e ? { grp: `ช่วง ${k}`, step: `${f} (${L.length} สัปดาห์ เหลือไม่เกิน ${L[L.length - 1][1]} ใบ)`, owner: "", start: s0 > e ? e : s0, end: e, due: "" } : null; }).filter(Boolean);
+    const burnG = await planSlides("แผนทำให้เสร็จ: งานค้างเป็นศูนย์ภายใน 31 ธ.ค. (Gantt)", burnP);
+    const extra = [{ title: "แผนทำให้เสร็จ: เป้าหมายงานค้างคงเหลือรายสัปดาห์ถึง 31 ธ.ค.", head: ["สัปดาห์", "งานค้างคงเหลือไม่เกิน (ใบ)", "งานเกิน 60 วันคงเหลือ (ใบ)", "จุดเน้น"], chart: false, left: true, colW: [4.2, 2.6, 2.6, 2.9], fs: 12, rows: blBurn() }, ...burnG,
       ...(A ? [{ title: "วิธีแก้ไขและกำหนดเสร็จ (AI 3 คน)", head: ["กลุ่ม", "ปัญหา / สาเหตุราก", "วิธีแก้ไข", "ผู้รับผิดชอบ", "เสร็จภายใน"], chart: false, left: true, colW: [0.9, 3.4, 5.2, 1.6, 1.2], fs: 10,
         rows: A.items.map(it => [it.code, `${it.title}\nสาเหตุราก: ${it.root_cause}`, it.actions.map((a, i) => `${i + 1}. ${a.step}`).join("\n"), [...new Set(it.actions.map(a => a.owner))].join(", "), last(it)]) }] : [])];
     const more = A ? (await aiSlides()).slice(1) : trSecs(null);
@@ -543,6 +547,20 @@
     if (t >= d0 && t <= d1) s += `<line x1="${px(t)}" y1="${top - 8}" x2="${px(t)}" y2="${H - 12}" stroke="#B42318" stroke-width="2"/><text x="${px(t) + 4}" y="${top - 12}" font-size="13" fill="#B42318">วันนี้</text>`;
     return { svg: s + "</svg>", w: W, h: H };
   }
+  // ---------- every plan is shown as a Gantt chart too (user rule 2026-11-21), the table stays ----------
+  const RANGE_ = /\s*[–—]\s*|\s+-\s+|\s+ถึง\s+/;
+  const planOf = (grp, step, owner, when) => { const parts = String(when || "").split(RANGE_).filter(Boolean), end = parseDue(parts[parts.length - 1]); if (!end) return null;
+    let start = parts.length > 1 ? parseDue(parts[0]) : null; if (!start || start > end) start = end < today() ? dAdd(end, -6) : today();
+    return { grp, step: String(step || "").trim(), owner: owner || "", start, end, due: when }; };
+  const tlPlan = R => ((R && R.timeline) || []).map((x, i) => planOf(`ช่วง ${i + 1}`, x.activity, "", x.when)).filter(Boolean);
+  // section tables with a date column: 6 backlog action plan, 10 energy measures, 13 commitments
+  const PLAN_COL = { bap: [0, 5, 4, "งานค้าง"], enap: [0, 4, 4, "พลังงาน"], next: [0, 3, 2, "ACT"] };
+  const secPlan = (k, rows) => { const c = PLAN_COL[k]; if (!c) return [];
+    return (rows || []).filter(r => String(r[0] ?? "").trim() && !/^รวม/.test(String(r[0]))).map(r => { const id = String(r[0]).match(/^ACT-\d+/);
+      return planOf(id ? id[0] : c[3], k === "next" ? `${r[0]}${r[1] ? " · " + r[1] : ""}` : r[0], r[c[2]], r[c[1]]); }).filter(Boolean); };
+  async function planSlides(title, P, note) {
+    if (!P || !P.length) return []; const ch = gChunks(P);
+    return Promise.all(ch.map(async (c, i) => { const g = ganttSvg(c); return { title: `${title}${ch.length > 1 ? ` ${i + 1}/${ch.length}` : ""}`, img: await toPng(g.svg, g.w, g.h), imgR: g.h / g.w, svg: g.svg, note: note || `${P.length} รายการ · แถบสีแดง = เลยกำหนดแล้ว` }; })); }
   const ganttChunks = R => { const P = aiPlan(R), out = gChunks(P); return { P, out }; };
   const toPng = (svg, w, h) => new Promise(ok => { const img = new Image();
     img.onload = () => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d").drawImage(img, 0, 0); try { ok(cv.toDataURL("image/png")); } catch (e) { ok(null); } };
@@ -597,6 +615,7 @@
         it.actions.map(a => `<tr><td>${esc(a.step)}</td><td>${esc(a.owner)}</td><td>${esc(a.due)}</td><td>${esc(a.measure)}</td></tr>`).join("") + `</tbody></table></div><p><b>ผลที่คาดหวัง:</b> ${esc(it.expected_result)}</p>`).join("") +
       (() => { const P = aiPlan(R); return P.length ? `<h3>แผนงานและวันวางเสร็จ (Gantt)</h3><p class="sub">${P.length} ขั้นตอน วางเสร็จทั้งหมด ${esc(thd(P.reduce((m, p) => p.end > m ? p.end : m, P[0].end)))} · แถบสีแดง = เลยกำหนดแล้ว</p><div class="fish">${ganttSvg(P).svg}</div>` : ""; })() +
       `<h3>แผนเวลา</h3><div class="tw"><table><thead><tr><th>ช่วงเวลา</th><th>กิจกรรม</th></tr></thead><tbody>${R.timeline.map(x => `<tr><td>${esc(x.when)}</td><td>${esc(x.activity)}</td></tr>`).join("")}</tbody></table></div>` +
+      (tlPlan(R).length ? `<div class="fish">${ganttSvg(tlPlan(R)).svg}</div>` : "") +
       `<h3>ความเสี่ยงของแผน</h3><ul>${R.risks.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       `<h3>การตรวจวนของ AI 3</h3><div class="tw"><table><thead><tr><th>รอบ</th><th>ผลตรวจ</th><th>สิ่งที่สั่งแก้ / สรุป</th></tr></thead><tbody>${logRows().map(r => `<tr><td>${esc(r[0])}</td><td><b class="${r[1] === "ผ่าน" ? "ok" : "bad"}">${esc(r[1])}</b></td><td>${esc(r[2]).replace(/\n/g, "<br>")}</td></tr>`).join("")}</tbody></table></div>` +
       `<h3>สิ่งที่ AI 2 ทบทวน และ AI 3 แก้แล้ว</h3><ul>${R.review_notes.map(x => `<li>${esc(x)}</li>`).join("")}</ul><h3>การติดตามผลครั้งถัดไป</h3><ul>${R.follow_up.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
@@ -637,6 +656,7 @@
       ...gant.map((g, i) => ({ title: `แผนงานและวันวางเสร็จ (Gantt)${gant.length > 1 ? ` ${i + 1}/${gant.length}` : ""}`, img: g.img, imgR: g.h / g.w, svg: g.svg,
         note: `ทั้งหมด ${GC.P.length} ขั้นตอน วางเสร็จทั้งหมด ${thd(GC.P.reduce((m, p) => p.end > m ? p.end : m, GC.P[0].end))} · แถบสีแดง = เลยกำหนด` })),
       { title: "แผนเวลาถึงสิ้นเดือนธันวาคม", head: ["ช่วงเวลา", "กิจกรรม"], chart: false, left: true, colW: [2.8, 9.5], fs: 13, rows: R.timeline.map(x => [x.when, x.activity]) },
+      ...(await planSlides("แผนเวลาถึงสิ้นเดือนธันวาคม (Gantt)", tlPlan(R))),
       { title: "การตรวจวนของ AI 3 และความเสี่ยง", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 12, rows: [...logRows().map(r => [r[0] + " " + r[1], r[2]]), ...R.risks.map((x, i) => [i ? "" : "ความเสี่ยง", x])] }]; }
   async function aiDeck() { const H = hosp(), R = AI.report;
     return { title: `Action plan แก้ปัญหา (RCA 4M + 5 Why) ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${thd(meet())} · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)`,
@@ -654,7 +674,8 @@
     return { title: `Chief Engineer Bi-Weekly Performance ${H.code}`, org: H.name, period: `ประชุม ${thd(meet())} 14:00–16:00 น. · ข้อมูล ${thd(a)} – ${thd(b)} · ผู้รายงาน ${D.site.chief || "-"}${D.site.qc ? " · " + D.site.qc : ""}`,
       findings: find.length ? find : ["ยังไม่ได้กรอกผลรอบนี้"], kpis: [["งานค้าง (ใบ)", BL.rows.length || S[2][3] || "-"], ["ค้าง > 60 วัน", BL.rows.length ? BL.rows.filter(r => +r.age > 60).length : S[3][3] || "-"], ["CM 24 ชม.", tbl("k24")[14][4] || "-"], ["TOR", S[0][3] || S[0][2] || "-"]],
       lead: await swotLead(AI.report, "SWOT ของงานวิศวกรรมรอบนี้ (AI 3 คน)"), analysis: dec,
-      sections: [...SEC.map(s => ({ title: s.t, head: s.cols, rows: filled(tbl(s.k)), chart: false, left: true, fs: s.days || s.k === "bap" ? 9 : 11, ...(s.k === "bap" ? { colW: [4.4, 0.9, 2.4, 1.2, 1.1, 1.1, 1.2] } : {}) })), ...(await aiSlides())],
+      sections: [...(await Promise.all(SEC.map(async s => [{ title: s.t, head: s.cols, rows: filled(tbl(s.k)), chart: false, left: true, fs: s.days || s.k === "bap" ? 9 : 11, ...(s.k === "bap" ? { colW: [4.4, 0.9, 2.4, 1.2, 1.1, 1.1, 1.2] } : {}) },
+        ...(await planSlides(`${s.t} (Gantt)`, secPlan(s.k, tbl(s.k))))]))).flat(), ...(await aiSlides())],
       notes: ["รายงานนี้ต้องมีทางเลือกและข้อเสนอของ Chief ทุกปัญหา", "ตัวเลข PR / ขออนุมัติภายใน 24 ชม. นับผ่าน KPI แต่ใบงานยังอยู่ใน Backlog จนปิดจริง"] }; }
   const repRun = fn => () => repDeck().then(fn).catch(e => toast(errText(e), true));
   $("#xP").onclick = repRun(d => Office.pptx(fname("BiWeekly"), d));
@@ -730,7 +751,7 @@
     if (!M.rounds.length) { $("#monBox").innerHTML = `<p class="note">ยังไม่มีรายงานของ ${esc(H.name)} ในเดือน${esc(ymTh(ym))}</p>`; $("#monActs").hidden = true; return; }
     const d = await monDeck(); $("#monActs").hidden = false;
     $("#monBox").innerHTML = `<div class="kpis">${d.kpis.map(([k, v]) => `<div class="kpi"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div><h3>บทสรุป</h3><ul>${d.findings.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
-      d.sections.filter(s => s.rows).map(s => `<h3>${esc(s.title)}</h3><div class="tw"><table class="pt"><thead><tr>${s.head.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${s.rows.map(r => `<tr>${r.map(v => `<td style="white-space:pre-line">${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`).join("");
+      d.sections.filter(s => s.rows || s.svg).map(s => s.svg ? `<h3>${esc(s.title)}</h3><div class="fish">${s.svg}</div>` : `<h3>${esc(s.title)}</h3><div class="tw"><table class="pt"><thead><tr>${s.head.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${s.rows.map(r => `<tr>${r.map(v => `<td style="white-space:pre-line">${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`).join("");
   }
   async function monDeck() {
     const { H, ym, rounds, days } = MON, F = rounds.map(roundFig), last = F[F.length - 1], first = F[0], dl = Object.keys(days).sort();
@@ -740,8 +761,15 @@
     const n = s => F.filter(f => f.st === s).length, lastT = (rounds[rounds.length - 1].data || {}).t || {}, lastD = thd(last.date);
     const allRows = (k, cols) => rounds.flatMap(x => (((x.data || {}).t || {})[k] || []).filter(r => String(r[0] ?? "").trim() && r.slice(1).some(v => String(v ?? "").trim()) || (k === "dec" && String(r[0] ?? "").trim())).map(r => [thd(x.meet_date, { day: "numeric", month: "short" }), ...cols.map((_, i) => String(r[i] ?? ""))]));
     const sec = (k, lab) => { const s = SEC.find(z => z.k === k); return { title: `${s.t} (${lab})`, head: s.cols, rows: (lastT[k] || []).map(r => r.map(v => String(v ?? ""))), chart: false, left: true, fs: 11 }; };
+    const secG = async (k, lab) => planSlides(`${SEC.find(z => z.k === k).t} (${lab}) Gantt`, secPlan(k, lastT[k]));
     const dec = allRows("dec", SEC.find(z => z.k === "dec").cols), nxt = allRows("next", SEC.find(z => z.k === "next").cols);
-    const findings = [`เดือน${ymTh(ym)} มีรายงาน ${rounds.length} รอบประชุม (${F.map(f => thd(f.date, { day: "numeric", month: "short" })).join(", ")}) ส่งตรงเวลา ${n("ส่งตรงเวลา")} รอบ ส่งเลยเวลา ${n("ส่งเลยเวลา")} รอบ ยังเป็นร่าง ${n("ร่าง ยังไม่ส่ง")} รอบ`,
+    const TOR = (lastT.tor || []).slice(0, 9), k8 = (MON.mai && MON.mai.report && MON.mai.report.kpi8) || [];
+    const k8of = i => k8.find(x => String(x.category || "").trim().startsWith(String(i + 1))) || k8[i] || null;
+    const torTot = TOR[8] || [], kpiLines = [`คะแนน KPI ตามสัญญา (TOR แนบ 4) รวม 8 หมวด: ลงนามล่าสุด ${torTot[2] || "-"} / 100 · Forecast ${torTot[3] || "-"} / 100 (เป้าหมาย ≥ 90) ${+torTot[3] >= 90 ? "ผ่านเป้าหมาย" : torTot[3] ? "ยังต่ำกว่าเป้าหมาย" : ""}`.trim(),
+      ...TOR.slice(0, 8).map((r, i) => { const a = k8of(i); return `${r[0]}: ลงนามล่าสุด ${r[2] || "-"} / ${r[1]} · Forecast ${r[3] || "-"}${r[4] && r[4] !== "-" ? ` · เสี่ยง: ${r[4]}` : ""}${a && a.action ? ` · Action plan: ${a.action}` : r[5] && r[5] !== "-" ? ` · Action: ${r[5]}` : ""}${a && a.due ? ` · ทำเสร็จ ${a.due}` : ""}${a && a.owner ? ` (${a.owner})` : ""}`; })];
+    const k8Plan = TOR.slice(0, 8).map((r, i) => ({ r, a: k8of(i) })).filter(x => x.a && parseDue(x.a.due)).map(({ r, a }) => ({ grp: `หมวด ${String(r[0]).match(/^\d+/) || ""}`, step: `${r[0]}: ${a.action}`, owner: a.owner, start: today(), end: parseDue(a.due) < today() ? today() : parseDue(a.due), due: a.due }));
+    const k8G = k8Plan.length ? ganttSvg(k8Plan) : null, k8Img = k8G ? await toPng(k8G.svg, k8G.w, k8G.h) : null;
+    const findings = [...(TOR.length ? kpiLines : ["ยังไม่มีคะแนน KPI 8 หมวดในรายงานรอบล่าสุดของเดือน (ข้อ 2 TOR Scorecard)"]), `เดือน${ymTh(ym)} มีรายงาน ${rounds.length} รอบประชุม (${F.map(f => thd(f.date, { day: "numeric", month: "short" })).join(", ")}) ส่งตรงเวลา ${n("ส่งตรงเวลา")} รอบ ส่งเลยเวลา ${n("ส่งเลยเวลา")} รอบ ยังเป็นร่าง ${n("ร่าง ยังไม่ส่ง")} รอบ`,
       dl.length ? `งานแจ้งซ่อม (CM) ในเดือนนี้มีข้อมูล ${dl.length} วัน: รับแจ้งใหม่ ${rc} ใบ ปิดจริง ${cl} ใบ ค้างปลายวันล่าสุด ${String(days[dl[dl.length - 1]].cm[7] ?? "-")} ใบ` : "ยังไม่มีตัวเลข CM รายวันในเดือนนี้",
       A ? `CM ดำเนินการภายใน 24 ชม. ทั้งเดือน ${pctOf(A, B + C)} (A ${A} ใบ, ปิดจริงทัน B ${B} ใบ, ส่ง PR/ขออนุมัติทัน C ${C} ใบ) เป้าหมาย 100%` : "ยังไม่มีตัวเลข KPI 24 ชม. ในเดือนนี้",
       `คะแนน TOR: รอบแรก ${first.tor} รอบล่าสุด ${last.tor} (เป้าหมาย ≥ 90) · งานค้าง: รอบแรก ${first.bl} ใบ รอบล่าสุด ${last.bl} ใบ · เกิน 60 วัน: รอบแรก ${first.o60} ใบ รอบล่าสุด ${last.o60} ใบ`,
@@ -757,15 +785,20 @@
     if (lastAI) findings.push(`AI 3 คน (${aiWhen(lastAI)}): ${lastAI.ai.summary}`);
     else findings.push("ยังไม่มี Action plan ของ AI 3 คนในเดือนนี้: กดปุ่ม 🤖 วิเคราะห์ทั้งเดือน ด้านบน แล้วดาวน์โหลดรายงานรวมรายเดือนนี้ใหม่");
     const out = { title: `รวมรายงานประจำเดือน ${ymTh(ym)} ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${rounds.length} รอบ · ใช้ฉบับล่าสุดของแต่ละรอบ · รอบล่าสุด ${lastD}`,
-      findings, kpis: [["รอบประชุม", rounds.length], ["CM 24 ชม. ทั้งเดือน", A ? pctOf(A, B + C) : "-"], ["งานค้างรอบล่าสุด", last.bl], ["TOR รอบล่าสุด", last.tor]],
+      findings, kpis: [["KPI รวม 8 หมวด (Forecast)", torTot[3] || last.tor], ["CM 24 ชม. ทั้งเดือน", A ? pctOf(A, B + C) : "-"], ["งานค้างรอบล่าสุด", last.bl], ["รอบประชุม", rounds.length]],
       lead: await swotLead(lastAI && lastAI.ai, `SWOT ของงานวิศวกรรม (AI 3 คน ${lastAI ? aiWhen(lastAI) : "-"})`),
       analysis: [...(lastAI ? lastAI.ai.analysis : []), ...(dec.filter(r => !/^รวม/.test(r[1])).length ? dec.filter(r => !/^รวม/.test(r[1])).map(r => `${r[0]} ขอ Owner ตัดสินใจ: ${r[1]} · ข้อเสนอ: ${r[3] || "-"} · มติ: ${r[6] || "ยังไม่มีมติ"}`) : ["ไม่มีเรื่องขอ Owner ตัดสินใจในเดือนนี้"])],
-      sections: [{ title: "ผลแต่ละรอบประชุมในเดือน", head: ["รอบประชุม", "สถานะ", "TOR", "CM 24 ชม.", "งานค้าง", "> 60 วัน", "PM ตรงแผน", "MA ติดตาม", "ไฟฟ้า kWh", "QC Coverage"], chart: false, left: true, fs: 10, colW: [1.9, 1.4, 0.9, 1.1, 1.0, 0.9, 1.2, 1.2, 1.3, 1.4],
+      sections: [...(TOR.length ? [{ title: "KPI ตามสัญญา 8 หมวด: ผล · Action plan · วันทำเสร็จ", head: ["หมวด TOR", "เต็ม", "ลงนามล่าสุด", "Forecast", "ข้อเสี่ยงถูกหักคะแนน", "Action plan", "ผู้รับผิดชอบ", "ทำเสร็จ"], chart: false, left: true, fs: 10, colW: [2.3, 0.6, 0.9, 0.9, 2.2, 3.2, 1.2, 1.0],
+          rows: TOR.map((r, i) => { const a = i < 8 ? k8of(i) : null; return [String(r[0] ?? ""), String(r[1] ?? ""), String(r[2] ?? ""), String(r[3] ?? ""), String(r[4] ?? ""), a ? a.action : i < 8 ? (r[5] && r[5] !== "-" ? `${r[5]} (รอ AI 3 คนวิเคราะห์ทั้งเดือน)` : "-") : "", a ? a.owner : "", a ? a.due : ""]; }) }] : []),
+        ...(k8Img ? [{ title: "แผนทำให้เสร็จ KPI 8 หมวด (Gantt)", img: k8Img, imgR: k8G.h / k8G.w, svg: k8G.svg, note: `วันทำเสร็จจาก AI 3 คน (ทั้งเดือน) · ${k8Plan.length} หมวดที่มีแผน` }] : []),
+        { title: "ผลแต่ละรอบประชุมในเดือน", head: ["รอบประชุม", "สถานะ", "TOR", "CM 24 ชม.", "งานค้าง", "> 60 วัน", "PM ตรงแผน", "MA ติดตาม", "ไฟฟ้า kWh", "QC Coverage"], chart: false, left: true, fs: 10, colW: [1.9, 1.4, 0.9, 1.1, 1.0, 0.9, 1.2, 1.2, 1.3, 1.4],
           rows: F.map(f => [thd(f.date), f.st, f.tor, f.cm24, String(f.bl), String(f.o60), f.pm, f.ma, f.kwh, f.qc]) },
         ...(cmRows.length ? [{ title: "CM รายวันทั้งเดือน (วันละ 1 แถว ไม่นับซ้ำ)", head: ["วัน", "คนจริง/สัญญา", "ชม. CM", "ค้างต้นวัน", "รับใหม่", "เปิดซ้ำ", "ปิดจริง", "ค้างปลายวัน", "A ครบกำหนด", "B ปิดจริงทัน", "C ส่ง PR ทัน", "% ผ่าน", "จากรอบ"], chart: false, left: true, fs: 9, colW: [1.8, 1.1, 0.7, 0.8, 0.8, 0.7, 0.8, 0.8, 0.9, 0.9, 0.9, 0.8, 0.8],
           rows: [...cmRows, ["รวมทั้งเดือน", "", "", "", String(rc), "", String(cl), "", String(A), String(B), String(C), A ? pctOf(A, B + C) : "", ""]] }] : []),
-        sec("aging", "รอบล่าสุด " + lastD), sec("bap", "รอบล่าสุด " + lastD), sec("pm", "รอบล่าสุด " + lastD), sec("ma", "รอบล่าสุด " + lastD), sec("en", "รอบล่าสุด " + lastD), sec("qc", "รอบล่าสุด " + lastD),
+        sec("aging", "รอบล่าสุด " + lastD), sec("bap", "รอบล่าสุด " + lastD), ...(await secG("bap", "รอบล่าสุด " + lastD)), sec("pm", "รอบล่าสุด " + lastD), sec("ma", "รอบล่าสุด " + lastD), sec("en", "รอบล่าสุด " + lastD),
+        sec("enap", "รอบล่าสุด " + lastD), ...(await secG("enap", "รอบล่าสุด " + lastD)), sec("qc", "รอบล่าสุด " + lastD),
         ...(dec.length ? [{ title: "เรื่องขอ Owner ตัดสินใจ ทุกรอบในเดือน", head: ["รอบ", ...SEC.find(z => z.k === "dec").cols], chart: false, left: true, fs: 9, colW: [0.9, 3.0, 2.0, 2.6, 1.2, 1.3, 1.3], rows: dec }] : []),
+        ...(await planSlides("คำมั่นรอบหน้า ทุกรอบในเดือน (Gantt)", nxt.map(r => { const p = planOf(String(r[1]).match(/^ACT-\d+/) ? String(r[1]).match(/^ACT-\d+/)[0] : "ACT", `${r[0]} ${r[1]}${r[2] ? " · " + r[2] : ""}`, r[3], r[4]); return p; }).filter(Boolean))),
         ...(nxt.length ? [{ title: "คำมั่นรอบหน้า ทุกรอบในเดือน", head: ["รอบ", ...SEC.find(z => z.k === "next").cols], chart: false, left: true, fs: 9, colW: [0.9, 3.0, 1.6, 1.6, 1.4, 1.9, 1.9], rows: nxt }] : []),
         ...(aiRows.length ? [{ title: "บทสรุปของ AI 3 คน แต่ละรอบ", head: ["รอบ", "บทสรุปผู้บริหาร"], chart: false, left: true, colW: [1.6, 10.7], fs: 12, rows: aiRows }] : []), ...aiPart].filter(s => !s.rows || s.rows.length),
       notes: [...(lastAI ? lastAI.ai.follow_up.map(x => "ติดตามผล: " + x) : []), "รายงานรายเดือนนี้รวมจากรายงานทุกรอบในเดือน ทุกฉบับที่เคยบันทึกยังเก็บไว้ เปิดดูได้ที่แท็บ รายงาน Chief หัวข้อ ฉบับที่บันทึกไว้", "ตัวเลขรายวันวันเดียวกันใช้จากรอบล่าสุดที่มีวันนั้น"] };
