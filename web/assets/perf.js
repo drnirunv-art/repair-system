@@ -77,10 +77,10 @@
   }
   document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => show(b.dataset.tab));
   function show(t) {
-    cur = t === "all" && exec ? "all" : t === "bl" ? "bl" : "rep";
+    cur = t === "all" && exec ? "all" : t === "bl" ? "bl" : t === "mon" ? "mon" : "rep";
     document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === cur));
-    ["rep", "bl", "all"].forEach(k => $("#tab-" + k).hidden = k !== cur);
-    ({ rep: drawRep, bl: drawBl, all: () => drawAll().catch(e => toast(errText(e), true)) })[cur]();
+    ["rep", "bl", "mon", "all"].forEach(k => $("#tab-" + k).hidden = k !== cur);
+    ({ rep: drawRep, bl: drawBl, mon: () => drawMon().catch(e => toast(errText(e), true)), all: () => drawAll().catch(e => toast(errText(e), true)) })[cur]();
   }
   async function load() {
     const h = $("#h").value;
@@ -91,7 +91,7 @@
     row = r.data; D = JSON.parse(JSON.stringify((row && row.data) || {})); BL = (row && row.backlog && row.backlog.rows) ? row.backlog : { rows: [] }; AI = (row && row.ai) || {}; stopPoll(); if (AI.job && AI.job.status === "running") watchJob();
     if (!D.site) D.site = { hospital: hosp().name, chief: canWrite ? me.full_name || "" : "", qc: "" };
     const [a, b] = period(); $("#per").textContent = `· รอบนี้ ${thd(a, { day: "numeric", month: "short" })} – ${thd(b)}`;
-    status();
+    status(); await loadHist();
   }
   function status() {
     const s = row && row.submitted_at ? (new Date(row.submitted_at) <= dueAt() ? ["ok", "ส่งแล้ว ตรงเวลา"] : ["late", "ส่งแล้ว เลยเวลา"]) : row ? ["draft", "ร่าง ยังไม่ส่ง"] : ["none", "ยังไม่มีรายงาน"];
@@ -371,7 +371,7 @@
     if (AI.job && AI.job.status === "running") delete rec.ai; // the server is writing the AI result, leave it alone
     if (send) { rec.submitted_at = new Date().toISOString(); rec.submitted_by = me.id; }
     const { data, error } = await sb.from("perf_weekly").upsert(rec, { onConflict: "hospital_id,meet_date" }).select().maybeSingle(); if (error) throw error;
-    row = data; status();
+    row = data; status(); await loadHist();
   }
   $("#save").onclick = guard(async () => { await persist(false); toast("บันทึกร่างแล้ว"); });
   $("#send").onclick = guard(async () => { await persist(true); toast(new Date() <= dueAt() ? "ส่งรายงานแล้ว ทันก่อนเสาร์ 10:00 น." : "ส่งรายงานแล้ว (เลยเวลาเสาร์ 10:00 น.)"); });
@@ -660,10 +660,116 @@
   $("#xP").onclick = repRun(d => Office.pptx(fname("BiWeekly"), d));
   $("#xW").onclick = repRun(d => Office.docx(fname("BiWeekly"), d));
   $("#xF").onclick = repRun(d => Office.pdf(fname("BiWeekly"), d));
-  $("#xX").onclick = repRun(d => Office.xlsx(fname("BiWeekly"), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes, figures: d.kpis }),
+  const repXlsx = d => Office.xlsx(fname("BiWeekly"), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: d.findings, notes: d.notes, figures: d.kpis }),
     ...SEC.map(s => ({ name: s.t.replace(/^(\d+)\.\s*/, "$1 ").slice(0, 31), rows: [s.cols, ...filled(tbl(s.k))], header: 0 })),
     ...(BL.rows.length ? [{ name: "Backlog ที่อัปโหลด", rows: [["เลขใบงาน", "วันที่แจ้ง", "ประเภท", "สถานที่", "รายละเอียด", "ผู้รับผิดชอบ", "สถานะค้าง", "เหตุผล", "อายุ (วัน)", "กลุ่ม"], ...BL.rows.map(r => [r.no, r.date, r.type, r.loc, r.detail, r.owner, r.status, r.reason, r.age, GRP.find(g => g[0] === grpOf(r))[1]])], header: 0 }] : []),
-    ...(AI.report ? aiSheets() : [])]));
+    ...(AI.report ? aiSheets() : [])]);
+  $("#xX").onclick = repRun(repXlsx);
+
+  // ---------- saved versions of this round (perf_weekly_history): every save is added, nothing is overwritten ----------
+  let HIST = [];
+  const KIND = { draft: "บันทึกร่าง", submit: "ส่งรายงาน", ai: "AI 3 คนทำเสร็จ" };
+  const tsT = s => new Date(s).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" });
+  async function loadHist() {
+    HIST = []; $("#hist").hidden = true; if (!row) return;
+    const r = await sb.from("perf_weekly_history").select("id,kind,saved_at,submitted_at,profiles(full_name)").eq("perf_id", row.id).order("saved_at", { ascending: false }).limit(100);
+    if (r.error || !r.data || !r.data.length) return;   // before migration 0057 the table does not exist: keep the page as it was
+    HIST = r.data; const n = HIST.length;
+    $("#histN").textContent = `(${n} ฉบับ ล่าสุด ${tsT(HIST[0].saved_at)} น.)`; $("#hist").hidden = false;
+    $("#histT").innerHTML = `<thead><tr><th>ฉบับที่</th><th>บันทึกเมื่อ</th><th>ชนิด</th><th>โดย</th><th>ใช้ฉบับนี้</th></tr></thead><tbody>` +
+      HIST.map((h, i) => `<tr><td class="num">${n - i}${i ? "" : " (ล่าสุด)"}</td><td>${esc(tsT(h.saved_at))} น.</td><td>${esc(KIND[h.kind] || h.kind)}</td><td>${esc((h.profiles && h.profiles.full_name) || "-")}</td>` +
+        `<td><button class="btn small" type="button" data-hv="${h.id}" data-ha="open">เปิดฉบับนี้</button> <button class="btn small" type="button" data-hv="${h.id}" data-ha="ppt">PPT</button> <button class="btn small" type="button" data-hv="${h.id}" data-ha="xlsx">Excel</button></td></tr>`).join("") + `</tbody>`;
+    $("#histT").querySelectorAll("[data-hv]").forEach(b => b.onclick = guard(() => useVer(+b.dataset.hv, b.dataset.ha)));
+  }
+  async function useVer(id, how) {
+    const r = await sb.from("perf_weekly_history").select("data,backlog,ai,saved_at").eq("id", id).maybeSingle(); if (r.error) throw r.error; if (!r.data) return;
+    const v = r.data, no = HIST.length - HIST.findIndex(h => h.id === id), vD = JSON.parse(JSON.stringify(v.data || {})), vBL = v.backlog && v.backlog.rows ? v.backlog : { rows: [] }, vAI = v.ai || {};
+    if (!vD.site) vD.site = { hospital: hosp().name, chief: "", qc: "" };
+    if (how === "open") { D = vD; BL = vBL; AI = vAI; drawRep(); toast(`เปิดฉบับที่ ${no} (${tsT(v.saved_at)} น.) แล้ว ถ้ากด บันทึกร่าง จะเก็บเป็นฉบับใหม่ ฉบับเดิมทุกฉบับยังอยู่`); return; }
+    const keep = [D, BL, AI]; D = vD; BL = vBL; AI = vAI;   // export the old version with the same report layout, then put the open one back
+    try { const d = await repDeck(); d.period += ` · ฉบับที่ ${no} บันทึกเมื่อ ${tsT(v.saved_at)} น.`; if (how === "ppt") await Office.pptx(fname("BiWeekly") + `_ฉบับ${no}`, d); else await repXlsx(d); }
+    finally { [D, BL, AI] = keep; }
+  }
+
+  // ---------- month-end roll-up: every meeting Saturday of the month (latest version of each round) ----------
+  const TMF = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+  const ymTh = ym => `${TMF[+ym.slice(5, 7) - 1]} ${+ym.slice(0, 4) + 543}`;
+  const isoOf = s => s.slice(0, 10);
+  let MON = null;
+  (() => { const t = today(); let y = +t.slice(0, 4), m = +t.slice(5, 7); const o = [];
+    for (let i = 0; i < 12; i++) { const ym = `${y}-${String(m).padStart(2, "0")}`; o.push(`<option value="${ym}">${ymTh(ym)}</option>`); if (--m < 1) { m = 12; y--; } }
+    $("#mm").innerHTML = o.join(""); $("#mm").onchange = guard(() => drawMon()); })();
+  const cellOf = (t, k, r, c) => t && t[k] && t[k][r] ? String(t[k][r][c] ?? "").trim() : "";
+  const pctOf = (a, b) => a ? Math.round(b * 1000 / a) / 10 + "%" : "-";
+  function roundFig(x) {
+    const t = (x.data && x.data.t) || {}, bl = (x.backlog && x.backlog.rows) || [];
+    let A = 0, B = 0, C = 0; (t.k24 || []).slice(0, 14).forEach(r => { const a = +r[1] || 0; if (a > 0) { A += a; B += +r[2] || 0; C += +r[3] || 0; } });
+    const st = !x.submitted_at ? "ร่าง ยังไม่ส่ง" : new Date(x.submitted_at) <= new Date(x.meet_date + "T10:00:00+07:00") ? "ส่งตรงเวลา" : "ส่งเลยเวลา";
+    return { date: x.meet_date, st, tor: cellOf(t, "sum", 0, 3) || cellOf(t, "tor", 8, 3) || "-", cm24: A ? pctOf(A, B + C) : cellOf(t, "sum", 1, 3) || "-",
+      bl: bl.length || cellOf(t, "sum", 2, 3) || "-", o60: bl.length ? bl.filter(v => +v.age > 60).length : cellOf(t, "sum", 3, 3) || "-",
+      pm: cellOf(t, "sum", 4, 3) || cellOf(t, "pm", 5, 3) || "-", ma: cellOf(t, "sum", 5, 3) || "-", kwh: cellOf(t, "en", 0, 3) || "-", qc: cellOf(t, "qc", 0, 2) || "-",
+      ai: x.ai && x.ai.report ? x.ai.report : null };
+  }
+  async function monthData(hid, ym) {
+    const a = ym + "-01", b = dAdd(dAdd(a, 32).slice(0, 8) + "01", -1);
+    const r = await sb.from("perf_weekly").select("id,meet_date,submitted_at,updated_at,data,backlog,ai").eq("hospital_id", hid).gte("meet_date", a).lte("meet_date", dAdd(b, 14)).order("meet_date");
+    if (r.error) throw r.error; const got = r.data || [], rounds = got.filter(x => x.meet_date <= b);   // the next month's first rounds still hold this month's last days
+    // daily figures: each day of the month comes from the latest round that has a figure for it (the two weeks of a round overlap the next round)
+    const days = {};
+    got.forEach(x => { const t = (x.data && x.data.t) || {}, d0 = dAdd(x.meet_date, -14);
+      for (let i = 0; i < 14; i++) { const d = dAdd(d0, i); if (d < a || d > b) continue;
+        const cm = (t.cm || [])[i] || [], k = (t.k24 || [])[i] || [], has = v => v.slice(1).some(c => String(c ?? "").trim());
+        if (has(cm) || has(k)) days[d] = { cm, k, from: x.meet_date }; } });
+    return { a, b, rounds, days };
+  }
+  async function drawMon() {
+    const H = hosp(), ym = $("#mm").value, M = await monthData(H.id, ym); MON = { H, ym, ...M };
+    if (!M.rounds.length) { $("#monBox").innerHTML = `<p class="note">ยังไม่มีรายงานของ ${esc(H.name)} ในเดือน${esc(ymTh(ym))}</p>`; $("#monActs").hidden = true; return; }
+    const d = await monDeck(); $("#monActs").hidden = false;
+    $("#monBox").innerHTML = `<div class="kpis">${d.kpis.map(([k, v]) => `<div class="kpi"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div><h3>บทสรุป</h3><ul>${d.findings.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
+      d.sections.filter(s => s.rows).map(s => `<h3>${esc(s.title)}</h3><div class="tw"><table class="pt"><thead><tr>${s.head.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${s.rows.map(r => `<tr>${r.map(v => `<td style="white-space:pre-line">${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`).join("");
+  }
+  async function monDeck() {
+    const { H, ym, rounds, days } = MON, F = rounds.map(roundFig), last = F[F.length - 1], first = F[0], dl = Object.keys(days).sort();
+    let rc = 0, cl = 0, A = 0, B = 0, C = 0;
+    const cmRows = dl.map(d => { const { cm, k, from } = days[d]; rc += +cm[4] || 0; cl += +cm[6] || 0; const a = +k[1] || 0; if (a > 0) { A += a; B += +k[2] || 0; C += +k[3] || 0; }
+      return [`${DAYS[dow(d)]} ${thd(d)}`, ...[1, 2, 3, 4, 5, 6, 7].map(i => String(cm[i] ?? "")), String(k[1] ?? ""), String(k[2] ?? ""), String(k[3] ?? ""), a > 0 ? pctOf(a, (+k[2] || 0) + (+k[3] || 0)) : "", thd(from, { day: "numeric", month: "short" })]; });
+    const n = s => F.filter(f => f.st === s).length, lastT = (rounds[rounds.length - 1].data || {}).t || {}, lastD = thd(last.date);
+    const allRows = (k, cols) => rounds.flatMap(x => (((x.data || {}).t || {})[k] || []).filter(r => String(r[0] ?? "").trim() && r.slice(1).some(v => String(v ?? "").trim()) || (k === "dec" && String(r[0] ?? "").trim())).map(r => [thd(x.meet_date, { day: "numeric", month: "short" }), ...cols.map((_, i) => String(r[i] ?? ""))]));
+    const sec = (k, lab) => { const s = SEC.find(z => z.k === k); return { title: `${s.t} (${lab})`, head: s.cols, rows: (lastT[k] || []).map(r => r.map(v => String(v ?? ""))), chart: false, left: true, fs: 11 }; };
+    const dec = allRows("dec", SEC.find(z => z.k === "dec").cols), nxt = allRows("next", SEC.find(z => z.k === "next").cols);
+    const findings = [`เดือน${ymTh(ym)} มีรายงาน ${rounds.length} รอบประชุม (${F.map(f => thd(f.date, { day: "numeric", month: "short" })).join(", ")}) ส่งตรงเวลา ${n("ส่งตรงเวลา")} รอบ ส่งเลยเวลา ${n("ส่งเลยเวลา")} รอบ ยังเป็นร่าง ${n("ร่าง ยังไม่ส่ง")} รอบ`,
+      dl.length ? `งานแจ้งซ่อม (CM) ในเดือนนี้มีข้อมูล ${dl.length} วัน: รับแจ้งใหม่ ${rc} ใบ ปิดจริง ${cl} ใบ ค้างปลายวันล่าสุด ${String(days[dl[dl.length - 1]].cm[7] ?? "-")} ใบ` : "ยังไม่มีตัวเลข CM รายวันในเดือนนี้",
+      A ? `CM ดำเนินการภายใน 24 ชม. ทั้งเดือน ${pctOf(A, B + C)} (A ${A} ใบ, ปิดจริงทัน B ${B} ใบ, ส่ง PR/ขออนุมัติทัน C ${C} ใบ) เป้าหมาย 100%` : "ยังไม่มีตัวเลข KPI 24 ชม. ในเดือนนี้",
+      `คะแนน TOR: รอบแรก ${first.tor} รอบล่าสุด ${last.tor} (เป้าหมาย ≥ 90) · งานค้าง: รอบแรก ${first.bl} ใบ รอบล่าสุด ${last.bl} ใบ · เกิน 60 วัน: รอบแรก ${first.o60} ใบ รอบล่าสุด ${last.o60} ใบ`,
+      `PM ทำเองตรงแผนรอบล่าสุด ${last.pm} (เป้าหมาย ≥ 95%) · MA ติดตามสัญญารอบล่าสุด ${last.ma} (เป้าหมาย 100%)`];
+    const lastAI = [...F].reverse().find(f => f.ai);
+    const aiRows = F.filter(f => f.ai).map(f => [thd(f.date, { day: "numeric", month: "short" }), f.ai.summary]);
+    const out = { title: `รวมรายงานประจำเดือน ${ymTh(ym)} ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${rounds.length} รอบ · ใช้ฉบับล่าสุดของแต่ละรอบ · รอบล่าสุด ${lastD}`,
+      findings, kpis: [["รอบประชุม", rounds.length], ["CM 24 ชม. ทั้งเดือน", A ? pctOf(A, B + C) : "-"], ["งานค้างรอบล่าสุด", last.bl], ["TOR รอบล่าสุด", last.tor]],
+      lead: await swotLead(lastAI && lastAI.ai, `SWOT ของงานวิศวกรรมรอบล่าสุดที่มี AI 3 คน (${lastAI ? thd(lastAI.date, { day: "numeric", month: "short" }) : "-"})`),
+      analysis: dec.filter(r => !/^รวม/.test(r[1])).length ? dec.filter(r => !/^รวม/.test(r[1])).map(r => `${r[0]} ขอ Owner ตัดสินใจ: ${r[1]} · ข้อเสนอ: ${r[3] || "-"} · มติ: ${r[6] || "ยังไม่มีมติ"}`) : ["ไม่มีเรื่องขอ Owner ตัดสินใจในเดือนนี้"],
+      sections: [{ title: "ผลแต่ละรอบประชุมในเดือน", head: ["รอบประชุม", "สถานะ", "TOR", "CM 24 ชม.", "งานค้าง", "> 60 วัน", "PM ตรงแผน", "MA ติดตาม", "ไฟฟ้า kWh", "QC Coverage"], chart: false, left: true, fs: 10, colW: [1.9, 1.4, 0.9, 1.1, 1.0, 0.9, 1.2, 1.2, 1.3, 1.4],
+          rows: F.map(f => [thd(f.date), f.st, f.tor, f.cm24, String(f.bl), String(f.o60), f.pm, f.ma, f.kwh, f.qc]) },
+        ...(cmRows.length ? [{ title: "CM รายวันทั้งเดือน (วันละ 1 แถว ไม่นับซ้ำ)", head: ["วัน", "คนจริง/สัญญา", "ชม. CM", "ค้างต้นวัน", "รับใหม่", "เปิดซ้ำ", "ปิดจริง", "ค้างปลายวัน", "A ครบกำหนด", "B ปิดจริงทัน", "C ส่ง PR ทัน", "% ผ่าน", "จากรอบ"], chart: false, left: true, fs: 9, colW: [1.8, 1.1, 0.7, 0.8, 0.8, 0.7, 0.8, 0.8, 0.9, 0.9, 0.9, 0.8, 0.8],
+          rows: [...cmRows, ["รวมทั้งเดือน", "", "", "", String(rc), "", String(cl), "", String(A), String(B), String(C), A ? pctOf(A, B + C) : "", ""]] }] : []),
+        sec("aging", "รอบล่าสุด " + lastD), sec("bap", "รอบล่าสุด " + lastD), sec("pm", "รอบล่าสุด " + lastD), sec("ma", "รอบล่าสุด " + lastD), sec("en", "รอบล่าสุด " + lastD), sec("qc", "รอบล่าสุด " + lastD),
+        ...(dec.length ? [{ title: "เรื่องขอ Owner ตัดสินใจ ทุกรอบในเดือน", head: ["รอบ", ...SEC.find(z => z.k === "dec").cols], chart: false, left: true, fs: 9, colW: [0.9, 3.0, 2.0, 2.6, 1.2, 1.3, 1.3], rows: dec }] : []),
+        ...(nxt.length ? [{ title: "คำมั่นรอบหน้า ทุกรอบในเดือน", head: ["รอบ", ...SEC.find(z => z.k === "next").cols], chart: false, left: true, fs: 9, colW: [0.9, 3.0, 1.6, 1.6, 1.4, 1.9, 1.9], rows: nxt }] : []),
+        ...(aiRows.length ? [{ title: "บทสรุปของ AI 3 คน แต่ละรอบ", head: ["รอบ", "บทสรุปผู้บริหาร"], chart: false, left: true, colW: [1.6, 10.7], fs: 12, rows: aiRows }] : [])].filter(s => !s.rows || s.rows.length),
+      notes: ["รายงานรายเดือนนี้รวมจากรายงานทุกรอบในเดือน ทุกฉบับที่เคยบันทึกยังเก็บไว้ เปิดดูได้ที่แท็บ รายงาน Chief หัวข้อ ฉบับที่บันทึกไว้", "ตัวเลขรายวันวันเดียวกันใช้จากรอบล่าสุดที่มีวันนั้น"] };
+    if (exec) { const [r, Hs] = await Promise.all([sb.from("perf_weekly").select("hospital_id,meet_date,submitted_at,data,backlog,ai").gte("meet_date", MON.a).lte("meet_date", MON.b).order("meet_date"), sb.from("hospitals").select("id,code,name").order("code")]);
+      const ORDER = ["PT1", "PT2", "PT3", "PTN", "PTW", "PTS", "PTP", "PLD", "PLR", "PLS", "PLK", "PLC"], hs = (Hs.data || []).sort((x, y) => ORDER.indexOf(x.code) - ORDER.indexOf(y.code));
+      const rows = hs.map(h => { const xs = (r.data || []).filter(v => v.hospital_id === h.id).map(roundFig), l = xs[xs.length - 1];
+        return [h.code, h.name, String(xs.length), String(xs.filter(f => f.st === "ส่งตรงเวลา").length), l ? l.tor : "-", l ? l.cm24 : "-", l ? String(l.bl) : "-", l ? String(l.o60) : "-", l ? l.pm : "-"]; });
+      out.sections.push({ title: `ภาพรวม 12 โรง เดือน${ymTh(ym)} (รอบล่าสุดของแต่ละโรง)`, head: ["รหัส", "โรงพยาบาล", "รอบที่มีรายงาน", "ส่งตรงเวลา", "TOR", "CM 24 ชม.", "งานค้าง", "> 60 วัน", "PM ตรงแผน"], chart: false, left: true, fs: 10, colW: [0.8, 1.8, 1.2, 1.1, 1.0, 1.2, 1.0, 1.0, 1.2], rows }); }
+    return out;
+  }
+  const fM = () => `BiWeekly_Monthly_${hosp().code}_${+$("#mm").value.slice(0, 4) + 543}${$("#mm").value.slice(4)}`;
+  const monRun = fn => guard(async () => { if (!MON) return; fn(await monDeck()); });
+  $("#mP").onclick = monRun(d => Office.pptx(fM(), d)); $("#mW").onclick = monRun(d => Office.docx(fM(), d)); $("#mF").onclick = monRun(d => Office.pdf(fM(), d));
+  $("#mX").onclick = monRun(d => Office.xlsx(fM(), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: [...d.findings, ...d.analysis], notes: d.notes, figures: d.kpis }),
+    ...d.sections.filter(x => x.rows).map(x => ({ name: x.title.replace(/[\\/?*[\]:]/g, " ").slice(0, 31), rows: [x.head, ...x.rows], header: 0 })), ...Office.drawSheets(d)]));
 
   // ---------- 12 hospitals ----------
   let allRows = [];
