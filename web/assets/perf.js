@@ -606,6 +606,7 @@
     box.innerHTML = `<h3>Action plan โดย AI 3 คน</h3>${ROLES}<p class="sub">ทำเมื่อ ${new Date(AI.at).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" })} · AI 3 ตรวจวน ${(AI.log || []).length} รอบ · ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
       `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p>` +
       (R.swot ? `<h3>SWOT ของงานวิศวกรรมรอบนี้</h3><div class="fish">${swotSvg(R.swot)}</div>` : `<p class="note">${esc(swotLines(R)[0])}</p>`) +
+      ((R.kpi8 || []).length ? `<h3>KPI ตามสัญญา 8 หมวด: Action plan · วันทำเสร็จ</h3><div class="tw"><table class="pt"><thead><tr><th>หมวด</th><th>ผล</th><th>ข้อเสี่ยง</th><th>Action plan</th><th>ผู้รับผิดชอบ</th><th>ทำเสร็จ</th></tr></thead><tbody>${R.kpi8.map(x => `<tr><td>${esc(x.category)}</td><td>${esc(x.result)}</td><td>${esc(x.risk)}</td><td>${esc(x.action)}</td><td>${esc(x.owner)}</td><td>${esc(x.due)}</td></tr>`).join("")}</tbody></table></div>` : "") +
       `<h3>บทวิเคราะห์</h3><ul>${R.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       `<h3>อ่านใบงานค้างทุกใบ (${BL.rows.length} ใบ)</h3><div class="tw"><table><tr><th>รายการตรวจ</th><th>จำนวนใบ</th></tr>${chkRows().map(r => `<tr><td>${esc(r[0])}</td><td>${r[1]}</td></tr>`).join("")}</table></div>` +
       (trRows(R).length ? `<div class="tw"><table><tr><th>ปัญหาการทำงาน (AI 3 คน)</th><th>ใบ</th><th>เลขใบงาน</th><th>วิธีแก้</th></tr>${(R.ticket_review || []).map(x => `<tr><td>${esc(x.issue)}</td><td>${(x.tickets || []).length}</td><td style="white-space:normal">${esc((x.tickets || []).join(", "))}</td><td style="white-space:normal">${esc(x.fix)}</td></tr>`).join("")}</table></div>` : `<p class="note">รายงาน AI รอบนี้ทำก่อนกฎอ่านใบงานทุกใบ กดปุ่ม 🤖 ใหม่เพื่อให้ AI 3 คนอ่านและวิเคราะห์ทุกใบ</p>`) +
@@ -638,6 +639,7 @@
   function aiSheets() { const R = AI.report, rows = [["กลุ่ม", "ปัญหา", "ใบงาน", "สาเหตุราก", "วิธีการ / ขั้นตอน", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "วัดผล", "ผลที่คาดหวัง"]];
     R.items.forEach(it => it.actions.forEach((a, i) => rows.push([i ? "" : it.code, i ? "" : it.title, i ? "" : (it.tickets || []).join(", "), i ? "" : it.root_cause, a.step, a.owner, a.due, a.measure, i ? "" : it.expected_result])));
     return [{ name: "Action plan AI", rows, header: 0 },
+      ...((R.kpi8 || []).length ? [{ name: "KPI 8 หมวด Action plan", rows: [["หมวด TOR", "ผล", "ข้อเสี่ยง", "Action plan", "ผู้รับผิดชอบ", "ทำเสร็จ"], ...R.kpi8.map(x => [x.category, x.result, x.risk, x.action, x.owner, x.due])], header: 0 }] : []),
       { name: "อ่านใบงานทุกใบ", rows: [["รายการตรวจ", "จำนวนใบ"], ...chkRows(), [], ["ปัญหา (AI 3 คน)", "จำนวนใบ", "เลขใบงาน", "วิธีแก้"], ...(R.ticket_review || []).map(x => [x.issue, (x.tickets || []).length, (x.tickets || []).join(", "), x.fix])], header: 0 },
       { name: "RCA ก้างปลา 4M", rows: [["กลุ่ม", "ปัญหา", ...M4.map(m => m[1]), "5 Why", "สาเหตุราก", "ชื่อโครงการ", "เป้าหมาย", "งบประมาณ"], ...R.items.map(it => [it.code, it.title, ...M4.map(m => ((it.m4 || {})[m[0]] || []).join("\n")), (it.why5 || []).join("\n"), it.root_cause, it.project.name, it.project.goal, it.project.budget])], header: 0 },
       ...(R.swot ? [{ name: "SWOT", rows: [["หัวข้อ", "รายการ"], ...SW.flatMap(([k, lab]) => (R.swot[k] || []).map((t, i) => [i ? "" : lab, t]))], header: 0 }] : []),
@@ -666,16 +668,32 @@
   // ---------- exports of the Chief report (template order) ----------
   const fname = p => `${p}_${hosp().code}_${meet().replace(/^(\d{4})/, y => +y + 543)}`;
   const filled = T => T.map(r => r.map(v => String(v ?? "")));
+  // KPI 8 TOR categories: total first, then each category with the AI 3-role Action plan and finish date (same in the round and the month report)
+  async function k8Part(TOR, k8, wait) {
+    TOR = (TOR || []).slice(0, 9); k8 = k8 || [];
+    const k8of = i => k8.find(x => String(x.category || "").trim().startsWith(String(i + 1))) || k8[i] || null;
+    if (!TOR.length || !TOR.slice(0, 9).some(r => r.slice(1).some(v => String(v ?? "").trim()))) return { k8of, tot: [], lines: [], secs: [] };
+    const tot = TOR[8] || [], lines = [`คะแนน KPI ตามสัญญา (TOR แนบ 4) รวม 8 หมวด: ลงนามล่าสุด ${tot[2] || "-"} / 100 · Forecast ${tot[3] || "-"} / 100 (เป้าหมาย ≥ 90) ${+tot[3] >= 90 ? "ผ่านเป้าหมาย" : tot[3] ? "ยังต่ำกว่าเป้าหมาย" : ""}`.trim(),
+      ...TOR.slice(0, 8).map((r, i) => { const a = k8of(i); return `${r[0]}: ลงนามล่าสุด ${r[2] || "-"} / ${r[1]} · Forecast ${r[3] || "-"}${r[4] && r[4] !== "-" ? ` · เสี่ยง: ${r[4]}` : ""}${a && a.action ? ` · Action plan: ${a.action}` : r[5] && r[5] !== "-" ? ` · Action: ${r[5]}` : ""}${a && a.due ? ` · ทำเสร็จ ${a.due}` : ""}${a && a.owner ? ` (${a.owner})` : ""}`; })];
+    const plan = TOR.slice(0, 8).map((r, i) => ({ r, a: k8of(i) })).filter(x => x.a && parseDue(x.a.due)).map(({ r, a }) => ({ grp: `หมวด ${String(r[0]).match(/^\d+/) || ""}`, step: `${r[0]}: ${a.action}`, owner: a.owner, start: today(), end: parseDue(a.due) < today() ? today() : parseDue(a.due), due: a.due }));
+    const G = plan.length ? ganttSvg(plan) : null, img = G ? await toPng(G.svg, G.w, G.h) : null;
+    const secs = [{ title: "KPI ตามสัญญา 8 หมวด: ผล · Action plan · วันทำเสร็จ", head: ["หมวด TOR", "เต็ม", "ลงนามล่าสุด", "Forecast", "ข้อเสี่ยงถูกหักคะแนน", "Action plan", "ผู้รับผิดชอบ", "ทำเสร็จ"], chart: false, left: true, fs: 10, colW: [2.3, 0.6, 0.9, 0.9, 2.2, 3.2, 1.2, 1.0],
+        rows: TOR.map((r, i) => { const a = i < 8 ? k8of(i) : null; return [String(r[0] ?? ""), String(r[1] ?? ""), String(r[2] ?? ""), String(r[3] ?? ""), String(r[4] ?? ""), a ? a.action : i < 8 ? (r[5] && r[5] !== "-" ? `${r[5]} (${wait})` : "-") : "", a ? a.owner : "", a ? a.due : ""]; }) },
+      ...(img ? [{ title: "แผนทำให้เสร็จ KPI 8 หมวด (Gantt)", img, imgR: G.h / G.w, svg: G.svg, note: `วันทำเสร็จจาก AI 3 คน · ${plan.length} หมวดที่มีแผน` }] : [])];
+    return { k8of, tot, lines, secs };
+  }
   async function repDeck() {
     k24calc(); const H = hosp(), S = tbl("sum"), [a, b] = period();
     const find = S.filter(r => String(r[3]).trim()).map(r => `${r[0]}: ${r[3]} (เป้าหมาย ${r[1]})${String(r[4]).trim() ? " · " + r[4] : ""}`);
     if (BL.rows.length) find.push(`งานค้าง ${BL.rows.length} ใบ เกิน 60 วัน ${BL.rows.filter(r => +r.age > 60).length} ใบ (จาก ${BL.file})`);
     const dec = tbl("dec").filter(r => String(r[0]).trim()).map(r => `ขอ Owner ตัดสินใจ: ${r[0]}${r[2] ? " · ข้อเสนอ: " + r[2] : ""}`);
+    const R = AI.report, K = await k8Part(tbl("tor"), R && R.kpi8, "รอ AI 3 คนวิเคราะห์รอบนี้");
+    const lead8 = [...K.lines, ...(R ? [`AI 3 คน (รอบนี้): ${R.summary}`] : ["ยังไม่มี Action plan ของ AI 3 คนในรอบนี้: กดปุ่ม 🤖 ให้ AI 3 คนวิเคราะห์ แล้วดาวน์โหลดรายงานนี้ใหม่"])];
     return { title: `Chief Engineer Bi-Weekly Performance ${H.code}`, org: H.name, period: `ประชุม ${thd(meet())} 14:00–16:00 น. · ข้อมูล ${thd(a)} – ${thd(b)} · ผู้รายงาน ${D.site.chief || "-"}${D.site.qc ? " · " + D.site.qc : ""}`,
-      findings: find.length ? find : ["ยังไม่ได้กรอกผลรอบนี้"], kpis: [["งานค้าง (ใบ)", BL.rows.length || S[2][3] || "-"], ["ค้าง > 60 วัน", BL.rows.length ? BL.rows.filter(r => +r.age > 60).length : S[3][3] || "-"], ["CM 24 ชม.", tbl("k24")[14][4] || "-"], ["TOR", S[0][3] || S[0][2] || "-"]],
-      lead: await swotLead(AI.report, "SWOT ของงานวิศวกรรมรอบนี้ (AI 3 คน)"), analysis: dec,
+      findings: [...lead8, ...(find.length ? find : ["ยังไม่ได้กรอกผลรอบนี้"])], kpis: [...(K.tot[3] || K.tot[2] ? [["KPI รวม 8 หมวด (Forecast)", K.tot[3] || K.tot[2]]] : []), ["งานค้าง (ใบ)", BL.rows.length || S[2][3] || "-"], ["ค้าง > 60 วัน", BL.rows.length ? BL.rows.filter(r => +r.age > 60).length : S[3][3] || "-"], ["CM 24 ชม.", tbl("k24")[14][4] || "-"], ...(K.tot[3] || K.tot[2] ? [] : [["TOR", S[0][3] || S[0][2] || "-"]])],
+      lead: await swotLead(R, "SWOT ของงานวิศวกรรมรอบนี้ (AI 3 คน)"), analysis: [...(R ? R.analysis : []), ...dec],
       sections: [...(await Promise.all(SEC.map(async s => [{ title: s.t, head: s.cols, rows: filled(tbl(s.k)), chart: false, left: true, fs: s.days || s.k === "bap" ? 9 : 11, ...(s.k === "bap" ? { colW: [4.4, 0.9, 2.4, 1.2, 1.1, 1.1, 1.2] } : {}) },
-        ...(await planSlides(`${s.t} (Gantt)`, secPlan(s.k, tbl(s.k))))]))).flat(), ...(await aiSlides())],
+        ...(s.k === "tor" ? K.secs : []), ...(await planSlides(`${s.t} (Gantt)`, secPlan(s.k, tbl(s.k))))]))).flat(), ...(await aiSlides())],
       notes: ["รายงานนี้ต้องมีทางเลือกและข้อเสนอของ Chief ทุกปัญหา", "ตัวเลข PR / ขออนุมัติภายใน 24 ชม. นับผ่าน KPI แต่ใบงานยังอยู่ใน Backlog จนปิดจริง"] }; }
   const repRun = fn => () => repDeck().then(fn).catch(e => toast(errText(e), true));
   $("#xP").onclick = repRun(d => Office.pptx(fname("BiWeekly"), d));
@@ -763,13 +781,8 @@
     const sec = (k, lab) => { const s = SEC.find(z => z.k === k); return { title: `${s.t} (${lab})`, head: s.cols, rows: (lastT[k] || []).map(r => r.map(v => String(v ?? ""))), chart: false, left: true, fs: 11 }; };
     const secG = async (k, lab) => planSlides(`${SEC.find(z => z.k === k).t} (${lab}) Gantt`, secPlan(k, lastT[k]));
     const dec = allRows("dec", SEC.find(z => z.k === "dec").cols), nxt = allRows("next", SEC.find(z => z.k === "next").cols);
-    const TOR = (lastT.tor || []).slice(0, 9), k8 = (MON.mai && MON.mai.report && MON.mai.report.kpi8) || [];
-    const k8of = i => k8.find(x => String(x.category || "").trim().startsWith(String(i + 1))) || k8[i] || null;
-    const torTot = TOR[8] || [], kpiLines = [`คะแนน KPI ตามสัญญา (TOR แนบ 4) รวม 8 หมวด: ลงนามล่าสุด ${torTot[2] || "-"} / 100 · Forecast ${torTot[3] || "-"} / 100 (เป้าหมาย ≥ 90) ${+torTot[3] >= 90 ? "ผ่านเป้าหมาย" : torTot[3] ? "ยังต่ำกว่าเป้าหมาย" : ""}`.trim(),
-      ...TOR.slice(0, 8).map((r, i) => { const a = k8of(i); return `${r[0]}: ลงนามล่าสุด ${r[2] || "-"} / ${r[1]} · Forecast ${r[3] || "-"}${r[4] && r[4] !== "-" ? ` · เสี่ยง: ${r[4]}` : ""}${a && a.action ? ` · Action plan: ${a.action}` : r[5] && r[5] !== "-" ? ` · Action: ${r[5]}` : ""}${a && a.due ? ` · ทำเสร็จ ${a.due}` : ""}${a && a.owner ? ` (${a.owner})` : ""}`; })];
-    const k8Plan = TOR.slice(0, 8).map((r, i) => ({ r, a: k8of(i) })).filter(x => x.a && parseDue(x.a.due)).map(({ r, a }) => ({ grp: `หมวด ${String(r[0]).match(/^\d+/) || ""}`, step: `${r[0]}: ${a.action}`, owner: a.owner, start: today(), end: parseDue(a.due) < today() ? today() : parseDue(a.due), due: a.due }));
-    const k8G = k8Plan.length ? ganttSvg(k8Plan) : null, k8Img = k8G ? await toPng(k8G.svg, k8G.w, k8G.h) : null;
-    const findings = [...(TOR.length ? kpiLines : ["ยังไม่มีคะแนน KPI 8 หมวดในรายงานรอบล่าสุดของเดือน (ข้อ 2 TOR Scorecard)"]), `เดือน${ymTh(ym)} มีรายงาน ${rounds.length} รอบประชุม (${F.map(f => thd(f.date, { day: "numeric", month: "short" })).join(", ")}) ส่งตรงเวลา ${n("ส่งตรงเวลา")} รอบ ส่งเลยเวลา ${n("ส่งเลยเวลา")} รอบ ยังเป็นร่าง ${n("ร่าง ยังไม่ส่ง")} รอบ`,
+    const TOR = (lastT.tor || []).slice(0, 9), K8 = await k8Part(TOR, MON.mai && MON.mai.report && MON.mai.report.kpi8, "รอ AI 3 คนวิเคราะห์ทั้งเดือน"), torTot = K8.tot, kpiLines = K8.lines;
+    const findings = [...(kpiLines.length ? kpiLines : ["ยังไม่มีคะแนน KPI 8 หมวดในรายงานรอบล่าสุดของเดือน (ข้อ 2 TOR Scorecard)"]), `เดือน${ymTh(ym)} มีรายงาน ${rounds.length} รอบประชุม (${F.map(f => thd(f.date, { day: "numeric", month: "short" })).join(", ")}) ส่งตรงเวลา ${n("ส่งตรงเวลา")} รอบ ส่งเลยเวลา ${n("ส่งเลยเวลา")} รอบ ยังเป็นร่าง ${n("ร่าง ยังไม่ส่ง")} รอบ`,
       dl.length ? `งานแจ้งซ่อม (CM) ในเดือนนี้มีข้อมูล ${dl.length} วัน: รับแจ้งใหม่ ${rc} ใบ ปิดจริง ${cl} ใบ ค้างปลายวันล่าสุด ${String(days[dl[dl.length - 1]].cm[7] ?? "-")} ใบ` : "ยังไม่มีตัวเลข CM รายวันในเดือนนี้",
       A ? `CM ดำเนินการภายใน 24 ชม. ทั้งเดือน ${pctOf(A, B + C)} (A ${A} ใบ, ปิดจริงทัน B ${B} ใบ, ส่ง PR/ขออนุมัติทัน C ${C} ใบ) เป้าหมาย 100%` : "ยังไม่มีตัวเลข KPI 24 ชม. ในเดือนนี้",
       `คะแนน TOR: รอบแรก ${first.tor} รอบล่าสุด ${last.tor} (เป้าหมาย ≥ 90) · งานค้าง: รอบแรก ${first.bl} ใบ รอบล่าสุด ${last.bl} ใบ · เกิน 60 วัน: รอบแรก ${first.o60} ใบ รอบล่าสุด ${last.o60} ใบ`,
@@ -788,9 +801,7 @@
       findings, kpis: [["KPI รวม 8 หมวด (Forecast)", torTot[3] || last.tor], ["CM 24 ชม. ทั้งเดือน", A ? pctOf(A, B + C) : "-"], ["งานค้างรอบล่าสุด", last.bl], ["รอบประชุม", rounds.length]],
       lead: await swotLead(lastAI && lastAI.ai, `SWOT ของงานวิศวกรรม (AI 3 คน ${lastAI ? aiWhen(lastAI) : "-"})`),
       analysis: [...(lastAI ? lastAI.ai.analysis : []), ...(dec.filter(r => !/^รวม/.test(r[1])).length ? dec.filter(r => !/^รวม/.test(r[1])).map(r => `${r[0]} ขอ Owner ตัดสินใจ: ${r[1]} · ข้อเสนอ: ${r[3] || "-"} · มติ: ${r[6] || "ยังไม่มีมติ"}`) : ["ไม่มีเรื่องขอ Owner ตัดสินใจในเดือนนี้"])],
-      sections: [...(TOR.length ? [{ title: "KPI ตามสัญญา 8 หมวด: ผล · Action plan · วันทำเสร็จ", head: ["หมวด TOR", "เต็ม", "ลงนามล่าสุด", "Forecast", "ข้อเสี่ยงถูกหักคะแนน", "Action plan", "ผู้รับผิดชอบ", "ทำเสร็จ"], chart: false, left: true, fs: 10, colW: [2.3, 0.6, 0.9, 0.9, 2.2, 3.2, 1.2, 1.0],
-          rows: TOR.map((r, i) => { const a = i < 8 ? k8of(i) : null; return [String(r[0] ?? ""), String(r[1] ?? ""), String(r[2] ?? ""), String(r[3] ?? ""), String(r[4] ?? ""), a ? a.action : i < 8 ? (r[5] && r[5] !== "-" ? `${r[5]} (รอ AI 3 คนวิเคราะห์ทั้งเดือน)` : "-") : "", a ? a.owner : "", a ? a.due : ""]; }) }] : []),
-        ...(k8Img ? [{ title: "แผนทำให้เสร็จ KPI 8 หมวด (Gantt)", img: k8Img, imgR: k8G.h / k8G.w, svg: k8G.svg, note: `วันทำเสร็จจาก AI 3 คน (ทั้งเดือน) · ${k8Plan.length} หมวดที่มีแผน` }] : []),
+      sections: [...K8.secs,
         { title: "ผลแต่ละรอบประชุมในเดือน", head: ["รอบประชุม", "สถานะ", "TOR", "CM 24 ชม.", "งานค้าง", "> 60 วัน", "PM ตรงแผน", "MA ติดตาม", "ไฟฟ้า kWh", "QC Coverage"], chart: false, left: true, fs: 10, colW: [1.9, 1.4, 0.9, 1.1, 1.0, 0.9, 1.2, 1.2, 1.3, 1.4],
           rows: F.map(f => [thd(f.date), f.st, f.tor, f.cm24, String(f.bl), String(f.o60), f.pm, f.ma, f.kwh, f.qc]) },
         ...(cmRows.length ? [{ title: "CM รายวันทั้งเดือน (วันละ 1 แถว ไม่นับซ้ำ)", head: ["วัน", "คนจริง/สัญญา", "ชม. CM", "ค้างต้นวัน", "รับใหม่", "เปิดซ้ำ", "ปิดจริง", "ค้างปลายวัน", "A ครบกำหนด", "B ปิดจริงทัน", "C ส่ง PR ทัน", "% ผ่าน", "จากรอบ"], chart: false, left: true, fs: 9, colW: [1.8, 1.1, 0.7, 0.8, 0.8, 0.7, 0.8, 0.8, 0.9, 0.9, 0.9, 0.8, 0.8],

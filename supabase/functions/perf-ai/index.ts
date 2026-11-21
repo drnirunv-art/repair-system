@@ -222,7 +222,7 @@ Deno.serve(async (req) => {
         return { check: c, model };
       }
       if (body.step === "report") {
-        const rep = await obj(S3, SHAPE + (src.month_mode ? KPI8_SHAPE : ""), `${U3(p1, p2)}${src.month_mode ? "\n\nนี่คือรายงานรวมประจำเดือน: summary ต้องเริ่มด้วยคะแนน KPI รวม 8 หมวด (ลงนามล่าสุดและ Forecast เทียบเป้าหมาย ≥ 90) แล้วจึงสรุปเรื่องอื่น และต้องมี kpi8 ครบ 8 หมวด" : ""}\n\nประวัติการตรวจวนของ AI 3:\n${hist}\nใส่ใน review_notes ว่าแต่ละรอบ AI 3 สั่งแก้อะไรและแก้แล้วอย่างไร`, Report);
+        const rep = await obj(S3, SHAPE + KPI8_SHAPE, `${U3(p1, p2)}\n\n${src.month_mode ? "นี่คือรายงานรวมประจำเดือน" : "นี่คือรายงานรอบประชุม Bi-Weekly"}: summary ต้องเริ่มด้วยคะแนน KPI รวม 8 หมวด (ลงนามล่าสุดและ Forecast เทียบเป้าหมาย ≥ 90) แล้วจึงสรุปเรื่องอื่น และต้องมี kpi8 ครบ 8 หมวด\n\nประวัติการตรวจวนของ AI 3:\n${hist}\nใส่ใน review_notes ว่าแต่ละรอบ AI 3 สั่งแก้อะไรและแก้แล้วอย่างไร`, Report);
         return { report: rep, model };
       }
       throw new Error("step ไม่ถูกต้อง");
