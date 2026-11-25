@@ -25,6 +25,7 @@
   form.tf .wide{grid-column:1/-1}
   .note{border-left:4px solid #0b5cad;background:#f4f9ff;padding:8px 12px;border-radius:8px;color:#17212b;margin:8px 0}
   .note.bad{border-color:#b42318;background:#fff4f2}
+  .pill.bio{background:#fdecef;border-color:#e8a5b3;color:#8a1c33}.pill.chem{background:#e8f1fb;border-color:#9fc0e6;color:#0b4a8a}
   .pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:12px;border:1px solid var(--line);background:#fff;color:#17212b;white-space:nowrap}
   .acts{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
   .lgd{display:flex;gap:8px;flex-wrap:wrap;font-size:13px;margin:6px 0}.lgd span{padding:2px 8px;border-radius:6px;color:#17212b}
@@ -58,7 +59,9 @@
   <section id="gate" hidden><div class="panel"><h2>ต้องเข้าสู่ระบบก่อน</h2><p class="sub">เปิด <a href="home.html">หน้าหลัก</a> แล้วเข้าสู่ระบบ จากนั้นกลับมาที่หน้านี้</p></div></section>
   <div id="body" hidden>
     <div class="hsel"><label for="h">โรงพยาบาล</label><select id="h"></select>
+      <label for="grp">กลุ่มน้ำ</label><select id="grp"></select>
       <label for="sys">ระบบน้ำ</label><select id="sys"></select>
+      <label for="tt">ชนิดการตรวจ</label><select id="tt"></select>
       <span class="sub" id="ro"></span></div>
 
     <section id="tab-sum">
@@ -70,6 +73,8 @@
       <ol id="find"></ol>
       <h2>บทวิเคราะห์</h2>
       <ol id="anal"></ol>
+      <h2>แยกตามกลุ่มน้ำ และชนิดการตรวจ (ตรวจเชื้อ / สารเคมี)</h2>
+      <div class="tw"><table class="tt" id="byGT"></table></div>
       <h2>แยกตามระบบน้ำ</h2>
       <div class="tw"><table class="tt" id="bySys"></table></div>
       <h2>ผลนอกเกณฑ์ในช่วงที่เลือก</h2>

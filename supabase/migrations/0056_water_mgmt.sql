@@ -1,13 +1,15 @@
 -- 0056 Water Management Program (JCI 8th FMS.08.04): register of water sampling points per hospital, a test plan per point
 -- (parameter, limits, frequency), results checked against the limits, and every out-of-range result opening a corrective action
--- that can become a repair job. Systems: cooling tower (Legionella), RO for dialysis and CSSD, potable water, hot water.
+-- that can become a repair job. Three water groups (user 2026-11-25): น้ำกินดื่ม (drinking water dispensers), น้ำใช้ (tap water,
+-- cooling tower Legionella, RO for dialysis and CSSD, hot water) and น้ำเสีย (wastewater treatment); every test is one of two types:
+-- ตรวจเชื้อ (microbiological) or สารเคมี (chemical / physical).
 -- Additive only: new tables, functions, policies and a central template list. Nothing existing is changed.
 -- Limits in the template are starting values from the references named in each row; each hospital edits its own plan
 -- to match its Water Management Plan approved by the IC / Environment of Care committee.
 
 create table if not exists public.water_templates (
   id bigint generated always as identity primary key,
-  system text not null,                 -- CT / RO_HD / RO_CSSD / POT / HW
+  system text not null,                 -- DW / POT / CT / RO_HD / RO_CSSD / HW / WW
   code text not null unique,
   param text not null,
   unit text,
@@ -15,13 +17,14 @@ create table if not exists public.water_templates (
   lo numeric, hi numeric, warn numeric, -- warn = alert level before the limit (upper limits only)
   freq text not null check (freq in ('D', 'W', 'M', 'Q', 'S', 'Y')),
   ref text, method text, note text,
+  test_type text not null default 'chem' check (test_type in ('bio', 'chem')),   -- bio = ตรวจเชื้อ · chem = สารเคมี
   sort int not null default 0
 );
 
 create table if not exists public.water_points (
   id bigint generated always as identity primary key,
   hospital_id uuid not null references public.hospitals(id),
-  system text not null check (system in ('CT', 'RO_HD', 'RO_CSSD', 'POT', 'HW', 'OTH')),
+  system text not null check (system in ('DW', 'POT', 'CT', 'RO_HD', 'RO_CSSD', 'HW', 'WW', 'OTH')),
   code text not null,
   name text not null,
   location text,
@@ -43,12 +46,15 @@ create table if not exists public.water_plans (
   lo numeric, hi numeric, warn numeric,
   freq text not null check (freq in ('D', 'W', 'M', 'Q', 'S', 'Y')),
   ref text, method text, note text,
+  test_type text not null default 'chem' check (test_type in ('bio', 'chem')),
   sort int not null default 0,
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
 create index if not exists water_plans_point_idx on public.water_plans (point_id);
 create index if not exists water_plans_hosp_idx on public.water_plans (hospital_id, active);
+alter table public.water_templates add column if not exists test_type text not null default 'chem';
+alter table public.water_plans add column if not exists test_type text not null default 'chem';
 
 create table if not exists public.water_results (
   id bigint generated always as identity primary key,
@@ -97,6 +103,10 @@ language sql stable security definer set search_path = public as $$
 -- a number as people write it: 1500 / 0.25 (no trailing zeros or dot)
 create or replace function public.water_num(v numeric) returns text
 language sql immutable as $$ select rtrim(to_char(v, 'FM999999990.999'), '.') $$;
+
+-- the three water groups: น้ำกินดื่ม / น้ำใช้ / น้ำเสีย
+create or replace function public.water_group(sys text) returns text
+language sql immutable as $$ select case sys when 'DW' then 'DRINK' when 'WW' then 'WASTE' else 'USE' end $$;
 
 create or replace function public.water_freq_interval(f text) returns interval
 language sql immutable as $$
@@ -206,8 +216,8 @@ begin
   insert into water_points (hospital_id, system, code, name, location, created_by)
   values (p_hospital, p_system, trim(p_code), trim(p_name), nullif(trim(coalesce(p_location, '')), ''), auth.uid()) returning id into v_id;
   if p_template then
-    insert into water_plans (point_id, hospital_id, template_code, param, unit, kind, lo, hi, warn, freq, ref, method, note, sort)
-    select v_id, p_hospital, t.code, t.param, t.unit, t.kind, t.lo, t.hi, t.warn, t.freq, t.ref, t.method, t.note, t.sort
+    insert into water_plans (point_id, hospital_id, template_code, param, unit, kind, lo, hi, warn, freq, ref, method, note, test_type, sort)
+    select v_id, p_hospital, t.code, t.param, t.unit, t.kind, t.lo, t.hi, t.warn, t.freq, t.ref, t.method, t.note, t.test_type, t.sort
     from water_templates t where t.system = p_system order by t.sort;
   end if;
   return v_id;
@@ -260,7 +270,7 @@ end $$;
 
 -- 12-hospital overview for executives (and each person's own hospitals)
 create or replace function public.water_overview() returns table (code text, name text, points bigint, plans bigint, overdue bigint, never bigint,
-  results_90 bigint, fail_90 bigint, open_actions bigint, last_test date)
+  results_90 bigint, fail_90 bigint, open_actions bigint, last_test date, fail_bio_90 bigint, fail_chem_90 bigint)
 language sql stable security definer set search_path = public as $$
   with pl as (
     select p.id, p.hospital_id, p.freq, (select max(r.sampled_on) from water_results r where r.plan_id = p.id) last
@@ -274,39 +284,65 @@ language sql stable security definer set search_path = public as $$
     (select count(*) from water_results r where r.hospital_id = h.id and r.sampled_on >= (now() at time zone 'Asia/Bangkok')::date - 90),
     (select count(*) from water_results r where r.hospital_id = h.id and r.sampled_on >= (now() at time zone 'Asia/Bangkok')::date - 90 and r.status = 'fail'),
     (select count(*) from water_actions a where a.hospital_id = h.id and a.status = 'open'),
-    (select max(pl.last) from pl where pl.hospital_id = h.id)
+    (select max(pl.last) from pl where pl.hospital_id = h.id),
+    (select count(*) from water_results r join water_plans p on p.id = r.plan_id where r.hospital_id = h.id and r.sampled_on >= (now() at time zone 'Asia/Bangkok')::date - 90 and r.status = 'fail' and p.test_type = 'bio'),
+    (select count(*) from water_results r join water_plans p on p.id = r.plan_id where r.hospital_id = h.id and r.sampled_on >= (now() at time zone 'Asia/Bangkok')::date - 90 and r.status = 'fail' and p.test_type = 'chem')
   from hospitals h where public.water_can_read(h.id) order by h.code $$;
 
 revoke all on function public.water_can_record(uuid), public.water_can_manage(uuid), public.water_can_read(uuid), public.water_add_point(uuid, text, text, text, text, boolean),
   public.water_action_save(bigint, text, text, text, date, boolean, bigint), public.water_to_job(bigint), public.water_overview(),
   public.water_result_grade(), public.water_result_action() from public, anon;
 grant execute on function public.water_can_record(uuid), public.water_can_manage(uuid), public.water_can_read(uuid), public.water_add_point(uuid, text, text, text, text, boolean),
-  public.water_action_save(bigint, text, text, text, date, boolean, bigint), public.water_to_job(bigint), public.water_overview(), public.water_freq_interval(text), public.water_num(numeric) to authenticated;
+  public.water_action_save(bigint, text, text, text, date, boolean, bigint), public.water_to_job(bigint), public.water_overview(), public.water_freq_interval(text), public.water_num(numeric), public.water_group(text) to authenticated;
 
 -- central starting values (each hospital edits its own plan to match its approved Water Management Plan)
-insert into public.water_templates (system, code, param, unit, kind, lo, hi, warn, freq, ref, method, note, sort)
+insert into public.water_templates (system, code, param, unit, kind, lo, hi, warn, freq, ref, method, note, sort, test_type)
 select v.* from (values
-  ('CT', 'CT01', 'Legionella spp. (เพาะเชื้อ)', 'CFU/L', 'num', null::numeric, 1000::numeric, 100::numeric, 'Q', 'FMS.08.04 · HSE ACOP L8 · ASHRAE 188', 'ส่งห้องปฏิบัติการที่ได้รับรอง ISO/IEC 17025', 'ตั้งแต่ 100 ทบทวนการควบคุมและเพิ่มสารฆ่าเชื้อ ถ้าเกิน 1,000 ฆ่าเชื้อแบบเข้มข้น (Shock dose) ล้างทำความสะอาด แล้วตรวจซ้ำ', 1),
-  ('CT', 'CT02', 'จุลินทรีย์ทั้งหมด (TBC / Dip slide)', 'CFU/mL', 'num', null, 100000, 10000, 'M', 'HSE ACOP L8', 'Dip slide หรือส่งห้องปฏิบัติการ', 'ตั้งแต่ 10,000 ทบทวนการบำบัดน้ำ ถ้าเกิน 100,000 ฆ่าเชื้อและตรวจ Legionella เพิ่ม', 2),
-  ('CT', 'CT03', 'ค่าความเป็นกรด-ด่าง (pH)', null, 'num', 7.0, 9.0, null, 'W', 'คำแนะนำผู้รับเหมาเคมีบำบัดน้ำ', 'ชุดทดสอบหรือเครื่องวัด pH', null, 3),
-  ('CT', 'CT04', 'ค่าการนำไฟฟ้า (Conductivity)', 'µS/cm', 'num', null, 3000, null, 'W', 'คำแนะนำผู้รับเหมาเคมีบำบัดน้ำ', 'เครื่องวัดค่าการนำไฟฟ้า', 'ตั้งตามรอบความเข้มข้น (Cycle) ที่ผู้รับเหมาเคมีกำหนด เกินเกณฑ์ให้ระบายน้ำทิ้ง (Blowdown)', 4),
-  ('CT', 'CT05', 'สารฆ่าเชื้อคงเหลือ (Free chlorine / Oxidising biocide)', 'mg/L', 'num', 0.5, 2.0, null, 'W', 'HSE ACOP L8', 'ชุดทดสอบ DPD', 'ถ้าใช้สารฆ่าเชื้อชนิดไม่ออกซิไดซ์ ให้แก้เกณฑ์ตามผู้ผลิต', 5),
-  ('RO_HD', 'HD01', 'จุลินทรีย์ทั้งหมด (Total viable count) น้ำ RO ไตเทียม', 'CFU/mL', 'num', null, 100, 50, 'M', 'ISO 23500-3 · AAMI', 'เก็บที่จุดจ่ายน้ำ RO และปลายท่อวน (Loop)', 'ตั้งแต่ 50 คือระดับเฝ้าระวัง ต้องฆ่าเชื้อระบบ RO และท่อจ่าย แล้วตรวจซ้ำ', 1),
-  ('RO_HD', 'HD02', 'Endotoxin น้ำ RO ไตเทียม', 'EU/mL', 'num', null, 0.25, 0.125, 'M', 'ISO 23500-3 · AAMI', 'LAL test', 'ตั้งแต่ 0.125 คือระดับเฝ้าระวัง ต้องฆ่าเชื้อระบบ RO แล้วตรวจซ้ำ', 2),
-  ('RO_HD', 'HD03', 'ค่าการนำไฟฟ้าน้ำ RO ไตเทียม', 'µS/cm', 'num', null, 10, null, 'D', 'ISO 23500-2', 'อ่านจากเครื่องวัดที่ตัวเครื่อง RO ทุกวันก่อนเริ่มฟอกไต', 'เกินเกณฑ์ให้หยุดจ่ายน้ำ แจ้งหน่วยไตเทียม และตรวจเมมเบรน', 3),
-  ('RO_HD', 'HD04', 'คลอรีนรวม (Total chlorine) หลังถังคาร์บอน', 'mg/L', 'num', null, 0.1, null, 'D', 'ISO 23500-3', 'ชุดทดสอบ DPD ก่อนเริ่มฟอกไตทุกวัน', 'เกินเกณฑ์ห้ามใช้น้ำฟอกไต ตรวจถังคาร์บอนสำรองและเปลี่ยนสารกรอง', 4),
-  ('RO_HD', 'HD05', 'สารเคมีปนเปื้อนตาม ISO 23500-3 (อะลูมิเนียม ตะกั่ว ทองแดง ฟลูออไรด์ ฯลฯ)', null, 'pf', null, null, null, 'Y', 'ISO 23500-3', 'ส่งห้องปฏิบัติการที่ได้รับรอง ISO/IEC 17025', 'แนบรายงานผลจากห้องปฏิบัติการ', 5),
-  ('RO_CSSD', 'CS01', 'ค่าการนำไฟฟ้าน้ำ RO หน่วยจ่ายกลาง', 'µS/cm', 'num', null, 10, null, 'D', 'AAMI ST108 (Critical water)', 'อ่านจากเครื่องวัดที่ตัวเครื่อง RO', 'เกินเกณฑ์ให้แจ้งหน่วยจ่ายกลาง หยุดใช้ล้างรอบสุดท้าย และตรวจเมมเบรน', 1),
-  ('RO_CSSD', 'CS02', 'จุลินทรีย์ทั้งหมด น้ำ RO หน่วยจ่ายกลาง', 'CFU/mL', 'num', null, 10, null, 'M', 'AAMI ST108 (Critical water)', 'ส่งห้องปฏิบัติการ', 'เกินเกณฑ์ให้ฆ่าเชื้อระบบ RO แล้วตรวจซ้ำ', 2),
-  ('RO_CSSD', 'CS03', 'Endotoxin น้ำ RO หน่วยจ่ายกลาง', 'EU/mL', 'num', null, 10, null, 'Q', 'AAMI ST108 (Critical water)', 'LAL test', 'เกินเกณฑ์ให้ฆ่าเชื้อระบบ RO แล้วตรวจซ้ำ', 3),
-  ('RO_CSSD', 'CS04', 'ค่าความเป็นกรด-ด่าง (pH) น้ำ RO หน่วยจ่ายกลาง', null, 'num', 5.0, 7.5, null, 'M', 'AAMI ST108', 'เครื่องวัด pH', null, 4),
-  ('POT', 'PO01', 'คลอรีนอิสระคงเหลือที่ก๊อกปลายทาง', 'mg/L', 'num', 0.2, 0.5, null, 'W', 'เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย', 'ชุดทดสอบ DPD สุ่มก๊อกปลายทางหมุนเวียนแต่ละชั้น', 'ต่ำกว่าเกณฑ์ให้เติมคลอรีนที่ถังเก็บน้ำและตรวจซ้ำ', 1),
-  ('POT', 'PO02', 'ค่าความเป็นกรด-ด่าง (pH) น้ำประปา', null, 'num', 6.5, 8.5, null, 'M', 'เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย', 'เครื่องวัด pH', null, 2),
-  ('POT', 'PO03', 'ความขุ่น (Turbidity)', 'NTU', 'num', null, 5, null, 'M', 'เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย', 'เครื่องวัดความขุ่น', 'เกินเกณฑ์ให้ล้างถังเก็บน้ำ / เปลี่ยนไส้กรอง', 3),
-  ('POT', 'PO04', 'โคลิฟอร์มทั้งหมด (Total coliform)', null, 'detect', null, null, null, 'M', 'เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย', 'ส่งห้องปฏิบัติการ หรือชุดทดสอบ อ.11', 'พบให้เติมคลอรีน ล้างถังเก็บน้ำ แจ้งคณะกรรมการ IC และตรวจซ้ำ', 4),
-  ('POT', 'PO05', 'อี. โคไล (E. coli)', null, 'detect', null, null, null, 'Q', 'เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย', 'ส่งห้องปฏิบัติการ', 'พบให้หยุดใช้น้ำดื่มจากจุดนั้นทันที แจ้งคณะกรรมการ IC และตรวจซ้ำ', 5),
-  ('HW', 'HW01', 'อุณหภูมิน้ำร้อนที่ถังเก็บ (Calorifier)', '°C', 'num', 60, null, null, 'M', 'HSE ACOP L8 / HTM 04-01', 'เทอร์โมมิเตอร์', 'ต่ำกว่า 60 °C เสี่ยงต่อ Legionella ให้ปรับตั้งอุณหภูมิ', 1),
-  ('HW', 'HW02', 'อุณหภูมิน้ำร้อนที่ก๊อกปลายทาง (หลังเปิด 1 นาที)', '°C', 'num', 50, null, null, 'M', 'HSE ACOP L8 / HTM 04-01', 'เทอร์โมมิเตอร์ สุ่มก๊อกไกลที่สุดของแต่ละโซน', 'ต่ำกว่า 50 °C ให้ตรวจปั๊มวนน้ำร้อนและฉนวนท่อ', 2),
-  ('HW', 'HW03', 'Legionella spp. ที่ก๊อกน้ำร้อน / ฝักบัว หอผู้ป่วยกลุ่มเสี่ยง', 'CFU/L', 'num', null, 1000, 100, 'S', 'FMS.08.04 · HSE ACOP L8', 'ส่งห้องปฏิบัติการที่ได้รับรอง ISO/IEC 17025', 'ตั้งแต่ 100 ทบทวนการควบคุม ถ้าเกิน 1,000 ฆ่าเชื้อด้วยความร้อนหรือคลอรีน แล้วตรวจซ้ำ', 3)
-) v(system, code, param, unit, kind, lo, hi, warn, freq, ref, method, note, sort)
+  ('CT', 'CT01', 'Legionella spp. (เพาะเชื้อ)', 'CFU/L', 'num', null::numeric, 1000::numeric, 100::numeric, 'Q', 'FMS.08.04 · HSE ACOP L8 · ASHRAE 188', 'ส่งห้องปฏิบัติการที่ได้รับรอง ISO/IEC 17025', 'ตั้งแต่ 100 ทบทวนการควบคุมและเพิ่มสารฆ่าเชื้อ ถ้าเกิน 1,000 ฆ่าเชื้อแบบเข้มข้น (Shock dose) ล้างทำความสะอาด แล้วตรวจซ้ำ', 1, 'bio'),
+  ('CT', 'CT02', 'จุลินทรีย์ทั้งหมด (TBC / Dip slide)', 'CFU/mL', 'num', null, 100000, 10000, 'M', 'HSE ACOP L8', 'Dip slide หรือส่งห้องปฏิบัติการ', 'ตั้งแต่ 10,000 ทบทวนการบำบัดน้ำ ถ้าเกิน 100,000 ฆ่าเชื้อและตรวจ Legionella เพิ่ม', 2, 'bio'),
+  ('CT', 'CT03', 'ค่าความเป็นกรด-ด่าง (pH)', null, 'num', 7.0, 9.0, null, 'W', 'คำแนะนำผู้รับเหมาเคมีบำบัดน้ำ', 'ชุดทดสอบหรือเครื่องวัด pH', null, 3, 'chem'),
+  ('CT', 'CT04', 'ค่าการนำไฟฟ้า (Conductivity)', 'µS/cm', 'num', null, 3000, null, 'W', 'คำแนะนำผู้รับเหมาเคมีบำบัดน้ำ', 'เครื่องวัดค่าการนำไฟฟ้า', 'ตั้งตามรอบความเข้มข้น (Cycle) ที่ผู้รับเหมาเคมีกำหนด เกินเกณฑ์ให้ระบายน้ำทิ้ง (Blowdown)', 4, 'chem'),
+  ('CT', 'CT05', 'สารฆ่าเชื้อคงเหลือ (Free chlorine / Oxidising biocide)', 'mg/L', 'num', 0.5, 2.0, null, 'W', 'HSE ACOP L8', 'ชุดทดสอบ DPD', 'ถ้าใช้สารฆ่าเชื้อชนิดไม่ออกซิไดซ์ ให้แก้เกณฑ์ตามผู้ผลิต', 5, 'chem'),
+  ('RO_HD', 'HD01', 'จุลินทรีย์ทั้งหมด (Total viable count) น้ำ RO ไตเทียม', 'CFU/mL', 'num', null, 100, 50, 'M', 'ISO 23500-3 · AAMI', 'เก็บที่จุดจ่ายน้ำ RO และปลายท่อวน (Loop)', 'ตั้งแต่ 50 คือระดับเฝ้าระวัง ต้องฆ่าเชื้อระบบ RO และท่อจ่าย แล้วตรวจซ้ำ', 1, 'bio'),
+  ('RO_HD', 'HD02', 'Endotoxin น้ำ RO ไตเทียม', 'EU/mL', 'num', null, 0.25, 0.125, 'M', 'ISO 23500-3 · AAMI', 'LAL test', 'ตั้งแต่ 0.125 คือระดับเฝ้าระวัง ต้องฆ่าเชื้อระบบ RO แล้วตรวจซ้ำ', 2, 'bio'),
+  ('RO_HD', 'HD03', 'ค่าการนำไฟฟ้าน้ำ RO ไตเทียม', 'µS/cm', 'num', null, 10, null, 'D', 'ISO 23500-2', 'อ่านจากเครื่องวัดที่ตัวเครื่อง RO ทุกวันก่อนเริ่มฟอกไต', 'เกินเกณฑ์ให้หยุดจ่ายน้ำ แจ้งหน่วยไตเทียม และตรวจเมมเบรน', 3, 'chem'),
+  ('RO_HD', 'HD04', 'คลอรีนรวม (Total chlorine) หลังถังคาร์บอน', 'mg/L', 'num', null, 0.1, null, 'D', 'ISO 23500-3', 'ชุดทดสอบ DPD ก่อนเริ่มฟอกไตทุกวัน', 'เกินเกณฑ์ห้ามใช้น้ำฟอกไต ตรวจถังคาร์บอนสำรองและเปลี่ยนสารกรอง', 4, 'chem'),
+  ('RO_HD', 'HD05', 'สารเคมีปนเปื้อนตาม ISO 23500-3 (อะลูมิเนียม ตะกั่ว ทองแดง ฟลูออไรด์ ฯลฯ)', null, 'pf', null, null, null, 'Y', 'ISO 23500-3', 'ส่งห้องปฏิบัติการที่ได้รับรอง ISO/IEC 17025', 'แนบรายงานผลจากห้องปฏิบัติการ', 5, 'chem'),
+  ('RO_CSSD', 'CS01', 'ค่าการนำไฟฟ้าน้ำ RO หน่วยจ่ายกลาง', 'µS/cm', 'num', null, 10, null, 'D', 'AAMI ST108 (Critical water)', 'อ่านจากเครื่องวัดที่ตัวเครื่อง RO', 'เกินเกณฑ์ให้แจ้งหน่วยจ่ายกลาง หยุดใช้ล้างรอบสุดท้าย และตรวจเมมเบรน', 1, 'chem'),
+  ('RO_CSSD', 'CS02', 'จุลินทรีย์ทั้งหมด น้ำ RO หน่วยจ่ายกลาง', 'CFU/mL', 'num', null, 10, null, 'M', 'AAMI ST108 (Critical water)', 'ส่งห้องปฏิบัติการ', 'เกินเกณฑ์ให้ฆ่าเชื้อระบบ RO แล้วตรวจซ้ำ', 2, 'bio'),
+  ('RO_CSSD', 'CS03', 'Endotoxin น้ำ RO หน่วยจ่ายกลาง', 'EU/mL', 'num', null, 10, null, 'Q', 'AAMI ST108 (Critical water)', 'LAL test', 'เกินเกณฑ์ให้ฆ่าเชื้อระบบ RO แล้วตรวจซ้ำ', 3, 'bio'),
+  ('RO_CSSD', 'CS04', 'ค่าความเป็นกรด-ด่าง (pH) น้ำ RO หน่วยจ่ายกลาง', null, 'num', 5.0, 7.5, null, 'M', 'AAMI ST108', 'เครื่องวัด pH', null, 4, 'chem'),
+  ('POT', 'PO01', 'คลอรีนอิสระคงเหลือที่ก๊อกปลายทาง', 'mg/L', 'num', 0.2, 0.5, null, 'W', 'เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย', 'ชุดทดสอบ DPD สุ่มก๊อกปลายทางหมุนเวียนแต่ละชั้น', 'ต่ำกว่าเกณฑ์ให้เติมคลอรีนที่ถังเก็บน้ำและตรวจซ้ำ', 1, 'chem'),
+  ('POT', 'PO02', 'ค่าความเป็นกรด-ด่าง (pH) น้ำประปา', null, 'num', 6.5, 8.5, null, 'M', 'เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย', 'เครื่องวัด pH', null, 2, 'chem'),
+  ('POT', 'PO03', 'ความขุ่น (Turbidity)', 'NTU', 'num', null, 5, null, 'M', 'เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย', 'เครื่องวัดความขุ่น', 'เกินเกณฑ์ให้ล้างถังเก็บน้ำ / เปลี่ยนไส้กรอง', 3, 'chem'),
+  ('POT', 'PO04', 'โคลิฟอร์มทั้งหมด (Total coliform)', null, 'detect', null, null, null, 'M', 'เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย', 'ส่งห้องปฏิบัติการ หรือชุดทดสอบ อ.11', 'พบให้เติมคลอรีน ล้างถังเก็บน้ำ แจ้งคณะกรรมการ IC และตรวจซ้ำ', 4, 'bio'),
+  ('POT', 'PO05', 'อี. โคไล (E. coli)', null, 'detect', null, null, null, 'Q', 'เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย', 'ส่งห้องปฏิบัติการ', 'พบให้หยุดใช้น้ำดื่มจากจุดนั้นทันที แจ้งคณะกรรมการ IC และตรวจซ้ำ', 5, 'bio'),
+  ('HW', 'HW01', 'อุณหภูมิน้ำร้อนที่ถังเก็บ (Calorifier)', '°C', 'num', 60, null, null, 'M', 'HSE ACOP L8 / HTM 04-01', 'เทอร์โมมิเตอร์', 'ต่ำกว่า 60 °C เสี่ยงต่อ Legionella ให้ปรับตั้งอุณหภูมิ', 1, 'chem'),
+  ('HW', 'HW02', 'อุณหภูมิน้ำร้อนที่ก๊อกปลายทาง (หลังเปิด 1 นาที)', '°C', 'num', 50, null, null, 'M', 'HSE ACOP L8 / HTM 04-01', 'เทอร์โมมิเตอร์ สุ่มก๊อกไกลที่สุดของแต่ละโซน', 'ต่ำกว่า 50 °C ให้ตรวจปั๊มวนน้ำร้อนและฉนวนท่อ', 2, 'chem'),
+  ('HW', 'HW03', 'Legionella spp. ที่ก๊อกน้ำร้อน / ฝักบัว หอผู้ป่วยกลุ่มเสี่ยง', 'CFU/L', 'num', null, 1000, 100, 'S', 'FMS.08.04 · HSE ACOP L8', 'ส่งห้องปฏิบัติการที่ได้รับรอง ISO/IEC 17025', 'ตั้งแต่ 100 ทบทวนการควบคุม ถ้าเกิน 1,000 ฆ่าเชื้อด้วยความร้อนหรือคลอรีน แล้วตรวจซ้ำ', 3, 'bio')
+) v(system, code, param, unit, kind, lo, hi, warn, freq, ref, method, note, sort, test_type)
+where not exists (select 1 from public.water_templates t where t.code = v.code);
+
+-- น้ำกินดื่ม (ตู้กดน้ำดื่ม / เครื่องกรองน้ำดื่ม) and น้ำเสีย (ระบบบำบัดน้ำเสีย): starting values, each hospital edits its own plan
+insert into public.water_templates (system, code, param, unit, kind, lo, hi, warn, freq, ref, method, note, sort, test_type)
+select v.* from (values
+  ('DW', 'DW01', 'โคลิฟอร์มทั้งหมด (Total coliform) น้ำดื่ม', null, 'detect', null::numeric, null::numeric, null::numeric, 'M', 'ประกาศกระทรวงสาธารณสุข เรื่องน้ำบริโภค · เกณฑ์น้ำดื่มกรมอนามัย', 'ส่งห้องปฏิบัติการ หรือชุดทดสอบ อ.11 สุ่มตู้กดน้ำดื่มหมุนเวียน', 'พบให้หยุดใช้ตู้นั้น ล้างฆ่าเชื้อ เปลี่ยนไส้กรอง แจ้งคณะกรรมการ IC และตรวจซ้ำ', 1, 'bio'),
+  ('DW', 'DW02', 'อี. โคไล (E. coli) น้ำดื่ม', null, 'detect', null, null, null, 'Q', 'ประกาศกระทรวงสาธารณสุข เรื่องน้ำบริโภค', 'ส่งห้องปฏิบัติการ', 'พบให้หยุดใช้ตู้นั้นทันที ล้างฆ่าเชื้อ แจ้งคณะกรรมการ IC และตรวจซ้ำ', 2, 'bio'),
+  ('DW', 'DW03', 'สแตฟิโลค็อกคัส ออเรียส (Staphylococcus aureus) น้ำดื่ม', null, 'detect', null, null, null, 'S', 'ประกาศกระทรวงสาธารณสุข เรื่องน้ำบริโภค', 'ส่งห้องปฏิบัติการ', 'พบให้หยุดใช้ ล้างฆ่าเชื้อหัวจ่ายและถังพัก แล้วตรวจซ้ำ', 3, 'bio'),
+  ('DW', 'DW04', 'ค่าความเป็นกรด-ด่าง (pH) น้ำดื่ม', null, 'num', 6.5, 8.5, null, 'M', 'ประกาศกระทรวงสาธารณสุข เรื่องน้ำบริโภค', 'เครื่องวัด pH', null, 4, 'chem'),
+  ('DW', 'DW05', 'ความขุ่น (Turbidity) น้ำดื่ม', 'NTU', 'num', null, 5, null, 'M', 'ประกาศกระทรวงสาธารณสุข เรื่องน้ำบริโภค', 'เครื่องวัดความขุ่น', 'เกินเกณฑ์ให้เปลี่ยนไส้กรองและล้างถังพัก', 5, 'chem'),
+  ('DW', 'DW06', 'ของแข็งละลายน้ำทั้งหมด (TDS) น้ำดื่ม', 'mg/L', 'num', null, 500, null, 'M', 'ประกาศกระทรวงสาธารณสุข เรื่องน้ำบริโภค', 'เครื่องวัด TDS', 'เกินเกณฑ์ให้ตรวจเมมเบรน RO ของเครื่องกรอง', 6, 'chem'),
+  ('DW', 'DW07', 'ความกระด้างทั้งหมด (Hardness as CaCO3) น้ำดื่ม', 'mg/L', 'num', null, 100, null, 'S', 'ประกาศกระทรวงสาธารณสุข เรื่องน้ำบริโภค', 'ส่งห้องปฏิบัติการ', null, 7, 'chem'),
+  ('DW', 'DW08', 'ไนเตรต (Nitrate as N) น้ำดื่ม', 'mg/L', 'num', null, 4, null, 'Y', 'ประกาศกระทรวงสาธารณสุข เรื่องน้ำบริโภค', 'ส่งห้องปฏิบัติการ', null, 8, 'chem'),
+  ('DW', 'DW09', 'ตะกั่ว (Lead) น้ำดื่ม', 'mg/L', 'num', null, 0.01, null, 'Y', 'ประกาศกระทรวงสาธารณสุข เรื่องน้ำบริโภค', 'ส่งห้องปฏิบัติการที่ได้รับรอง ISO/IEC 17025', 'เกินเกณฑ์ให้หยุดใช้และตรวจท่อและอุปกรณ์ที่เป็นโลหะ', 9, 'chem'),
+  ('WW', 'WW01', 'คลอรีนอิสระคงเหลือในน้ำทิ้งหลังฆ่าเชื้อ', 'mg/L', 'num', 0.5, 1.0, null, 'D', 'คำแนะนำกรมอนามัย น้ำทิ้งโรงพยาบาล', 'ชุดทดสอบ DPD ที่บ่อสัมผัสคลอรีนทุกวัน', 'ต่ำกว่าเกณฑ์ให้เพิ่มการจ่ายคลอรีน สูงกว่าเกณฑ์ให้ลดการจ่าย', 1, 'chem'),
+  ('WW', 'WW02', 'ค่าความเป็นกรด-ด่าง (pH) น้ำทิ้ง', null, 'num', 5, 9, null, 'D', 'มาตรฐานควบคุมการระบายน้ำทิ้งจากอาคาร (กระทรวงทรัพยากรธรรมชาติและสิ่งแวดล้อม)', 'เครื่องวัด pH บันทึกตามแบบ ทส.1', null, 2, 'chem'),
+  ('WW', 'WW03', 'บีโอดี (BOD) น้ำทิ้ง', 'mg/L', 'num', null, 20, null, 'M', 'มาตรฐานควบคุมการระบายน้ำทิ้งจากอาคาร ประเภท ก', 'ส่งห้องปฏิบัติการที่ขึ้นทะเบียนกรมโรงงาน / กรมควบคุมมลพิษ', 'เกินเกณฑ์ให้ตรวจระบบเติมอากาศ ตะกอนจุลินทรีย์ และเวลากักน้ำ', 3, 'chem'),
+  ('WW', 'WW04', 'ของแข็งแขวนลอย (SS) น้ำทิ้ง', 'mg/L', 'num', null, 30, null, 'M', 'มาตรฐานควบคุมการระบายน้ำทิ้งจากอาคาร ประเภท ก', 'ส่งห้องปฏิบัติการ', 'เกินเกณฑ์ให้ตรวจถังตกตะกอนและการสูบตะกอนส่วนเกิน', 4, 'chem'),
+  ('WW', 'WW05', 'ทีเคเอ็น (TKN) น้ำทิ้ง', 'mg/L', 'num', null, 35, null, 'M', 'มาตรฐานควบคุมการระบายน้ำทิ้งจากอาคาร ประเภท ก', 'ส่งห้องปฏิบัติการ', null, 5, 'chem'),
+  ('WW', 'WW06', 'น้ำมันและไขมัน (Fat, Oil and Grease) น้ำทิ้ง', 'mg/L', 'num', null, 20, null, 'M', 'มาตรฐานควบคุมการระบายน้ำทิ้งจากอาคาร ประเภท ก', 'ส่งห้องปฏิบัติการ', 'เกินเกณฑ์ให้ตรวจและตักไขมันที่บ่อดักไขมันของโรงครัว', 6, 'chem'),
+  ('WW', 'WW07', 'ซัลไฟด์ (Sulfide) น้ำทิ้ง', 'mg/L', 'num', null, 1, null, 'M', 'มาตรฐานควบคุมการระบายน้ำทิ้งจากอาคาร ประเภท ก', 'ส่งห้องปฏิบัติการ', null, 7, 'chem'),
+  ('WW', 'WW08', 'โคลิฟอร์มทั้งหมด (Total coliform) น้ำทิ้ง', 'MPN/100 mL', 'num', null, 5000, null, 'M', 'เกณฑ์น้ำทิ้งโรงพยาบาล กรมอนามัย / กรมควบคุมมลพิษ', 'ส่งห้องปฏิบัติการ', 'เกินเกณฑ์ให้ตรวจการจ่ายคลอรีนและเวลาสัมผัสคลอรีน แล้วตรวจซ้ำ', 8, 'bio'),
+  ('WW', 'WW09', 'ฟีคัลโคลิฟอร์ม (Fecal coliform) น้ำทิ้ง', 'MPN/100 mL', 'num', null, 1000, null, 'M', 'เกณฑ์น้ำทิ้งโรงพยาบาล กรมอนามัย / กรมควบคุมมลพิษ', 'ส่งห้องปฏิบัติการ', 'เกินเกณฑ์ให้ตรวจการจ่ายคลอรีนและเวลาสัมผัสคลอรีน แล้วตรวจซ้ำ', 9, 'bio')
+) v(system, code, param, unit, kind, lo, hi, warn, freq, ref, method, note, sort, test_type)
 where not exists (select 1 from public.water_templates t where t.code = v.code);
