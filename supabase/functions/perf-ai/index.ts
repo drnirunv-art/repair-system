@@ -34,7 +34,10 @@ const Report = z.object({
   risks: z.array(z.string()),
   review_notes: z.array(z.string()),
   follow_up: z.array(z.string()),
+  // the 8 TOR KPI categories, each with its result, risk, Action plan, owner and finish date
+  kpi8: z.array(z.object({ category: z.string(), result: z.string(), risk: z.string(), action: z.string(), owner: z.string(), due: z.string() })).default([]),
 });
+const KPI8_SHAPE = `\nเพิ่ม key "kpi8" ใน JSON เดียวกัน: [{"category":"1. PM (บำรุงรักษาเชิงป้องกัน)","result":"ลงนามล่าสุด 18 / 20 · Forecast 18.5","risk":"","action":"","owner":"","due":"15 ธ.ค. 2569"}] ครบทั้ง 8 หมวดของ TOR (1 PM, 2 คุณภาพงาน, 3 CM, 4 รายงานประจำเดือน, 5 ESG, 6 การซ้อม Code, 7 การฝึกอบรม, 8 CEG / KPI Engineering) เรียงตามหมวด ใช้ตัวเลขจาก figures.tor เท่านั้น action = วิธีทำให้หมวดนี้ไม่เสียคะแนน owner = ตำแหน่ง due = วันทำเสร็จ เช่น 15 ธ.ค. 2569`;
 
 const CONTEXT = `บริบท: บริษัทผู้รับจ้างงานบริหารวิศวกรรมอาคารของโรงพยาบาล ประชุม Bi-Weekly Performance ทุกวันเสาร์ 14:00-16:00 น. Chief Engineer ของแต่ละโรงส่งรายงานก่อน 10:00 น.
 เป้าหมายองค์กร: คะแนน KPI ตามสัญญา (TOR แนบ 4) ไม่ต่ำกว่า 90, งานแจ้งซ่อม (CM) ดำเนินการภายใน 24 ชั่วโมง (ปิดจริง หรือส่ง PR/ขออนุมัติครบ) 100%, งานค้าง (Backlog) เป็นศูนย์ภายในสิ้นเดือนธันวาคม โดยงานค้างเกิน 60 วันต้องหมดก่อน, PM ตรงแผน ≥ 95%, MA ติดตามสัญญาครบ 100%
@@ -160,8 +163,11 @@ Deno.serve(async (req) => {
     // and the state lives in perf_weekly.ai.job, so the person can close the page and come back for the result.
     // deno-lint-ignore no-explicit-any
     let J: any = null, base: any = {};
+    // the month-end roll-up (body.month = first day of the month) keeps its AI in perf_monthly; a meeting round keeps it in perf_weekly
+    const TB = body.month ? "perf_monthly" : "perf_weekly", KC = body.month ? "month" : "meet_date", KV = body.month ? String(body.month) : body.meet_date;
+    const keyOf = body.month ? { month: KV } : { meet_date: KV };
     if (body.job === "run" || body.job === "start") {
-      const r = await db.from("perf_weekly").select("ai").eq("hospital_id", hospital_id).eq("meet_date", body.meet_date).maybeSingle();
+      const r = await db.from(TB).select("ai").eq("hospital_id", hospital_id).eq(KC, KV).maybeSingle();
       // keep the last finished Action plan visible until the new one is done
       base = { ...(r.data?.ai ?? {}) }; delete base.job;
       if (body.job === "run") {
@@ -216,7 +222,7 @@ Deno.serve(async (req) => {
         return { check: c, model };
       }
       if (body.step === "report") {
-        const rep = await obj(S3, SHAPE, `${U3(p1, p2)}\n\nประวัติการตรวจวนของ AI 3:\n${hist}\nใส่ใน review_notes ว่าแต่ละรอบ AI 3 สั่งแก้อะไรและแก้แล้วอย่างไร`, Report);
+        const rep = await obj(S3, SHAPE + KPI8_SHAPE, `${U3(p1, p2)}\n\n${src.month_mode ? "นี่คือรายงานรวมประจำเดือน" : "นี่คือรายงานรอบประชุม Bi-Weekly"}: summary ต้องเริ่มด้วยคะแนน KPI รวม 8 หมวด (ลงนามล่าสุดและ Forecast เทียบเป้าหมาย ≥ 90) แล้วจึงสรุปเรื่องอื่น และต้องมี kpi8 ครบ 8 หมวด\n\nประวัติการตรวจวนของ AI 3:\n${hist}\nใส่ใน review_notes ว่าแต่ละรอบ AI 3 สั่งแก้อะไรและแก้แล้วอย่างไร`, Report);
         return { report: rep, model };
       }
       throw new Error("step ไม่ถูกต้อง");
@@ -228,17 +234,17 @@ Deno.serve(async (req) => {
       .then((r) => r.text()).catch((e) => console.error("chain", e));
     const now = () => new Date().toISOString();
     // deno-lint-ignore no-explicit-any
-    const save = (ai: any) => db.from("perf_weekly").update({ ai: ai.report ? ai : { ...base, ...ai }, updated_at: now() }).eq("hospital_id", hospital_id).eq("meet_date", body.meet_date);
+    const save = (ai: any) => db.from(TB).update({ ai: ai.report ? ai : { ...base, ...ai }, updated_at: now() }).eq("hospital_id", hospital_id).eq(KC, KV);
     if (body.job === "start") {
-      const id = crypto.randomUUID(), input = { hospital: body.hospital, meeting: body.meeting, period: body.period, figures: body.figures, backlog: body.backlog, notes: body.notes };
+      const id = crypto.randomUUID(), input = { hospital: body.hospital, meeting: body.meeting, period: body.period, figures: body.figures, backlog: body.backlog, notes: body.notes, month_mode: !!body.month };
       const job = { id, status: "running", round: 1, step: "propose", p1: "", p2: "", issues: [], log: [], tries: 0, n: 0, input, events: [], started_at: now(), updated_at: now(), by: u.user.id };
-      const { error } = await db.from("perf_weekly").upsert({ hospital_id, meet_date: body.meet_date, ai: { ...base, job }, updated_by: u.user.id, updated_at: now() }, { onConflict: "hospital_id,meet_date" });
+      const { error } = await db.from(TB).upsert({ hospital_id, ...keyOf, ai: { ...base, job }, updated_by: u.user.id, updated_at: now() }, { onConflict: `hospital_id,${KC}` });
       if (error) return out({ error: "เริ่มงานไม่ได้ (ต้องเป็นหัวหน้าของโรงนี้): " + error.message }, 403);
-      EdgeRuntime.waitUntil(chain({ job: "run", hospital_id, meet_date: body.meet_date, id }));
+      EdgeRuntime.waitUntil(chain({ job: "run", hospital_id, ...keyOf, id }));
       return out({ started: true, id });
     }
     if (body.job === "run") {
-      const next = { job: "run", hospital_id, meet_date: body.meet_date, id: J.id };
+      const next = { job: "run", hospital_id, ...keyOf, id: J.id };
       const r = J.round, lab: Record<string, string> = { propose: r === 1 ? "รอบ 1: AI 1 เสนอ RCA และวิธีแก้" : `รอบ ${r}: AI 1 แก้ตามที่ AI 3 สั่ง`, review: `รอบ ${r}: AI 2 วิเคราะห์ ทบทวน`, check: `รอบ ${r}: AI 3 ตรวจสอบ`, report: "AI 3 เรียบเรียงรายงานฉบับสุดท้าย" };
       EdgeRuntime.waitUntil((async () => {
         const label = lab[J.step] ?? J.step;
