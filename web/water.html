@@ -38,6 +38,8 @@
   .pt h3{margin:4px 0 6px;font-size:16px}
   table.mon td,table.mon th{font-size:13px}table.mon td:first-child{min-width:230px}#cExec td:nth-child(2){min-width:220px}#cExec td:nth-child(10){min-width:200px}table.mon td.sec{background:#dfe9f5;font-weight:700}
   .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px}
+  .aibox{border:1px solid #c9d8ec;background:#f7faff;border-radius:10px;padding:6px 12px;margin:10px 0}.aibox h3{margin:8px 0 4px}
+  .fchip{display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:8px;border:1px solid var(--line);background:#fff;font-size:12px;cursor:pointer;color:#17212b}.fchip.saved{background:#d5f0df}.fchip.read{background:#fcefd2}.fchip.error{background:#f8d7d3}
   svg.trend{width:100%;height:auto;background:#fff;border:1px solid var(--line);border-radius:10px}
   @media print{header,nav,.hsel,.acts,form,.noprint{display:none!important}body{background:#fff}}
 </style>
@@ -51,6 +53,7 @@
     <button role="tab" data-tab="c_DRINK" aria-selected="false">หมวด 1 น้ำกินดื่ม</button>
     <button role="tab" data-tab="c_USE" aria-selected="false">หมวด 2 น้ำใช้</button>
     <button role="tab" data-tab="c_WASTE" aria-selected="false">หมวด 3 น้ำเสีย</button>
+    <button role="tab" data-tab="imp" aria-selected="false">แนบไฟล์ผลแล็บ · AI</button>
     <button role="tab" data-tab="due" aria-selected="false">ตารางตรวจตามความถี่</button>
     <button role="tab" data-tab="rec" aria-selected="false">บันทึกผลตรวจ</button>
     <button role="tab" data-tab="hist" aria-selected="false">ผลย้อนหลัง · แนวโน้ม</button>
@@ -92,6 +95,7 @@
       <h2 id="cTitle"></h2>
       <p class="sub" id="cSub"></p>
       <div class="kpis" id="cKpi"></div>
+      <div class="aibox"><div class="acts"><button class="btn" type="button" id="cAiBtn">🤖 AI สรุปผู้บริหาร + วิเคราะห์ (หมวดนี้ ของโรงนี้)</button><span class="sub" id="cAiMsg" role="status"></span></div><div id="cAi"></div></div>
       <h2>1. บทสรุปผู้บริหาร</h2>
       <ol id="cFind"></ol>
       <div class="tw"><table class="tt" id="cExec"></table></div>
@@ -107,6 +111,24 @@
       <div class="tw"><table class="tt" id="cPlan"></table></div>
       <div id="cGantt"></div>
       <div class="acts"><button class="btn primary" type="button" id="wcX">ดาวน์โหลด Excel (รายงานหมวดนี้)</button><button class="btn" type="button" id="wcP">PPT (บทสรุป + วิเคราะห์ หมวดนี้)</button></div>
+    </section>
+
+    <section id="tab-imp" hidden>
+      <p class="sub">แต่ละโรงอาจจ้างห้องปฏิบัติการต่างกัน ผลจึงหน้าตาไม่เหมือนกัน ให้แนบไฟล์ผลของแต่ละเดือน (PDF, รูปถ่าย, Excel, Word, CSV) แยกตามหมวด จากนั้นกด "ให้ AI อ่าน" AI จะกรอกค่าลงแบบฟอร์มกลางของโรง (จุดตรวจและรายการในทะเบียน) ให้ตรวจทุกแถวก่อนกด "บันทึกผล" ระบบเทียบเกณฑ์และเปิดรายการแก้ไขให้เองเหมือนกรอกด้วยมือ</p>
+      <div class="panel" id="upPanel">
+        <h2>แนบไฟล์ผลแล็บ</h2>
+        <form class="tf" id="fU">
+          <label>ผลของเดือน<input type="month" id="uM" required></label>
+          <label>หมวด<select id="uG"><option value="WASTE">หมวด 3 น้ำเสีย</option><option value="DRINK">หมวด 1 น้ำกินดื่ม</option><option value="USE">หมวด 2 น้ำใช้</option><option value="ALL">หลายหมวดในไฟล์เดียว</option></select></label>
+          <label>ห้องปฏิบัติการ<input id="uL" placeholder="ชื่อบริษัทห้องปฏิบัติการ"></label>
+          <label>ไฟล์ (เลือกได้หลายไฟล์ ไม่เกินไฟล์ละ 20 MB)<input type="file" id="uF" multiple required></label>
+          <div class="wide"><button class="btn primary" type="submit">แนบไฟล์</button> <label class="sub" style="display:inline-flex;flex-direction:row;gap:6px;align-items:center"><input type="checkbox" id="uAuto" checked> ให้ AI อ่านทันทีหลังแนบ</label> <span class="sub" id="uMsg" role="status"></span></div>
+        </form>
+      </div>
+      <div class="hsel"><label for="iY">ปี</label><select id="iY"></select></div>
+      <h2>ไฟล์ผลแล็บรายเดือน</h2>
+      <div class="tw"><table class="tt" id="iGrid"></table></div>
+      <div id="iRev"></div>
     </section>
 
     <section id="tab-due" hidden>
@@ -174,6 +196,12 @@
       <p class="sub">สถานะการตรวจน้ำของทุกโรงที่บัญชีนี้ดูได้ ผลตรวจและผลนอกเกณฑ์นับ 90 วันล่าสุด</p>
       <div class="tw"><table class="tt" id="vList"></table></div>
       <div class="acts"><button class="btn primary" type="button" id="vX">ดาวน์โหลด Excel (12 โรง)</button></div>
+      <h2>ผลตรวจรายหมวด เปรียบเทียบ 12 โรง</h2>
+      <div class="hsel"><label for="vY">ปี</label><select id="vY"></select><label for="vG">หมวด</label><select id="vG"><option value="DRINK">หมวด 1 น้ำกินดื่ม</option><option value="USE">หมวด 2 น้ำใช้</option><option value="WASTE" selected>หมวด 3 น้ำเสีย</option></select>
+        <button class="btn" type="button" id="vLoad">แสดงข้อมูล</button><span class="sub" id="vMsg" role="status"></span></div>
+      <div class="tw"><table class="tt" id="vGrp"></table></div>
+      <div class="aibox"><div class="acts"><button class="btn" type="button" id="vAiBtn">🤖 AI สรุปผู้บริหาร + วิเคราะห์ 12 โรง (หมวดนี้)</button><span class="sub" id="vAiMsg" role="status"></span></div><div id="vAi"></div></div>
+      <div class="acts"><button class="btn primary" type="button" id="vgX">ดาวน์โหลด Excel (หมวดนี้ 12 โรง)</button><button class="btn" type="button" id="vgP">PPT (บทสรุป + วิเคราะห์ 12 โรง)</button></div>
     </section>
   </div>
 </main>

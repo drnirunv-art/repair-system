@@ -16,7 +16,7 @@
   const RST = { pass: "ผ่าน", warn: "ผ่าน (ระดับเฝ้าระวัง)", fail: "นอกเกณฑ์" };
   const QUAL = { nd: "ไม่พบ", detected: "พบ", pass: "ผ่าน", fail: "ไม่ผ่าน" };
   let me = null, exec = false, hosps = [], canRec = false, canMan = false, cur = "sum", busy = false;
-  let tpl = [], points = [], plans = [], results = [], actions = [];
+  let tpl = [], points = [], plans = [], results = [], actions = [], wfiles = [], aiReps = [];
   const toast = (m, bad) => { const t = $("#toast"); t.textContent = m; t.hidden = false; t.style.background = bad ? "var(--bad)" : ""; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, bad ? 6000 : 3000); };
   const guard = fn => async ev => { if (ev && ev.preventDefault) ev.preventDefault(); if (busy) return; busy = true; try { await fn(ev); } catch (e) { toast(errText(e), true); } finally { busy = false; } };
   const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
@@ -89,16 +89,20 @@
       sb.from("water_results").select("*").eq("hospital_id", h).gte("sampled_on", since).order("sampled_on", { ascending: false }).order("id", { ascending: false }).limit(5000),
       sb.from("water_actions").select("*").eq("hospital_id", h).order("created_at", { ascending: false })]);
     for (const x of [p, l, r, a]) if (x.error) throw x.error;
+    // lab files and saved AI summaries (tables added with the file import; an empty list when not reachable)
+    const [wf, wa] = await Promise.all([sb.from("water_files").select("*").eq("hospital_id", h).order("month", { ascending: false }).order("id", { ascending: false }).limit(1000),
+      sb.from("water_ai").select("*").eq("hospital_id", h).order("created_at", { ascending: false }).limit(60)]);
+    wfiles = wf.error ? [] : wf.data || []; aiReps = wa.error ? [] : wa.data || [];
     points = p.data || []; plans = l.data || []; results = r.data || []; actions = a.data || [];
   }
   document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => show(b.dataset.tab));
-  const TABS = ["sum", "c_DRINK", "c_USE", "c_WASTE", "due", "rec", "hist", "act", "reg", "std", "all"];
+  const TABS = ["sum", "c_DRINK", "c_USE", "c_WASTE", "imp", "due", "rec", "hist", "act", "reg", "std", "all"];
   function show(t) {
     cur = TABS.includes(t) ? t : "sum";
     document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === cur));
     TABS.filter(k => !k.startsWith("c_")).forEach(k => $("#tab-" + k).hidden = k !== cur); $("#tab-cat").hidden = !cur.startsWith("c_");
     if (cur.startsWith("c_")) { try { rCat(cur.slice(2)); } catch (e) { toast(errText(e), true); } return; }
-    try { ({ sum: rSum, due: rDue, rec: rRec, hist: rHist, act: rAct, reg: rReg, std: rStd, all: rAll })[cur](); } catch (e) { toast(errText(e), true); }
+    try { ({ imp: rImp, sum: rSum, due: rDue, rec: rRec, hist: rHist, act: rAct, reg: rReg, std: rStd, all: rAll })[cur](); } catch (e) { toast(errText(e), true); }
   }
   $("#h").onchange = guard(async () => { await load(); show(cur); });
   function sysOpts() { const v = sysF(), ks = Object.keys(SYS).filter(k => !grpF() || grpOf(k) === grpF());
@@ -391,6 +395,7 @@
   // ---------- 12 โรง ----------
   let ov = [];
   async function rAll() {
+    vYears(); rV();
     const { data, error } = await sb.rpc("water_overview"); if (error) throw error; ov = data || [];
     $("#vList").innerHTML = `<tr><th>โรง</th><th>จุดตรวจ</th><th>รายการ</th><th>เลยกำหนด</th><th>ยังไม่เคย</th><th>ตรวจตามกำหนด %</th><th>ผลตรวจ 90 วัน</th><th>นอกเกณฑ์ 90 วัน</th><th>ตรวจเชื้อนอกเกณฑ์</th><th>สารเคมีนอกเกณฑ์</th><th>แก้ไขยังไม่ปิด</th><th>ตรวจล่าสุด</th></tr>` +
       ov.map(r => { const s = pct(r.plans - r.overdue - r.never, r.plans); return `<tr><td>${esc(r.code)} · ${esc(r.name)}</td><td class="n">${r.points}</td><td class="n">${r.plans}</td><td class="n ${r.overdue ? "over" : ""}">${r.overdue}</td><td class="n ${r.never ? "never" : ""}">${r.never}</td>
@@ -434,11 +439,13 @@
     if (pl.kind === "num" && (nearHi || nearLo)) return { st: "watch", txt: `ผ่านเกณฑ์ทุกครั้ง แต่ค่า${nearHi ? "สูงสุดใกล้เกณฑ์สูงสุด" : "ต่ำสุดใกล้เกณฑ์ต่ำสุด"} ควรเฝ้าระวัง` };
     if (x.warn) return { st: "watch", txt: `ผ่านเกณฑ์ มีระดับเฝ้าระวัง ${x.warn} ครั้ง` };
     return { st: "pass", txt: `ผ่านเกณฑ์ทุกครั้ง (${x.n} ครั้ง)` }; }
-  function catData(g) {
-    const Y = $("#cY").value, pid = +$("#cPt").value || null, curM = Y === today().slice(0, 4) ? +today().slice(5, 7) : 12;
-    const pts = points.filter(p => p.active && grpOf(p.system) === g && (!pid || p.id === pid)).sort((a, b) => CAT_SYS[g].indexOf(a.system) - CAT_SYS[g].indexOf(b.system) || a.code.localeCompare(b.code));
-    const blocks = pts.map(pt => { const pls = plans.filter(pl => pl.point_id === pt.id && pl.active && (!ttF() || pl.test_type === ttF())).sort((a, b) => a.sort - b.sort);
-      const rows = pls.map(pl => { const rs = results.filter(r => r.plan_id === pl.id && r.sampled_on.startsWith(Y));
+  // C = the data to use (default: the hospital open on the page); the 12-hospital view passes each hospital's own data
+  function catData(g, C) {
+    C = C || { points, plans, results, actions, Y: $("#cY").value, pid: +$("#cPt").value || null, tt: ttF(), hcode: hosp().code || "" };
+    const Y = String(C.Y), pid = C.pid || null, curM = Y === today().slice(0, 4) ? +today().slice(5, 7) : 12;
+    const pts = C.points.filter(p => p.active && grpOf(p.system) === g && (!pid || p.id === pid)).sort((a, b) => CAT_SYS[g].indexOf(a.system) - CAT_SYS[g].indexOf(b.system) || a.code.localeCompare(b.code));
+    const blocks = pts.map(pt => { const pls = C.plans.filter(pl => pl.point_id === pt.id && pl.active && (!C.tt || pl.test_type === C.tt)).sort((a, b) => a.sort - b.sort);
+      const rows = pls.map(pl => { const rs = C.results.filter(r => r.plan_id === pl.id && r.sampled_on.startsWith(Y));
         const cell = MON.map((_, i) => rs.filter(r => +r.sampled_on.slice(5, 7) === i + 1));
         const vals = rs.filter(r => !r.qual && r.value != null).map(r => +r.value);
         const x = { pl, pt, rs, cell, n: rs.length, fail: rs.filter(r => r.status === "fail").length, warn: rs.filter(r => r.status === "warn").length,
@@ -463,12 +470,12 @@
       const v = m.filter(x => x != null), av = v.length ? Math.round(avgOf(v) * 10) / 10 : null, low = v.filter(x => x < target).length;
       return { name, target, m, avg: av, low, n: v.length, st: !v.length ? "none" : low ? "fail" : "pass" }; }).filter(Boolean);
     const ids = new Set(all.map(x => x.pl.id));
-    const acts = actions.filter(a => { const r = results.find(x => x.id === a.result_id); return r && ids.has(r.plan_id) && (a.status === "open" || r.sampled_on.startsWith(Y)); })
-      .map(a => ({ a, r: results.find(x => x.id === a.result_id) })).sort((p, q) => (p.a.due || "9") < (q.a.due || "9") ? -1 : 1);
-    return { g, Y, YT: +Y + 543, pts, blocks, all, res, tested, clean, removal, acts, curM };
+    const acts = C.actions.filter(a => { const r = C.results.find(x => x.id === a.result_id); return r && ids.has(r.plan_id) && (a.status === "open" || r.sampled_on.startsWith(Y)); })
+      .map(a => ({ a, r: C.results.find(x => x.id === a.result_id) })).sort((p, q) => (p.a.due || "9") < (q.a.due || "9") ? -1 : 1);
+    return { g, Y, YT: +Y + 543, hcode: C.hcode, pmap: new Map(C.plans.map(p => [p.id, p])), pts, blocks, all, res, tested, clean, removal, acts, curM };
   }
   function catTexts(D) {
-    const H = hosp().code || "", G = GRP[D.g], pass = D.res.filter(r => r.status !== "fail").length, bio = D.res.filter(r => plOf(r.plan_id).test_type === "bio"), chem = D.res.filter(r => plOf(r.plan_id).test_type !== "bio");
+    const H = D.hcode, G = GRP[D.g], pass = D.res.filter(r => r.status !== "fail").length, bio = D.res.filter(r => (D.pmap.get(r.plan_id) || {}).test_type === "bio"), chem = D.res.filter(r => (D.pmap.get(r.plan_id) || {}).test_type !== "bio");
     const nm = x => `${x.pl.param} (${x.pt.code})`, fails = D.all.filter(x => x.as.st === "fail"), watch = D.all.filter(x => x.as.st === "watch");
     const find = [
       `${H} หมวด ${CAT_NO[D.g]} ${G} ปี พ.ศ. ${D.YT}: จุดตรวจ ${D.pts.length} จุด รายการตรวจ ${D.all.length} รายการ ผลตรวจรวม ${D.res.length} ครั้ง ผ่านเกณฑ์ ${pass} ครั้ง${D.res.length ? ` (${pct(pass, D.res.length)}%)` : ""}`,
@@ -527,27 +534,34 @@
   const chartGrids = D => { const L = chartList(D), out = []; for (let i = 0; i < L.length; i += 4) { const c = L.slice(i, i + 4);
     out.push(svgWrap(1300, 620, c.map((x, j) => monChart(x, (j % 2) * 650, Math.floor(j / 2) * 310, 650, 310)).join(""))); } return out; };
   // Gantt of the action plan: from the day the result was found to the due day (red = late)
-  function planGantt(D) {
-    const P = D.acts.filter(p => p.r).map(p => ({ p, s: p.r.sampled_on, e: p.a.due || addD(p.r.sampled_on, 7) })); if (!P.length) return null;
-    const d0 = P.reduce((m, x) => x.s < m ? x.s : m, P[0].s), d1 = P.reduce((m, x) => x.e > m ? x.e : m, P[0].e), span = Math.max(14, daysBetween(d0, d1) + 1);
-    P.forEach((x, i) => { x.lines = wrapTxt(`${i + 1}. ${plOf(x.p.r.plan_id).param} (${ptOf(plOf(x.p.r.plan_id).point_id).code})${x.p.a.owner ? " · " + x.p.a.owner : ""}`, 56); x.h = Math.max(34, 14 + x.lines.length * 18); });
-    const YS = P.map((_, i) => P.slice(0, i).reduce((t, x) => t + x.h, 0));
-    const W = 1300, L = 560, R = 1280, top = 56, H = top + P.reduce((t, x) => t + x.h, 0) + 20, px = d => L + (R - L) * daysBetween(d0, d) / span, t = today();
-    let s = `<text x="16" y="30" font-size="16" font-weight="bold" fill="#17212b">ประเด็น · ผู้รับผิดชอบ</text><text x="${L - 10}" y="30" text-anchor="end" font-size="14" fill="#4b5563">กำหนดเสร็จ</text>`;
-    for (let k = 0; k <= span; k += Math.max(7, Math.ceil(span / 6 / 7) * 7)) { const d = addD(d0, k); s += `<line x1="${px(d)}" y1="${top - 8}" x2="${px(d)}" y2="${H - 10}" stroke="#e3e9f1" stroke-width="1"/><text x="${px(d) + 3}" y="30" font-size="12" fill="#4b5563">${esc(dTH(d))}</text>`; }
-    P.forEach((x, i) => { const y = top + YS[i], RH = x.h, done = x.p.a.status === "done", late = !done && x.e < t, col = done ? "#1F7A3D" : late ? "#B42318" : "#0B5CAD";
-      if (i % 2) s += `<rect x="8" y="${y}" width="${W - 16}" height="${RH}" fill="#f6f8fb"/>`;
-      s += x.lines.map((l, k) => `<text x="16" y="${y + 22 + k * 18}" font-size="13" fill="#17212b">${esc(l)}</text>`).join("") + `<text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="12" fill="${col}">${esc(dTH(x.e))}</text>` +
-        `<rect x="${px(x.s)}" y="${y + RH / 2 - 9}" width="${Math.max(6, px(addD(x.e, 1)) - px(x.s))}" height="18" rx="4" fill="${col}"/>`; });
-    if (t >= d0 && t <= d1) s += `<line x1="${px(t)}" y1="${top - 8}" x2="${px(t)}" y2="${H - 10}" stroke="#B42318" stroke-width="2"/><text x="${px(t) + 4}" y="${top - 12}" font-size="12" fill="#B42318">วันนี้</text>`;
-    return svgWrap(W, H, s);
-  }
   // full text, never cut (user rule): wrap at word boundaries (Thai words via Intl.Segmenter)
   const wrapTxt = (str, max) => { const seg = typeof Intl !== "undefined" && Intl.Segmenter ? [...new Intl.Segmenter("th", { granularity: "word" }).segment(str)].map(x => x.segment) : str.split(/(\s+)/), out = [""];
     seg.forEach(w => { if ((out[out.length - 1] + w).length > max && out[out.length - 1].trim()) out.push(w.trimStart()); else out[out.length - 1] += w; }); return out.filter(l => l.trim()); };
+  // Gantt: items [{ label, s, e, col }] from start day to due day (full labels, wrapped)
+  function ganttSvg(items) {
+    if (!items.length) return null; const P = items.map(x => ({ ...x, lines: wrapTxt(x.label, 56) })); P.forEach(x => x.h = Math.max(34, 14 + x.lines.length * 18));
+    const YS = P.map((_, i) => P.slice(0, i).reduce((t, x) => t + x.h, 0));
+    const d0 = P.reduce((m, x) => x.s < m ? x.s : m, P[0].s), d1 = P.reduce((m, x) => x.e > m ? x.e : m, P[0].e), span = Math.max(14, daysBetween(d0, d1) + 1);
+    const W = 1300, L = 560, R = 1280, top = 56, H = top + P.reduce((t, x) => t + x.h, 0) + 20, px = d => L + (R - L) * daysBetween(d0, d) / span, t = today();
+    let s = `<text x="16" y="30" font-size="16" font-weight="bold" fill="#17212b">ประเด็น · ผู้รับผิดชอบ</text><text x="${L - 10}" y="30" text-anchor="end" font-size="14" fill="#4b5563">กำหนดเสร็จ</text>`;
+    for (let k = 0; k <= span; k += Math.max(7, Math.ceil(span / 6 / 7) * 7)) { const d = addD(d0, k); s += `<line x1="${px(d)}" y1="${top - 8}" x2="${px(d)}" y2="${H - 10}" stroke="#e3e9f1" stroke-width="1"/><text x="${px(d) + 3}" y="30" font-size="12" fill="#4b5563">${esc(dTH(d))}</text>`; }
+    P.forEach((x, i) => { const y = top + YS[i], RH = x.h;
+      if (i % 2) s += `<rect x="8" y="${y}" width="${W - 16}" height="${RH}" fill="#f6f8fb"/>`;
+      s += x.lines.map((l, k) => `<text x="16" y="${y + 22 + k * 18}" font-size="13" fill="#17212b">${esc(l)}</text>`).join("") + `<text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="12" fill="${x.col}">${esc(dTH(x.e))}</text>` +
+        `<rect x="${px(x.s)}" y="${y + RH / 2 - 9}" width="${Math.max(6, px(addD(x.e, 1)) - px(x.s))}" height="18" rx="4" fill="${x.col}"/>`; });
+    if (t >= d0 && t <= d1) s += `<line x1="${px(t)}" y1="${top - 8}" x2="${px(t)}" y2="${H - 10}" stroke="#B42318" stroke-width="2"/><text x="${px(t) + 4}" y="${top - 12}" font-size="12" fill="#B42318">วันนี้</text>`;
+    return svgWrap(W, H, s);
+  }
+  // Gantt of the corrective actions: from the day the result was found to the due day (red = late, green = closed)
+  const planGantt = D => ganttSvg(D.acts.filter(p => p.r).map((p, i) => { const pl = D.pmap.get(p.r.plan_id) || {}, pt = D.pts.find(x => x.id === pl.point_id) || {}, e = p.a.due || addD(p.r.sampled_on, 7), done = p.a.status === "done";
+    return { label: `${i + 1}. ${pl.param || ""} (${pt.code || ""})${p.a.owner ? " · " + p.a.owner : ""}`, s: p.r.sampled_on, e: e < p.r.sampled_on ? p.r.sampled_on : e, col: done ? "#1F7A3D" : e < today() ? "#B42318" : "#0B5CAD" }; }));
+  // Gantt of an AI plan (dates YYYY-MM-DD)
+  const isD = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+  const aiGantt = R => ganttSvg(((R && R.plan) || []).filter(x => isD(x.due)).map((x, i) => { const s0 = isD(x.start) && x.start <= x.due ? x.start : today() <= x.due ? today() : x.due;
+    return { label: `${i + 1}. ${x.issue}: ${x.action} · ${x.owner}`, s: s0, e: x.due, col: x.due < today() ? "#B42318" : "#0B5CAD" }; }));
   let catCur = "DRINK";
   function rCat(g) {
-    catCur = g; catYears(); catPoints(g); const D = catData(g), T = catTexts(D), pass = D.res.filter(r => r.status !== "fail").length;
+    catCur = g; catYears(); catPoints(g); rCatAi(); const D = catData(g), T = catTexts(D), pass = D.res.filter(r => r.status !== "fail").length;
     $("#cTitle").textContent = `หมวด ${CAT_NO[g]} ${GRP[g]} · สรุปผลการตรวจวัดคุณภาพน้ำ ${hosp().name || ""} ปี พ.ศ. ${D.YT}`;
     $("#cSub").textContent = `ค่ามาตรฐานอ้างอิง: ${CAT_LAW[g]}`;
     const cr = pct(D.clean.length, D.tested.length), pr = pct(pass, D.res.length), o = D.acts.filter(p => p.a.status === "open").length;
@@ -572,6 +586,7 @@
     const gs = planGantt(D); $("#cGantt").innerHTML = gs ? `<p class="sub"><b>แผนการแก้ไข (Gantt)</b> จากวันที่พบถึงวันกำหนดเสร็จ · น้ำเงิน = กำลังแก้ไข · แดง = เลยกำหนด · เขียว = ปิดแล้ว</p><div class="tw">${gs.replace("<svg ", '<svg class="trend" ')}</div>` : "";
   }
   ["#cY", "#cPt"].forEach(s => $(s).onchange = () => rCat(catCur));
+  const catAi = () => { const a = aiOf(hosp().id, catCur, $("#cY").value); return a && a.report; };
   const catName = k => `น้ำ_หมวด${CAT_NO[catCur]}_${GRP[catCur]}_${k}_${hosp().code || ""}_${dTH(today()).replace(/\s/g, "")}`;
   $("#wcX").onclick = () => { const D = catData(catCur), T = catTexts(D), title = `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`;
     const mon = [["ตารางสรุปข้อมูลผลตรวจรายเดือน " + GRP[catCur] + " ปี พ.ศ. " + D.YT], []], st = { 0: 2 };
@@ -584,13 +599,14 @@
       { name: "แผนการแก้ไข", header: 0, rows: [PLAN_HEAD, ...D.acts.map(planRow)] },
       { name: "ผลตรวจทั้งหมด", header: 0, rows: [RES_HEAD, ...D.res.map(resRow)] }];
     const gs = planGantt(D); if (gs) sheets.push({ name: "Gantt แผนแก้ไข", rows: [["แผนการแก้ไข (Gantt)"]], styles: { 0: 2 }, svg: gs });
+    sheets.splice(1, 0, ...aiSheets(catAi(), ""));
     chartGrids(D).forEach((svg, i) => sheets.push({ name: `กราฟ ${i + 1}`, rows: [[`กราฟแนวโน้มรายเดือนเทียบค่ามาตรฐาน ชุดที่ ${i + 1}`]], styles: { 0: 2 }, svg }));
     Office.xlsx(catName("รายงาน"), sheets); };
   $("#wcP").onclick = () => { const D = catData(catCur), T = catTexts(D), gs = planGantt(D);
     const d = { title: `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`, org: hosp().name, period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`,
       findings: T.find, analysis: T.anal, notes: T.notes,
       kpis: [["จุดตรวจ", D.pts.length], ["ผลตรวจ (ครั้ง)", D.res.length], ["ผ่านเกณฑ์", (pct(D.res.filter(r => r.status !== "fail").length, D.res.length) ?? "-") + "%"], ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`]],
-      sections: [
+      sections: [...aiSections(catAi()),
         { title: "ตารางบทสรุป (ค่าเฉลี่ย ต่ำสุด–สูงสุด เทียบค่ามาตรฐาน)", head: ["จุดตรวจ", "รายการ", "ชนิด", "ค่าเฉลี่ย", "ต่ำสุด – สูงสุด", "ค่ามาตรฐาน", "การประเมิน"], colW: [1.0, 3.5, 0.9, 1.1, 1.5, 1.8, 2.5], rows: D.all.map(x => { const r = execRow(x); return [x.pt.code, x.pl.param + (x.pl.unit ? ` (${x.pl.unit})` : ""), r[2], r[4], r[5], r[6], r[9]]; }) },
         ...(catCur === "WASTE" ? [{ title: "ประสิทธิภาพการบำบัด (% Removal)", head: ["พารามิเตอร์", "เป้าหมาย", "เฉลี่ย", "เดือนที่ต่ำกว่าเป้าหมาย", "สถานะ"], colW: [3, 2.3, 2, 2.5, 2.5], rows: D.removal.map(r => [r.name, `มากกว่า ${r.target}%`, r.avg == null ? "-" : r.avg + "%", r.low, remRow(r)[15]]) }] : []),
         ...D.blocks.map((b, i) => ({ title: `ส่วนที่ ${i + 1} ${b.pt.code} ${b.pt.name}: ผลรายเดือน`, head: ["รายการ", "เกณฑ์", ...MON], colW: [3.1, 1.6, ...MON.map(() => 7.6 / 12)], rows: b.rows.map(x => [x.pl.param, hasLim(x.pl) ? crit(x.pl) : "ไม่กำหนด", ...x.cell.map(cellTxt)]) })),
@@ -598,5 +614,211 @@
         { title: "แผนการแก้ไข (Action plan)", head: ["ลำดับ", "ประเด็น", "มาตรการ / การแก้ไข", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "สถานะ"], colW: [0.7, 4.2, 3.4, 1.6, 1.3, 1.1], rows: D.acts.map((p, i) => { const r = planRow(p, i); return [r[0], r[2], r[4] || "ยังไม่ได้เขียนการแก้ไข", r[5], r[6], r[8]]; }) },
         ...(gs ? [{ title: "แผนการแก้ไข (Gantt)", svg: gs, note: "น้ำเงิน = กำลังแก้ไข · แดง = เลยกำหนด · เขียว = ปิดแล้ว" }] : [])] };
     return Office.pptx(catName("บทสรุปผู้บริหาร"), d).catch(e => toast(errText(e), true)); };
+
+  // ---------- AI helper (edge function water-ai): retries when the AI is busy or slow ----------
+  async function aiCall(body, msgEl) {
+    let data, error, msg;
+    for (let t = 0; t < 3; t++) {
+      ({ data, error } = await sb.functions.invoke("water-ai", { body }));
+      const st = error && error.context && error.context.status, j = error && error.context && typeof error.context.json === "function" ? await error.context.json().catch(() => ({})) : {};
+      msg = error ? (j.error || (st === 546 || st === 504 ? "AI ใช้เวลานานเกินที่เซิร์ฟเวอร์อนุญาต" : j.message || error.message)) + (st ? ` (รหัส ${st})` : "") : data && data.error;
+      if (!msg || /โควตา|limit: 0|สิทธิ์|ชนิดนี้|ยังไม่มีจุดตรวจ/.test(msg) || !(st === 546 || st === 504 || /ช้าเกิน|503|429|high demand|overload|UNAVAILABLE|RESOURCE_EXHAUSTED|ไม่ตรงรูปแบบ/i.test(msg)) || t === 2) break;
+      if (msgEl) msgEl.textContent = `AI ไม่ว่างหรือช้า กำลังลองใหม่อัตโนมัติ (ครั้งที่ ${t + 1}/2)`;
+      await new Promise(ok => setTimeout(ok, 10000 * (t + 1)));
+    }
+    if (msg) throw new Error(msg);
+    return data;
+  }
+
+  // ---------- แนบไฟล์ผลแล็บ · AI ----------
+  const FGRP = { DRINK: "หมวด 1 น้ำกินดื่ม", USE: "หมวด 2 น้ำใช้", WASTE: "หมวด 3 น้ำเสีย", ALL: "หลายหมวด" };
+  const FST = { uploaded: "แนบแล้ว ยังไม่ให้ AI อ่าน", read: "AI อ่านแล้ว รอตรวจและบันทึก", saved: "บันทึกผลแล้ว", error: "AI อ่านไม่สำเร็จ" };
+  const extOf = n => (String(n).match(/\.([a-z0-9]+)$/i) || [, ""])[1].toLowerCase();
+  // the text inside a .docx (word/document.xml) read in the browser, so the AI gets it as text
+  async function docxText(file) {
+    const buf = new Uint8Array(await file.arrayBuffer()), dv = new DataView(buf.buffer), dec = new TextDecoder();
+    let e = buf.length - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--; if (e < 0) throw new Error("ไฟล์ Word นี้เปิดไม่ได้");
+    let p = dv.getUint32(e + 16, true);
+    for (let n = dv.getUint16(e + 10, true); n > 0; n--) {
+      const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+      if (dec.decode(buf.subarray(p + 46, p + 46 + nl)) === "word/document.xml") {
+        const st = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true), raw = buf.subarray(st, st + csize);
+        const xml = method === 0 ? dec.decode(raw) : await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+        return xml.replace(/<\/w:tc>/g, " | ").replace(/<\/w:p>/g, "\n").replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/\n{3,}/g, "\n\n");
+      }
+      p += 46 + nl + xl + cl;
+    }
+    throw new Error("ไม่พบเนื้อหาในไฟล์ Word นี้");
+  }
+  // Excel / Word / CSV / text become text in the browser; PDF and pictures go to the AI as they are
+  async function fileText(file, name) {
+    const x = extOf(name);
+    if (x === "xlsx" || x === "xlsm") { const sh = await Office.readXlsx(file); return Object.entries(sh).map(([n, rows]) => `=== แผ่นงาน ${n} ===\n` + rows.map(r => r.map(c => String(c ?? "").trim()).join(" | ")).filter(l => l.replace(/[|\s]/g, "")).join("\n")).join("\n\n"); }
+    if (x === "docx") return docxText(file);
+    if (["csv", "txt", "tsv", "json", "xml", "html", "htm"].includes(x)) return await file.text();
+    return "";
+  }
+  function impYears() { const y = +today().slice(0, 4), ys = [...new Set([y, y - 1, ...wfiles.map(f => +f.month.slice(0, 4))])].sort((a, b) => b - a), v = $("#iY").value;
+    $("#iY").innerHTML = ys.map(x => `<option value="${x}">พ.ศ. ${x + 543}</option>`).join(""); if (ys.includes(+v)) $("#iY").value = v; }
+  let revId = null;
+  function rImp() {
+    $("#upPanel").hidden = !canRec; if (!$("#uM").value) $("#uM").value = today().slice(0, 7);
+    impYears(); const Y = $("#iY").value, G = ["DRINK", "USE", "WASTE", "ALL"];
+    $("#iGrid").innerHTML = `<tr><th>เดือน</th>${G.map(g => `<th>${FGRP[g]}</th>`).join("")}</tr>` + MON.map((m, i) => { const k = `${Y}-${String(i + 1).padStart(2, "0")}`;
+      return `<tr><td>${m} ${+Y + 543}</td>${G.map(g => { const L = wfiles.filter(f => f.month.startsWith(k) && f.grp === g);
+        return `<td>${L.map(f => `<span class="fchip ${f.status}" data-f="${f.id}" title="${esc(FST[f.status])}">${esc(f.file_name)}${f.status === "saved" ? ` ✓ ${f.saved_count}` : f.status === "read" ? " · รอบันทึก" : f.status === "error" ? " · อ่านไม่สำเร็จ" : ""}</span>`).join("") || (g === "ALL" ? "" : '<span class="sub">ยังไม่มีไฟล์</span>')}</td>`; }).join("")}</tr>`; }).join("");
+    if (revId && wfiles.some(f => f.id === revId)) rRev(revId); else $("#iRev").innerHTML = wfiles.length ? `<p class="sub">กดชื่อไฟล์ในตารางเพื่อดูผลที่ AI อ่าน ตรวจ และบันทึก</p>` : "";
+  }
+  $("#iY").onchange = () => rImp();
+  $("#iGrid").onclick = ev => { const c = ev.target.closest("[data-f]"); if (!c) return; revId = +c.dataset.f; rRev(revId); $("#iRev").scrollIntoView({ behavior: "smooth", block: "start" }); };
+  $("#fU").onsubmit = guard(async () => {
+    const fs = [...$("#uF").files], m = $("#uM").value, H = hosp(); if (!fs.length) throw new Error("เลือกไฟล์ก่อน"); if (!m) throw new Error("เลือกเดือนของผลก่อน");
+    const big = fs.find(f => f.size > 20 * 1024 * 1024); if (big) throw new Error(`ไฟล์ ${big.name} ใหญ่เกิน 20 MB`);
+    const made = [];
+    for (const [i, f] of fs.entries()) {
+      $("#uMsg").textContent = `กำลังแนบ ${i + 1}/${fs.length}: ${f.name}`;
+      const path = `${H.code}/${m}/${Date.now()}-${i}${extOf(f.name) ? "." + extOf(f.name) : ""}`;
+      const up = await sb.storage.from("water-lab").upload(path, f, { contentType: f.type || "application/octet-stream", upsert: false }); if (up.error) throw up.error;
+      const { data, error } = await sb.from("water_files").insert({ hospital_id: H.id, month: m + "-01", grp: $("#uG").value, path, file_name: f.name, mime: f.type || null, size: f.size, lab: $("#uL").value.trim() || null, created_by: me.id }).select().single();
+      if (error) throw error; made.push([data, f]);
+    }
+    $("#fU").reset(); $("#uM").value = m; await load(); $("#iY").value = m.slice(0, 4); revId = made[made.length - 1][0].id; rImp();
+    if ($("#uAuto").checked && made.length) for (const [row, f] of made) await aiRead(row, f);
+    $("#uMsg").textContent = `แนบแล้ว ${made.length} ไฟล์`;
+  });
+  async function aiRead(row, fileObj) {
+    const msg = $("#uMsg"); msg.textContent = `AI กำลังอ่าน ${row.file_name} (ประมาณ 20-60 วินาที)`;
+    let text = "";
+    try {
+      if (!fileObj && /^(xlsx|xlsm|docx|csv|txt|tsv|json|xml|html|htm)$/.test(extOf(row.file_name))) { const d = await sb.storage.from("water-lab").download(row.path); if (d.error) throw d.error; fileObj = d.data; }
+      if (fileObj) text = await fileText(fileObj, row.file_name);
+      await aiCall({ step: "read", file_id: row.id, text }, msg);
+      msg.textContent = `AI อ่าน ${row.file_name} แล้ว ตรวจผลด้านล่างก่อนกดบันทึก`;
+    } catch (e) { msg.textContent = ""; toast(`AI อ่าน ${row.file_name} ไม่สำเร็จ: ${errText(e)}`, true); }
+    await load(); revId = row.id; rImp();
+  }
+  // plan options grouped by sampling point
+  const planOpts = sel => `<option value="">ไม่บันทึก / ยังจับคู่ไม่ได้</option>` + points.filter(p => p.active).map(p => `<optgroup label="${esc(p.code)} ${esc(p.name)}">${plans.filter(x => x.point_id === p.id && x.active).map(x => `<option value="${x.id}"${x.id === sel ? " selected" : ""}>${esc(x.param)}${x.unit ? " (" + esc(x.unit) + ")" : ""}</option>`).join("")}</optgroup>`).join("");
+  // what a value means for a พบ/ไม่พบ or ผ่าน/ไม่ผ่าน item
+  const qualOf = (pl, v) => { const t = String(v || "").trim().toLowerCase();
+    if (pl.kind === "detect") return /ไม่พบ|^nd$|n\.d|not\s*detect|negative|absent|^<\s*\d|^0$/.test(t) ? "nd" : /พบ|detect|positive|present|^\d/.test(t) ? "detected" : null;
+    if (pl.kind === "pf") return /ไม่ผ่าน|fail|not\s*pass/.test(t) ? "fail" : /ผ่าน|pass|ok/.test(t) ? "pass" : null; return null; };
+  const gradeTxt = (pl, v) => { if (!pl.id || !String(v || "").trim()) return ["", ""];
+    if (pl.kind !== "num") { const q = qualOf(pl, v); return q ? [QUAL[q], q === "detected" || q === "fail" ? "fail" : "ok"] : ["อ่านค่าไม่ได้", "warn"]; }
+    const pv = parseVal(v); if (!pv || pv.bad) return ["อ่านค่าไม่ได้", "warn"];
+    const bad = (pl.lo != null && pv.value < +pl.lo) || (pl.hi != null && pv.value > +pl.hi); return bad ? ["นอกเกณฑ์", "fail"] : pl.lo == null && pl.hi == null ? ["ไม่มีเกณฑ์", ""] : ["ผ่าน", "ok"]; };
+  function rRev(id) {
+    const f = wfiles.find(x => x.id === id); if (!f) return; const A = f.ai || {}, rows = A.rows || [];
+    const dup = (pid, d) => pid && results.some(r => r.plan_id === pid && r.sampled_on === d);
+    $("#iRev").innerHTML = `<div class="panel"><h2>${esc(f.file_name)}</h2>
+      <p class="sub">${FGRP[f.grp]} · ผลของเดือน ${dTH(f.month).replace(/^\d+\s/, "")} · ${esc(f.lab || A.lab || "ไม่ระบุห้องปฏิบัติการ")}${A.report_no ? " · รายงานเลขที่ " + esc(A.report_no) : ""} · สถานะ: <b>${FST[f.status]}</b>${f.saved_count ? ` (บันทึกแล้ว ${f.saved_count} ค่า)` : ""}${f.ai_model ? ` · อ่านโดย ${esc(f.ai_model)} เมื่อ ${dTH(f.ai_at)}` : ""}</p>
+      ${f.error ? `<div class="note bad">${esc(f.error)}</div>` : ""}
+      <div class="acts"><button class="btn small" type="button" id="rvOpen">เปิดไฟล์</button>${canRec ? `<button class="btn small" type="button" id="rvRead">🤖 ${f.ai ? "ให้ AI อ่านใหม่" : "ให้ AI อ่านไฟล์นี้"}</button>` : ""}</div>
+      ${(A.notes || []).length ? `<div class="note">ข้อสังเกตของ AI:<br>${A.notes.map(esc).join("<br>")}</div>` : ""}
+      ${rows.length ? `<p class="sub">ตรวจทุกแถวเทียบกับไฟล์จริง แก้รายการ วันที่ หรือค่าได้ แถวที่ติ๊กเท่านั้นจะถูกบันทึก · แถวสีเหลือง = มีผลของรายการนี้ในวันเดียวกันอยู่แล้ว (ไม่ติ๊กให้)</p>
+      <div class="tw"><table class="tt" id="rvT"><tr><th>บันทึก</th><th>ในไฟล์</th><th>จุดตรวจ · รายการ (แบบฟอร์มกลาง)</th><th>วันที่เก็บตัวอย่าง</th><th>ค่า</th><th>เทียบเกณฑ์</th><th>หมายเหตุ AI</th></tr>
+      ${rows.map((r, i) => { const pl = plOf(r.plan_id), d = dup(r.plan_id, r.sampled_on), g = gradeTxt(pl, r.value);
+        return `<tr class="${d ? "warn" : ""}" data-i="${i}"><td><input type="checkbox" data-k="on" ${r.plan_id && !d && f.status !== "saved" ? "checked" : ""} aria-label="บันทึกแถวนี้"></td><td>${esc(r.point_in_file || "")}<br><b>${esc(r.param_in_file || "")}</b></td>
+          <td><select data-k="plan">${planOpts(r.plan_id)}</select></td><td><input type="date" data-k="date" value="${esc(r.sampled_on || "")}" max="${today()}"></td><td><input class="sm" data-k="val" value="${esc(r.value || "")}"></td><td class="${g[1]}" data-k="g">${esc(g[0])}</td><td>${esc(r.note || "")}${d ? "<br>มีผลวันนี้อยู่แล้ว" : ""}</td></tr>`; }).join("")}</table></div>
+      ${canRec ? `<div class="acts"><button class="btn primary" type="button" id="rvSave">บันทึกผลที่ติ๊ก</button><span class="sub" id="rvMsg"></span></div>` : ""}` : f.ai ? `<p class="sub">AI ไม่พบค่าที่จับคู่ได้ในไฟล์นี้</p>` : ""}</div>`;
+    $("#rvOpen").onclick = guard(async () => { const { data, error } = await sb.storage.from("water-lab").createSignedUrl(f.path, 600); if (error) throw error; window.open(data.signedUrl, "_blank", "noopener"); });
+    if ($("#rvRead")) $("#rvRead").onclick = guard(async () => aiRead(f));
+    const T = $("#rvT"); if (T) T.oninput = T.onchange = ev => { const tr = ev.target.closest("tr[data-i]"); if (!tr || ev.target.dataset.k === "on") return;
+      const g = gradeTxt(plOf(+tr.querySelector('[data-k="plan"]').value), tr.querySelector('[data-k="val"]').value), c = tr.querySelector('[data-k="g"]'); c.textContent = g[0]; c.className = g[1]; };
+    if ($("#rvSave")) $("#rvSave").onclick = guard(async () => {
+      const out = [];
+      for (const tr of T.querySelectorAll("tr[data-i]")) { if (!tr.querySelector('[data-k="on"]').checked) continue;
+        const pl = plOf(+tr.querySelector('[data-k="plan"]').value), d = tr.querySelector('[data-k="date"]').value, v = tr.querySelector('[data-k="val"]').value.trim(), r = rows[+tr.dataset.i];
+        if (!pl.id) throw new Error(`แถว "${r.param_in_file}" ยังไม่ได้เลือกรายการในแบบฟอร์มกลาง (หรือเอาติ๊กออก)`);
+        if (!d || d > today()) throw new Error(`แถว "${r.param_in_file}" วันที่เก็บตัวอย่างไม่ถูกต้อง`);
+        let value = null, val_text = null, qual = null;
+        if (pl.kind === "num") { const pv = parseVal(v); if (!pv || pv.bad) throw new Error(`ค่า "${v}" ของ ${pl.param} อ่านไม่ได้ ให้แก้เป็นตัวเลข เช่น 12 หรือ <0.1 หรือ ND`); value = pv.value; val_text = pv.text; }
+        else { qual = qualOf(pl, v); if (!qual) throw new Error(`ค่า "${v}" ของ ${pl.param} ต้องเป็น พบ / ไม่พบ หรือ ผ่าน / ไม่ผ่าน`); }
+        out.push({ plan_id: pl.id, hospital_id: pl.hospital_id, sampled_on: d, value, val_text, qual, lab: f.lab || A.lab || null, report_no: r.report_no || A.report_no || null, note: `นำเข้าจากไฟล์ ${f.file_name}${r.note ? " · " + r.note : ""}`, file_id: f.id, recorded_by: me.id }); }
+      if (!out.length) throw new Error("ยังไม่ได้ติ๊กแถวที่จะบันทึก");
+      const { data, error } = await sb.from("water_results").insert(out).select(); if (error) throw error;
+      const up = await sb.from("water_files").update({ status: "saved", saved_count: (f.saved_count || 0) + data.length, saved_at: new Date().toISOString(), saved_by: me.id }).eq("id", f.id); if (up.error) throw up.error;
+      const bad = data.filter(r => r.status === "fail").length;
+      toast(`บันทึกแล้ว ${data.length} ค่า${bad ? ` · นอกเกณฑ์ ${bad} ค่า ระบบเปิดรายการแก้ไขให้แล้ว` : ""}`, !!bad); await load(); rImp(); });
+  }
+
+  // ---------- AI สรุปผู้บริหาร + วิเคราะห์ ----------
+  // the figures the AI gets: computed here from the saved results (no personal data)
+  const aiInputOf = D => ({ hospital: D.hcode, group: GRP[D.g], year_be: D.YT, sampling_points: D.pts.map(p => `${p.code} ${p.name} (${SYS[p.system]})`),
+    results: D.res.length, passed: D.res.filter(r => r.status !== "fail").length, months_all_pass: D.clean.length, months_with_results: D.tested.length,
+    items: D.all.map(x => ({ point: x.pt.code, item: x.pl.param, type: TT[x.pl.test_type], unit: x.pl.unit || "", standard: hasLim(x.pl) ? crit(x.pl) : "ไม่กำหนด", tests: x.n, out_of_range: x.fail,
+      avg: x.avg, min: x.minT, max: x.maxT, monthly: Object.fromEntries(x.cell.map((l, i) => [MON[i], cellTxt(l)]).filter(([, v]) => v)), assessment: x.as.txt, missing_months: x.missing })),
+    removal: D.removal.map(r => ({ parameter: r.name, target: `>${r.target}%`, avg: r.avg, months_below_target: r.low, monthly: r.m })),
+    corrective_actions: D.acts.map(p => ({ problem: p.a.problem, action: p.a.action || "", owner: p.a.owner || "", due: p.a.due, status: p.a.status })) });
+  const aiOf = (h, g, y) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y);
+  function aiHtml(rep, when, model) {
+    if (!rep) return ""; const R = rep, G = aiGantt(R);
+    return `<h3>บทสรุปผู้บริหารโดย AI</h3><ol>${(R.summary || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><h3>บทวิเคราะห์โดย AI</h3><ol>${(R.analysis || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol>
+      ${(R.risks || []).length ? `<h3>ความเสี่ยง</h3><ol>${R.risks.map(x => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}
+      ${(R.plan || []).length ? `<h3>แผนงานที่ AI เสนอ</h3><div class="tw"><table class="tt"><tr><th>ลำดับ</th><th>ประเด็น</th><th>มาตรการ</th><th>ผู้รับผิดชอบ</th><th>เริ่ม</th><th>กำหนดเสร็จ</th></tr>${R.plan.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.issue)}</td><td>${esc(p.action)}</td><td>${esc(p.owner)}</td><td>${dTH(p.start)}</td><td>${dTH(p.due)}</td></tr>`).join("")}</table></div>` : ""}
+      ${G ? `<p class="sub"><b>แผนงาน (Gantt)</b></p><div class="tw">${G.replace("<svg ", '<svg class="trend" ')}</div>` : ""}
+      ${(R.data_gaps || []).length ? `<h3>ข้อมูลที่ยังขาด</h3><ol>${R.data_gaps.map(x => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}
+      <p class="sub">ทำเมื่อ ${dTH(when)}${model ? " · " + esc(model) : ""} · ตัวเลขมาจากผลที่บันทึกในระบบ ให้ผู้รับผิดชอบตรวจทานก่อนนำเสนอ</p>`;
+  }
+  // AI parts for the exports of a deck / workbook
+  const aiSections = R => !R ? [] : [
+    { title: "บทสรุปผู้บริหารโดย AI", head: ["ข้อ", "สรุป"], colW: [0.8, 11.5], rows: (R.summary || []).map((x, i) => [i + 1, x]) },
+    { title: "บทวิเคราะห์โดย AI", head: ["ข้อ", "วิเคราะห์"], colW: [0.8, 11.5], rows: [...(R.analysis || []), ...(R.risks || []).map(x => "ความเสี่ยง: " + x), ...(R.data_gaps || []).map(x => "ข้อมูลที่ยังขาด: " + x)].map((x, i) => [i + 1, x]) },
+    { title: "แผนงานที่ AI เสนอ", head: ["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ"], colW: [0.7, 3.2, 4.4, 1.8, 1.1, 1.1], rows: (R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due)]) },
+    ...(aiGantt(R) ? [{ title: "แผนงานที่ AI เสนอ (Gantt)", svg: aiGantt(R), note: "แถบสีแดง = เลยกำหนดแล้ว" }] : [])];
+  const aiSheets = (R, tag) => !R ? [] : [{ name: `AI สรุป${tag}`, header: 0, rows: [["ข้อ", "บทสรุปผู้บริหารโดย AI"], ...(R.summary || []).map((x, i) => [i + 1, x]), [], ["ข้อ", "บทวิเคราะห์โดย AI"], ...(R.analysis || []).map((x, i) => [i + 1, x]),
+      ...((R.risks || []).length ? [[], ["ข้อ", "ความเสี่ยง"], ...R.risks.map((x, i) => [i + 1, x])] : []), ...((R.data_gaps || []).length ? [[], ["ข้อ", "ข้อมูลที่ยังขาด"], ...R.data_gaps.map((x, i) => [i + 1, x])] : [])] },
+    { name: `AI แผนงาน${tag}`, header: 0, rows: [["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ"], ...(R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due)])] },
+    ...(aiGantt(R) ? [{ name: `AI Gantt${tag}`, rows: [["แผนงานที่ AI เสนอ (Gantt)"]], styles: { 0: 2 }, svg: aiGantt(R) }] : [])];
+  function rCatAi() { const a = aiOf(hosp().id, catCur, $("#cY").value); $("#cAi").innerHTML = a ? aiHtml(a.report, a.created_at, a.model) : `<p class="sub">ยังไม่มีบทสรุปจาก AI ของหมวดนี้ปีนี้ กดปุ่ม 🤖 เพื่อให้ AI อ่านผลทั้งปีแล้วเขียนบทสรุปผู้บริหาร บทวิเคราะห์ และแผนงาน</p>`;
+    $("#cAiBtn").hidden = !canRec; }
+  $("#cAiBtn").onclick = guard(async () => { const D = catData(catCur); if (!D.res.length) throw new Error("ยังไม่มีผลตรวจของหมวดนี้ในปีที่เลือก");
+    $("#cAiMsg").textContent = "AI กำลังอ่านผลทั้งปีและเขียนบทสรุป (ประมาณ 20-60 วินาที)";
+    try { const r = await aiCall({ step: "summary", hospital_id: hosp().id, grp: catCur, year: +D.Y, input: aiInputOf(D) }, $("#cAiMsg"));
+      aiReps.unshift({ hospital_id: hosp().id, grp: catCur, year: +D.Y, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() }); $("#cAiMsg").textContent = "เสร็จแล้ว"; rCatAi(); }
+    catch (e) { $("#cAiMsg").textContent = ""; throw e; } });
+
+  // ---------- 12 โรง: one water group compared across hospitals, AI summary of all 12 ----------
+  let V = null;
+  function vYears() { const y = +today().slice(0, 4); if (!$("#vY").options.length) $("#vY").innerHTML = [y, y - 1, y - 2].map(x => `<option value="${x}">พ.ศ. ${x + 543}</option>`).join(""); }
+  const vRow = r => [r.code, r.name, r.D.pts.length, r.D.all.length, r.D.res.length, r.pr == null ? "-" : r.pr + "%", `${r.D.clean.length}/${r.D.tested.length}`, r.fails.length ? r.fails.join(" · ") : r.D.res.length ? "ไม่มี" : "-",
+    r.watch.length ? r.watch.join(" · ") : "-", ...(V.g === "WASTE" ? [r.D.removal.map(x => `${x.name} ${x.avg == null ? "-" : x.avg + "%"}`).join(" · ") || "-"] : []), r.D.acts.filter(p => p.a.status === "open").length, r.nf];
+  const vHead = () => ["โรง", "ชื่อ", "จุดตรวจ", "รายการ", "ผลตรวจ (ครั้ง)", "ผ่านเกณฑ์", "เดือนที่ผ่านทุกรายการ", "รายการนอกเกณฑ์", "รายการเฝ้าระวัง", ...(V.g === "WASTE" ? ["% การบำบัดเฉลี่ย"] : []), "แก้ไขยังไม่ปิด", "ไฟล์ผลแล็บที่แนบ"];
+  $("#vLoad").onclick = guard(async () => {
+    const Y = $("#vY").value, g = $("#vG").value, ids = hosps.map(h => h.id); $("#vMsg").textContent = "กำลังโหลด…";
+    const [p, l, r, a, f, ai] = await Promise.all([sb.from("water_points").select("*").in("hospital_id", ids), sb.from("water_plans").select("*").in("hospital_id", ids),
+      sb.from("water_results").select("*").in("hospital_id", ids).gte("sampled_on", Y + "-01-01").lte("sampled_on", Y + "-12-31").order("sampled_on", { ascending: false }).limit(20000),
+      sb.from("water_actions").select("*").in("hospital_id", ids), sb.from("water_files").select("id,hospital_id,month,grp,status").in("hospital_id", ids).gte("month", Y + "-01-01").lte("month", Y + "-12-31"),
+      sb.from("water_ai").select("*").is("hospital_id", null).eq("grp", g).eq("year", +Y).order("created_at", { ascending: false }).limit(1)]);
+    for (const x of [p, l, r, a]) if (x.error) throw x.error;
+    const rows = hosps.slice().sort((x, y) => x.code.localeCompare(y.code)).map(h => { const C = { points: p.data.filter(x => x.hospital_id === h.id), plans: l.data.filter(x => x.hospital_id === h.id), results: r.data.filter(x => x.hospital_id === h.id), actions: a.data.filter(x => x.hospital_id === h.id), Y, pid: null, tt: "", hcode: h.code };
+      const D = catData(g, C), pass = D.res.filter(x => x.status !== "fail").length;
+      return { code: h.code, name: h.name, D, pr: pct(pass, D.res.length), fails: D.all.filter(x => x.as.st === "fail").map(x => `${x.pl.param} (${x.pt.code}) ${x.fail} ครั้ง`), watch: D.all.filter(x => x.as.st === "watch").map(x => `${x.pl.param} (${x.pt.code})`),
+        nf: (f.data || []).filter(x => x.hospital_id === h.id && (x.grp === g || x.grp === "ALL")).length }; });
+    V = { g, Y, YT: +Y + 543, rows, ai: ai.data && ai.data[0] }; $("#vMsg").textContent = ""; rV(); });
+  function rV() { if (!V) return;
+    $("#vGrp").innerHTML = `<tr>${vHead().map(h => `<th>${h}</th>`).join("")}</tr>` + V.rows.map(r => `<tr>${vRow(r).map((c, i) => `<td class="${i === 5 ? cls2(r.pr) : i === 7 && r.fails.length ? "fail" : ""} ${[2, 3, 4, 5].includes(i) ? "n" : ""}">${esc(String(c))}</td>`).join("")}</tr>`).join("");
+    $("#vAiBtn").hidden = !exec; $("#vAi").innerHTML = V.ai ? aiHtml(V.ai.report, V.ai.created_at, V.ai.model) : `<p class="sub">${exec ? "กดปุ่ม 🤖 เพื่อให้ AI สรุปและวิเคราะห์หมวดนี้ของทุกโรง" : "สรุป 12 โรงโดย AI ทำได้เฉพาะผู้บริหาร"}</p>`; }
+  const cls2 = v => v == null ? "never" : v >= 95 ? "ok" : v >= 80 ? "warn" : "fail";
+  const vInput = () => ({ group: GRP[V.g], year_be: V.YT, hospitals: V.rows.map(r => ({ hospital: r.code, sampling_points: r.D.pts.length, items: r.D.all.length, results: r.D.res.length, pass_rate: r.pr, months_all_pass: r.D.clean.length, months_with_results: r.D.tested.length,
+    out_of_range: r.D.all.filter(x => x.fail).map(x => ({ item: x.pl.param, point: x.pt.code, times: x.fail, max: x.maxT, min: x.minT, standard: crit(x.pl) })), watch: r.watch,
+    removal: r.D.removal.map(x => ({ parameter: x.name, avg: x.avg, target: x.target, months_below: x.low })), missing: r.D.all.filter(x => x.missing.length).map(x => `${x.pl.param} (${x.pt.code}) ขาด ${x.missing.length} เดือน`),
+    open_actions: r.D.acts.filter(p => p.a.status === "open").length, lab_files: r.nf })) });
+  $("#vAiBtn").onclick = guard(async () => { if (!V) throw new Error("กด \"แสดงข้อมูล\" ก่อน"); $("#vAiMsg").textContent = "AI กำลังเปรียบเทียบ 12 โรง (ประมาณ 30-90 วินาที)";
+    try { const r = await aiCall({ step: "summary", hospital_id: null, grp: V.g, year: +V.Y, input: vInput() }, $("#vAiMsg")); V.ai = { report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() }; $("#vAiMsg").textContent = "เสร็จแล้ว"; rV(); }
+    catch (e) { $("#vAiMsg").textContent = ""; throw e; } });
+  const vFind = () => { const W = V.rows.filter(r => r.D.res.length), F = V.rows.filter(r => r.fails.length), N = V.rows.filter(r => !r.D.pts.length);
+    return [`${GRP[V.g]} ปี พ.ศ. ${V.YT}: มีผลตรวจ ${W.length} จาก ${V.rows.length} โรง ผลตรวจรวม ${V.rows.reduce((t, r) => t + r.D.res.length, 0)} ครั้ง`,
+      F.length ? `โรงที่มีผลนอกเกณฑ์ ${F.length} โรง: ${F.map(r => `${r.code} (${r.fails.join(" · ")})`).join(" / ")}` : "ไม่มีโรงใดมีผลนอกเกณฑ์",
+      N.length ? `โรงที่ยังไม่มีจุดตรวจในหมวดนี้: ${N.map(r => r.code).join(", ")}` : "ทุกโรงมีจุดตรวจในหมวดนี้แล้ว",
+      `ไฟล์ผลแล็บที่แนบในปีนี้รวม ${V.rows.reduce((t, r) => t + r.nf, 0)} ไฟล์`]; };
+  $("#vgX").onclick = () => { if (!V) return toast("กด \"แสดงข้อมูล\" ก่อน", true);
+    Office.xlsx(`น้ำ_${GRP[V.g]}_12โรง_${V.YT}`, [Office.summarySheet({ title: `ผลตรวจคุณภาพน้ำ ${GRP[V.g]} เปรียบเทียบ 12 โรง ปี พ.ศ. ${V.YT}`, org: "โรงพยาบาลในเครือ 12 โรง", period: `ข้อมูล ณ ${dTH(today())}`, findings: vFind(), notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[V.g]}`] }),
+      { name: "เปรียบเทียบ 12 โรง", header: 0, rows: [vHead(), ...V.rows.map(vRow)] }, ...aiSheets(V.ai && V.ai.report, "")]); };
+  $("#vgP").onclick = () => { if (!V) return toast("กด \"แสดงข้อมูล\" ก่อน", true); const R = V.ai && V.ai.report;
+    return Office.pptx(`น้ำ_${GRP[V.g]}_12โรง_บทสรุปผู้บริหาร_${V.YT}`, { title: `ผลตรวจคุณภาพน้ำ ${GRP[V.g]} เปรียบเทียบ 12 โรง ปี พ.ศ. ${V.YT}`, org: "โรงพยาบาลในเครือ 12 โรง", period: `ข้อมูล ณ ${dTH(today())}`,
+      findings: R ? R.summary : vFind(), analysis: R ? R.analysis : [], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[V.g]}`],
+      sections: [{ title: "เปรียบเทียบ 12 โรง", head: ["โรง", "ผลตรวจ", "ผ่านเกณฑ์", "เดือนผ่านทุกรายการ", "รายการนอกเกณฑ์", "แก้ไขยังไม่ปิด"], colW: [0.9, 1.1, 1.2, 1.6, 6.3, 1.2], rows: V.rows.map(r => [r.code, r.D.res.length, r.pr == null ? "-" : r.pr + "%", `${r.D.clean.length}/${r.D.tested.length}`, r.fails.join(" · ") || "-", r.D.acts.filter(p => p.a.status === "open").length]) },
+        ...aiSections(R).slice(2)] }).catch(e => toast(errText(e), true)); };
 
 })();

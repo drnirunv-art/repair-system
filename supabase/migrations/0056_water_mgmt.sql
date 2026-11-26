@@ -374,3 +374,77 @@ select v.* from (values
   ('DW', 'DW12', 'คลอไรด์ (Chloride) น้ำดื่ม', 'mg/L', 'num', null, 250, null, 'Y', 'ประกาศกระทรวงสาธารณสุข ฉบับที่ 61 (พ.ศ. 2524) เรื่อง น้ำบริโภคในภาชนะบรรจุที่ปิดสนิท และฉบับแก้ไขเพิ่มเติม', 'ส่งห้องปฏิบัติการ', null, 12, 'chem')
 ) v(system, code, param, unit, kind, lo, hi, warn, freq, ref, method, note, sort, test_type)
 where not exists (select 1 from public.water_templates t where t.code = v.code);
+
+-- ผลแล็บเป็นไฟล์: แต่ละโรงแนบไฟล์ผลของแต่ละเดือน (แยกหมวด) ไฟล์ทุกแบบ (PDF รูป Excel Word) เพราะแต่ละโรงอาจใช้ห้องปฏิบัติการต่างกัน
+-- AI 1 คน (edge function water-ai) อ่านไฟล์แล้วเสนอแถวผลลงแบบฟอร์มกลาง (water_plans) คนตรวจและกดบันทึกเอง ; ไฟล์เก็บใน bucket water-lab โฟลเดอร์ = รหัสโรง
+create table if not exists public.water_files (
+  id bigint generated always as identity primary key,
+  hospital_id uuid not null references public.hospitals(id),
+  month date not null,                                   -- first day of the month the results belong to
+  grp text not null default 'ALL' check (grp in ('DRINK', 'USE', 'WASTE', 'ALL')),
+  path text not null unique, file_name text not null, mime text, size bigint,
+  lab text, note text,
+  status text not null default 'uploaded' check (status in ('uploaded', 'read', 'saved', 'error')),
+  ai jsonb, ai_model text, ai_at timestamptz, error text,
+  saved_count int not null default 0, saved_at timestamptz, saved_by uuid references public.profiles(id),
+  created_by uuid references public.profiles(id) default auth.uid(),
+  created_at timestamptz not null default now()
+);
+create index if not exists water_files_hosp_idx on public.water_files (hospital_id, month);
+alter table public.water_results add column if not exists file_id bigint references public.water_files(id);
+
+-- AI executive summary + analysis per hospital (or hospital_id null = 12 โรง), per water group and year; every run is kept
+create table if not exists public.water_ai (
+  id bigint generated always as identity primary key,
+  hospital_id uuid references public.hospitals(id),
+  grp text not null check (grp in ('DRINK', 'USE', 'WASTE', 'ALL')),
+  year int not null,
+  report jsonb not null, model text,
+  created_by uuid references public.profiles(id) default auth.uid(),
+  created_at timestamptz not null default now()
+);
+create index if not exists water_ai_idx on public.water_ai (hospital_id, year, grp, created_at desc);
+alter table public.water_files enable row level security;
+alter table public.water_ai enable row level security;
+
+do $p$ begin
+  if not exists (select 1 from pg_policies where tablename = 'water_files' and policyname = 'wf read') then
+    create policy "wf read" on public.water_files for select to authenticated using (public.water_can_read(hospital_id)); end if;
+  if not exists (select 1 from pg_policies where tablename = 'water_files' and policyname = 'wf write') then
+    create policy "wf write" on public.water_files for insert to authenticated with check (public.water_can_record(hospital_id) and created_by = auth.uid()); end if;
+  if not exists (select 1 from pg_policies where tablename = 'water_files' and policyname = 'wf edit') then
+    create policy "wf edit" on public.water_files for update to authenticated using (public.water_can_record(hospital_id)) with check (public.water_can_record(hospital_id)); end if;
+  if not exists (select 1 from pg_policies where tablename = 'water_ai' and policyname = 'wai read') then
+    create policy "wai read" on public.water_ai for select to authenticated
+      using (case when hospital_id is null then public.am_exec() else public.water_can_read(hospital_id) end); end if;
+  if not exists (select 1 from pg_policies where tablename = 'water_ai' and policyname = 'wai write') then
+    create policy "wai write" on public.water_ai for insert to authenticated
+      with check (created_by = auth.uid() and case when hospital_id is null then public.am_exec() else public.water_can_record(hospital_id) end); end if;
+end $p$;
+grant select, insert, update on public.water_files to authenticated;
+grant select, insert on public.water_ai to authenticated;
+
+-- a result saved from a file must come from a file of the same hospital
+create or replace function public.water_result_file() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.file_id is not null and not exists (select 1 from water_files f where f.id = new.file_id and f.hospital_id = new.hospital_id) then
+    raise exception 'ไฟล์ผลแล็บนี้ไม่ใช่ของโรงพยาบาลเดียวกับจุดตรวจ'; end if;
+  return new;
+end $$;
+revoke all on function public.water_result_file() from public, anon;
+drop trigger if exists water_result_file on public.water_results;
+create trigger water_result_file before insert on public.water_results for each row execute function public.water_result_file();
+
+-- private bucket for the lab files (any type, up to 20 MB); folder = hospital code
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('water-lab', 'water-lab', false, 20971520)
+on conflict (id) do nothing;
+do $s$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'water lab read') then
+    create policy "water lab read" on storage.objects for select to authenticated
+      using (bucket_id = 'water-lab' and exists (select 1 from public.hospitals h where h.code = (storage.foldername(objects.name))[1] and public.water_can_read(h.id))); end if;
+  if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'water lab upload') then
+    create policy "water lab upload" on storage.objects for insert to authenticated
+      with check (bucket_id = 'water-lab' and exists (select 1 from public.hospitals h where h.code = (storage.foldername(objects.name))[1] and public.water_can_record(h.id))); end if;
+end $s$;
