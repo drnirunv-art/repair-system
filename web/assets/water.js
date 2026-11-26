@@ -959,9 +959,21 @@
       if (error) throw error; made.push([data, f]);
     }
     $("#fU").reset(); $("#uM").value = m; await load(); $("#iY").value = m.slice(0, 4); revId = made[made.length - 1][0].id; rImp();
+    // a copy of every new file goes into the hospital's Google Drive month folder too, in the background
+    toDrive(made.map(x => x[0]));
     if ($("#uAuto").checked && made.length) for (const [row, f] of made) await aiRead(row, f);
     $("#uMsg").textContent = `แนบแล้ว ${made.length} ไฟล์`;
   });
+  // ---------- copy to Google Drive: <CODE> ... / หมวด N ... / <พ.ศ.>-<MM> <เดือน> (same file name is not copied twice) ----------
+  async function toDrive(rows, el) {
+    for (const row of rows) {
+      if (el) el.textContent = `กำลังส่ง ${row.file_name} เข้า Google Drive`;
+      try { const d = (await aiCall({ step: "drive", file_id: row.id })).drive || {};
+        const t = `${d.existed ? "มีใน Google Drive อยู่แล้ว" : "ส่งเข้า Google Drive แล้ว"}: ${row.file_name}${d.folder ? " → " + d.folder : ""}`;
+        if (el) el.innerHTML = `${esc(t)}${d.url ? ` · <a href="${esc(d.url)}" target="_blank" rel="noopener">เปิดใน Drive</a>` : ""}`; else toast(t);
+      } catch (e) { const t = `ส่ง ${row.file_name} เข้า Google Drive ไม่สำเร็จ: ${errText(e)}`; if (el) el.textContent = t; else toast(t, true); }
+    }
+  }
   async function aiRead(row, fileObj) {
     const msg = $("#uMsg"); msg.textContent = `AI กำลังอ่าน ${row.file_name} (ประมาณ 20-60 วินาที)`;
     let text = "";
@@ -993,7 +1005,7 @@
     $("#iRev").innerHTML = `<div class="panel"><h2>${esc(f.file_name)}</h2>
       <p class="sub">${FGRP[f.grp]} · ผลของเดือน ${dTH(f.month).replace(/^\d+\s/, "")} · ${esc(f.lab || A.lab || "ไม่ระบุห้องปฏิบัติการ")}${A.report_no ? " · รายงานเลขที่ " + esc(A.report_no) : ""} · สถานะ: <b>${FST[f.status]}</b>${f.saved_count ? ` (บันทึกแล้ว ${f.saved_count} ค่า)` : ""}${f.ai_model ? ` · อ่านโดย ${esc(f.ai_model)} เมื่อ ${dTH(f.ai_at)}` : ""}</p>
       ${f.error ? `<div class="note bad">${esc(f.error)}</div>` : ""}
-      <div class="acts"><button class="btn small" type="button" id="rvOpen">เปิดไฟล์</button>${canRec ? `<button class="btn small" type="button" id="rvRead">🤖 ${f.ai ? "ให้ AI อ่านใหม่" : "ให้ AI อ่านไฟล์นี้"}</button>` : ""}</div>
+      <div class="acts"><button class="btn small" type="button" id="rvOpen">เปิดไฟล์</button>${canRec ? `<button class="btn small" type="button" id="rvRead">🤖 ${f.ai ? "ให้ AI อ่านใหม่" : "ให้ AI อ่านไฟล์นี้"}</button><button class="btn small" type="button" id="rvDrive">📁 ส่งเข้า Google Drive</button><span class="sub" id="rvDMsg" role="status"></span>` : ""}</div>
       ${(A.notes || []).length ? `<div class="note">ข้อสังเกตของ AI:<br>${A.notes.map(esc).join("<br>")}</div>` : ""}
       ${rows.length ? `<p class="sub">ตรวจทุกแถวเทียบกับไฟล์จริง แก้รายการ วันที่ หรือค่าได้ แถวที่ติ๊กเท่านั้นจะถูกบันทึก · แถวสีเหลือง = มีผลของรายการนี้ในวันเดียวกันอยู่แล้ว (ไม่ติ๊กให้)</p>
       <div class="tw"><table class="tt" id="rvT"><tr><th>บันทึก</th><th>ในไฟล์</th><th>จุดตรวจ · รายการ (แบบฟอร์มกลาง)</th><th>วันที่เก็บตัวอย่าง</th><th>ค่า</th><th>เทียบเกณฑ์</th><th>หมายเหตุ AI</th></tr>
@@ -1003,6 +1015,7 @@
       ${canRec ? `<div class="acts"><button class="btn primary" type="button" id="rvSave">บันทึกผลที่ติ๊ก</button><span class="sub" id="rvMsg"></span></div>` : ""}` : f.ai ? `<p class="sub">AI ไม่พบค่าที่จับคู่ได้ในไฟล์นี้</p>` : ""}</div>`;
     $("#rvOpen").onclick = guard(async () => { const { data, error } = await sb.storage.from("water-lab").createSignedUrl(f.path, 600); if (error) throw error; window.open(data.signedUrl, "_blank", "noopener"); });
     if ($("#rvRead")) $("#rvRead").onclick = guard(async () => aiRead(f));
+    if ($("#rvDrive")) $("#rvDrive").onclick = guard(async () => { const b = $("#rvDrive"); b.disabled = true; try { await toDrive([f], $("#rvDMsg")); } finally { b.disabled = false; } });
     const T = $("#rvT"); if (T) T.oninput = T.onchange = ev => { const tr = ev.target.closest("tr[data-i]"); if (!tr || ev.target.dataset.k === "on") return;
       const g = gradeTxt(plOf(+tr.querySelector('[data-k="plan"]').value), tr.querySelector('[data-k="val"]').value), c = tr.querySelector('[data-k="g"]'); c.textContent = g[0]; c.className = g[1]; };
     if ($("#rvSave")) $("#rvSave").onclick = guard(async () => {

@@ -2,6 +2,7 @@
 //   step "read":    reads one lab-result file a hospital attached for a month (PDF, picture, or text the page took out of
 //                   Excel / Word / CSV) and maps every value to the central template (the hospital's water_plans).
 //                   It only PROPOSES rows: a person checks them on the page and saves. Proposal kept in water_files.ai.
+//   step "drive":   copies one attached file into the hospital's month folder in Google Drive (Apps Script hook, secret DRIVE_HOOK_URL).
 //   step "summary": executive summary + analysis + action plan for one hospital or for all 12 hospitals (hospital_id null,
 //                   executives only) from the figures the page computed; kept in water_ai.
 // Only water-quality figures are sent; no patient or staff personal data. The caller must be signed in and allowed to see the hospital.
@@ -132,12 +133,37 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const gkey = Deno.env.get("GEMINI_API_KEY"), key = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!gkey && !key) return out({ error: "ยังไม่ได้ตั้งค่า GEMINI_API_KEY (หรือ ANTHROPIC_API_KEY) ในระบบ" }, 503);
     const auth = req.headers.get("Authorization") ?? "";
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } } });
     const { data: u } = await db.auth.getUser();
     if (!u?.user) return out({ error: "ต้องเข้าสู่ระบบก่อน" }, 401);
     const body = await req.json();
+
+    if (body.step === "drive") {
+      // copies one attached lab file into the hospital's Google Drive folder: <CODE> ... / หมวด N ... / <พ.ศ.>-<MM> <เดือน>
+      // through the Apps Script web app of the Drive owner (secret DRIVE_HOOK_URL, with its own key ?k=...). No AI here.
+      const hook = Deno.env.get("DRIVE_HOOK_URL");
+      if (!hook) return out({ error: "ยังไม่ได้ตั้งค่าลิงก์ส่งไฟล์เข้า Google Drive (DRIVE_HOOK_URL)" }, 503);
+      const f = await db.from("water_files").select("id,hospital_id,month,grp,path,file_name,mime,size").eq("id", body.file_id).maybeSingle();
+      if (f.error || !f.data) return out({ error: "ไม่พบไฟล์ หรือไม่มีสิทธิ์ดูไฟล์นี้" }, 404);
+      const F = f.data;
+      const ok = await db.rpc("water_can_record", { h: F.hospital_id });
+      if (!ok.data) return out({ error: "ไม่มีสิทธิ์บันทึกผลของโรงพยาบาลนี้" }, 403);
+      const hs = await db.from("hospitals").select("code").eq("id", F.hospital_id).maybeSingle();
+      if (hs.error || !hs.data) return out({ error: "ไม่พบรหัสโรงพยาบาล" }, 404);
+      const dl = await db.storage.from("water-lab").download(F.path);
+      if (dl.error || !dl.data) return out({ error: "เปิดไฟล์จากที่เก็บไม่ได้ ลองใหม่อีกครั้ง" }, 500);
+      const buf = new Uint8Array(await dl.data.arrayBuffer());
+      if (buf.length > 20 * 1024 * 1024) return out({ error: "ไฟล์ใหญ่เกิน 20 MB ส่งเข้า Drive อัตโนมัติไม่ได้" }, 400);
+      const r = await fetch(hook, { method: "POST", redirect: "follow", headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ code: hs.data.code, grp: F.grp, month: String(F.month).slice(0, 7), name: F.file_name, mime: F.mime || "application/octet-stream", data: b64(buf) }) });
+      const t = await r.text();
+      // deno-lint-ignore no-explicit-any
+      let j: any = {}; try { j = JSON.parse(t); } catch (_) { return out({ error: `Google Drive ตอบกลับไม่ถูกต้อง (รหัส ${r.status}) ให้ตรวจว่าตั้งค่า Apps Script ให้ทุกคนเข้าถึงได้ (Anyone)` }, 502); }
+      if (!j.ok) return out({ error: `Google Drive: ${j.error || "ส่งไม่สำเร็จ"}` }, 502);
+      return out({ drive: { url: j.url, folder: j.folder, existed: !!j.existed } });
+    }
+    if (!gkey && !key) return out({ error: "ยังไม่ได้ตั้งค่า GEMINI_API_KEY (หรือ ANTHROPIC_API_KEY) ในระบบ" }, 503);
     // a JSON answer, asked up to twice when the shape is wrong
     // deno-lint-ignore no-explicit-any
     const obj = async (sys: string, shape: string, text: string, schema: any, file?: { mime: string; b64: string }) => {
