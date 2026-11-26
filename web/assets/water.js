@@ -5,9 +5,9 @@
   const { sb, $, esc, errText } = RS;
   const MGR = ["owner", "admin", "chief_engineer", "supervisor"];
   // three water groups (user 2026-11-25): น้ำกินดื่ม / น้ำใช้ / น้ำเสีย; every test is ตรวจเชื้อ or สารเคมี
-  const SYS = { DW: "น้ำดื่ม (ตู้กดน้ำดื่ม / เครื่องกรองน้ำดื่ม)", POT: "น้ำประปา (ถังเก็บ / ก๊อกปลายทาง)", CT: "หอผึ่งเย็น (Cooling tower)", RO_HD: "น้ำ RO ไตเทียม (Hemodialysis)", RO_CSSD: "น้ำ RO หน่วยจ่ายกลาง (CSSD)", HW: "น้ำร้อน (ควบคุม Legionella)", WW: "น้ำเสีย (ระบบบำบัดน้ำเสีย / น้ำทิ้ง)", OTH: "อื่น ๆ" };
+  const SYS = { DW: "น้ำดื่ม (ตู้กดน้ำดื่ม / เครื่องกรองน้ำดื่ม)", POT: "น้ำประปา (ถังเก็บ / ก๊อกปลายทาง)", CT: "หอผึ่งเย็น (Cooling tower)", RO_HD: "น้ำ RO ไตเทียม (Hemodialysis)", RO_CSSD: "น้ำ RO หน่วยจ่ายกลาง (CSSD)", HW: "น้ำร้อน (ควบคุม Legionella)", WW: "น้ำทิ้งหลังบำบัด (Effluent)", WW_IN: "น้ำเสียเข้าระบบบำบัด (Influent)", WW_AER: "บ่อเติมอากาศ (Aeration tank)", OTH: "อื่น ๆ" };
   const GRP = { DRINK: "น้ำกินดื่ม", USE: "น้ำใช้", WASTE: "น้ำเสีย" };
-  const grpOf = sys => sys === "DW" ? "DRINK" : sys === "WW" ? "WASTE" : "USE";
+  const grpOf = sys => sys === "DW" ? "DRINK" : /^WW/.test(sys || "") ? "WASTE" : "USE";
   const TT = { bio: "ตรวจเชื้อ", chem: "สารเคมี" };
   const ttPill = pl => `<span class="pill ${pl.test_type === "bio" ? "bio" : "chem"}">${TT[pl.test_type] || TT.chem}</span>`;
   const FREQ = { D: "ทุกวัน", W: "ทุกสัปดาห์", M: "ทุกเดือน", Q: "ทุก 3 เดือน", S: "ทุก 6 เดือน", Y: "ทุกปี" };
@@ -36,7 +36,12 @@
   const crit = pl => pl.kind === "detect" ? "ต้องไม่พบ" : pl.kind === "pf" ? "ต้องผ่าน" :
     (pl.lo != null && pl.hi != null ? `${num(pl.lo)} ถึง ${num(pl.hi)}` : pl.hi != null ? `ไม่เกิน ${num(pl.hi)}` : pl.lo != null ? `ไม่ต่ำกว่า ${num(pl.lo)}` : "ไม่มีเกณฑ์") +
     (pl.unit ? " " + pl.unit : "") + (pl.warn != null ? ` (เฝ้าระวังตั้งแต่ ${num(pl.warn)})` : "");
-  const valTxt = r => { const pl = plOf(r.plan_id); return r.qual ? QUAL[r.qual] : num(r.value) + (pl.unit ? " " + pl.unit : ""); };
+  const valTxt = r => { const pl = plOf(r.plan_id); return r.qual ? QUAL[r.qual] : (r.val_text || num(r.value)) + (pl.unit ? " " + pl.unit : ""); };
+  // a lab value as written: 12 · 1,250 · <0.1 · >16,000 · ND / ไม่พบ (= 0) → { value, text } ; text is kept only when it is not a plain number
+  const parseVal = raw => { const t = String(raw || "").trim(); if (!t) return null;
+    if (/^(nd|n\.d\.|ไม่พบ|not detected)$/i.test(t)) return { value: 0, text: "ND" };
+    const m = t.replace(/,/g, "").match(/^([<>≤≥]=?)?\s*(-?\d+(?:\.\d+)?)$/); if (!m) return { bad: true };
+    return { value: +m[2], text: m[1] ? m[1] + num(m[2]) : null }; };
   const livePlans = () => plans.filter(p => p.active && ptOf(p.point_id).active && plOk(p));
   const lastOf = id => results.find(r => r.plan_id === id);   // results are newest first
   function dueOf(pl) {
@@ -87,11 +92,12 @@
     points = p.data || []; plans = l.data || []; results = r.data || []; actions = a.data || [];
   }
   document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => show(b.dataset.tab));
-  const TABS = ["sum", "due", "rec", "hist", "act", "reg", "std", "all"];
+  const TABS = ["sum", "c_DRINK", "c_USE", "c_WASTE", "due", "rec", "hist", "act", "reg", "std", "all"];
   function show(t) {
     cur = TABS.includes(t) ? t : "sum";
     document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === cur));
-    TABS.forEach(k => $("#tab-" + k).hidden = k !== cur);
+    TABS.filter(k => !k.startsWith("c_")).forEach(k => $("#tab-" + k).hidden = k !== cur); $("#tab-cat").hidden = !cur.startsWith("c_");
+    if (cur.startsWith("c_")) { try { rCat(cur.slice(2)); } catch (e) { toast(errText(e), true); } return; }
     try { ({ sum: rSum, due: rDue, rec: rRec, hist: rHist, act: rAct, reg: rReg, std: rStd, all: rAll })[cur](); } catch (e) { toast(errText(e), true); }
   }
   $("#h").onchange = guard(async () => { await load(); show(cur); });
@@ -179,7 +185,7 @@
       (S.fails.length ? S.fails.map(r => { const pl = plOf(r.plan_id), pt = ptOf(pl.point_id), a = actions.find(x => x.result_id === r.id);
         return `<tr><td>${dTH(r.sampled_on)}</td><td>${GRP[grpOf(pt.system)]}</td><td>${esc(pt.code)} ${esc(pt.name)}</td><td>${esc(pl.param)} ${ttPill(pl)}</td><td class="fail">${esc(valTxt(r))}</td><td>${esc(crit(pl))}</td><td>${a ? (a.status === "done" ? "ปิดแล้ว" : "ยังไม่ปิด") + (a.job_no ? " · ใบงาน " + esc(a.job_no) : "") : "-"}</td></tr>`; }).join("") : `<tr><td colspan="7">ไม่มีผลนอกเกณฑ์ในช่วงนี้</td></tr>`);
   }
-  const resRow = r => { const pl = plOf(r.plan_id), pt = ptOf(pl.point_id); return [dTH(r.sampled_on), GRP[grpOf(pt.system)], SYS[pt.system] || "", TT[pl.test_type] || "", pt.code || "", pt.name || "", pl.param || "", r.qual ? QUAL[r.qual] : r.value, pl.unit || "", crit(pl), RST[r.status], r.lab || "", r.report_no || "", r.note || ""]; };
+  const resRow = r => { const pl = plOf(r.plan_id), pt = ptOf(pl.point_id); return [dTH(r.sampled_on), GRP[grpOf(pt.system)], SYS[pt.system] || "", TT[pl.test_type] || "", pt.code || "", pt.name || "", pl.param || "", r.qual ? QUAL[r.qual] : (r.val_text || r.value), pl.unit || "", crit(pl), RST[r.status], r.lab || "", r.report_no || "", r.note || ""]; };
   const RES_HEAD = ["วันที่เก็บตัวอย่าง", "กลุ่มน้ำ", "ระบบน้ำ", "ชนิดการตรวจ", "รหัสจุด", "จุดตรวจ", "รายการ", "ผล", "หน่วย", "เกณฑ์", "สรุป", "ผู้ตรวจ / ห้องปฏิบัติการ", "เลขที่รายงาน", "หมายเหตุ"];
   const dueRow = d => [GRP[grpOf(d.pt.system)], SYS[d.pt.system] || "", TT[d.pl.test_type] || "", d.pt.code, d.pt.name, d.pt.location || "", d.pl.param, FREQ[d.pl.freq], crit(d.pl), dTH(d.last), d.lastR ? RST[d.lastR.status] : "-", dTH(d.next), DST[d.st], d.late || ""];
   const DUE_HEAD = ["กลุ่มน้ำ", "ระบบน้ำ", "ชนิดการตรวจ", "รหัสจุด", "จุดตรวจ", "ที่ตั้ง", "รายการ", "ความถี่", "เกณฑ์", "ตรวจล่าสุด", "ผลล่าสุด", "ครบกำหนด", "สถานะ", "เลยกำหนด (วัน)"];
@@ -238,7 +244,7 @@
     const id = +$("#rP").value, list = plans.filter(p => p.point_id === id && p.active && (!ttF() || p.test_type === ttF())).sort((a, b) => (a.test_type === "bio" ? 0 : 1) - (b.test_type === "bio" ? 0 : 1) || a.sort - b.sort);
     $("#rRows").innerHTML = `<tr><th>รายการ</th><th>เกณฑ์</th><th>ความถี่ / ครบกำหนด</th><th>ผลตรวจ</th><th>หมายเหตุ</th></tr>` +
       (list.length ? list.map(pl => { const d = dueOf(pl);
-        const inp = pl.kind === "num" ? `<input class="sm" type="number" step="any" inputmode="decimal" data-v="${pl.id}" aria-label="ค่า ${esc(pl.param)}"> ${esc(pl.unit || "")}`
+        const inp = pl.kind === "num" ? `<input class="sm" type="text" inputmode="decimal" data-v="${pl.id}" placeholder="เช่น 12, <0.1, ND" aria-label="ค่า ${esc(pl.param)}"> ${esc(pl.unit || "")}`
           : `<select data-v="${pl.id}" aria-label="ผล ${esc(pl.param)}"><option value="">ไม่ได้ตรวจ</option>${(pl.kind === "detect" ? ["nd", "detected"] : ["pass", "fail"]).map(k => `<option value="${k}">${QUAL[k]}</option>`).join("")}</select>`;
         return `<tr><td>${ttPill(pl)} ${esc(pl.param)}${pl.method ? `<br><span class="sub">${esc(pl.method)}</span>` : ""}</td><td>${esc(crit(pl))}</td><td class="${d.st}">${FREQ[pl.freq]}<br>${d.next ? "ครบ " + dTH(d.next) : "ยังไม่เคยตรวจ"}</td><td>${inp}</td><td><input data-n="${pl.id}" aria-label="หมายเหตุ"></td></tr>`; }).join("")
         : `<tr><td colspan="5">จุดนี้ยังไม่มีรายการตรวจ ให้หัวหน้าเพิ่มที่แท็บ "ทะเบียนจุดตรวจ"</td></tr>`);
@@ -246,7 +252,8 @@
   $("#rP").onchange = () => recRows();
   $("#fR").onsubmit = guard(async () => {
     const rows = [...document.querySelectorAll("#rRows [data-v]")].filter(i => i.value !== "").map(i => { const pl = plOf(+i.dataset.v), n = document.querySelector(`#rRows [data-n="${pl.id}"]`).value.trim();
-      return { plan_id: pl.id, hospital_id: pl.hospital_id, sampled_on: $("#rD").value, value: pl.kind === "num" ? +i.value : null, qual: pl.kind === "num" ? null : i.value,
+      const pv = pl.kind === "num" ? parseVal(i.value) : null; if (pv && pv.bad) throw new Error(`ค่า "${i.value}" ของ ${pl.param} อ่านไม่ได้ ให้กรอกตัวเลข เช่น 12 หรือ <0.1 หรือ >16000 หรือ ND`);
+      return { plan_id: pl.id, hospital_id: pl.hospital_id, sampled_on: $("#rD").value, value: pv ? pv.value : null, val_text: pv ? pv.text : null, qual: pl.kind === "num" ? null : i.value,
         lab: $("#rLab").value.trim() || null, report_no: $("#rNo").value.trim() || null, note: n || null, recorded_by: me.id }; });
     if (!rows.length) throw new Error("กรอกผลอย่างน้อย 1 รายการ");
     if ($("#rD").value > today()) throw new Error("วันที่เก็บตัวอย่างต้องไม่เป็นวันในอนาคต");
@@ -394,4 +401,202 @@
       ov.map(r => [r.code, r.name, r.points, r.plans, r.overdue, r.never, pct(r.plans - r.overdue - r.never, r.plans) ?? "-", r.results_90, r.fail_90, r.fail_bio_90, r.fail_chem_90, r.open_actions, dTH(r.last_test)]),
       { title: "สถานะแผนจัดการน้ำ 12 โรงพยาบาล", period: `ข้อมูล ณ ${dTH(today())}`, findings: [none.length ? `โรงที่ยังไม่มีแผนการตรวจน้ำในระบบ: ${none.join(", ")}` : "ทุกโรงมีแผนการตรวจน้ำในระบบแล้ว",
         `รวมเลยกำหนด ${ov.reduce((t, r) => t + +r.overdue, 0)} รายการ · นอกเกณฑ์ 90 วัน ${ov.reduce((t, r) => t + +r.fail_90, 0)} ครั้ง · แก้ไขยังไม่ปิด ${ov.reduce((t, r) => t + +r.open_actions, 0)} รายการ`] }); };
+  // ---------- 3 หมวด (น้ำกินดื่ม / น้ำใช้ / น้ำเสีย): a yearly report per group in the layout of the hospital's yearly
+  // wastewater report: executive-summary table (average, min–max, standard, assessment), % removal (wastewater),
+  // analysis, month-by-month table per sampling point, monthly charts against the limits, action plan + Gantt, 4 exports ----------
+  const MON = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+  const CAT_SYS = { DRINK: ["DW"], USE: ["POT", "CT", "RO_HD", "RO_CSSD", "HW", "OTH"], WASTE: ["WW_IN", "WW", "WW_AER"] };
+  const CAT_NO = { DRINK: 1, USE: 2, WASTE: 3 };
+  const CAT_LAW = { DRINK: "ประกาศกระทรวงสาธารณสุข ฉบับที่ 61 (พ.ศ. 2524) เรื่อง น้ำบริโภคในภาชนะบรรจุที่ปิดสนิท และฉบับแก้ไขเพิ่มเติม",
+    USE: "เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย · ISO 23500 (น้ำไตเทียม) · AAMI ST108 (น้ำหน่วยจ่ายกลาง) · HSE ACOP L8 / ASHRAE 188 (Legionella) ตาม JCI FMS.08.04",
+    WASTE: "ประกาศกระทรวงทรัพยากรธรรมชาติและสิ่งแวดล้อม เรื่อง กำหนดมาตรฐานควบคุมการระบายน้ำทิ้งจากอาคารบางประเภทและบางขนาด พ.ศ. 2548 · อาคารประเภท ก (โรงพยาบาลตั้งแต่ 30 เตียง)" };
+  // % removal pairs: influent template → effluent template, target %
+  const REMOVAL = [["BOD", "WI02", "WW03", 85], ["COD", "WI03", "WW10", 70], ["SS (TSS)", "WI04", "WW04", 80], ["TKN", "WI09", "WW05", 60]];
+  const ST_TH = { fail: "นอกเกณฑ์", watch: "เฝ้าระวัง", pass: "ผ่าน", none: "ไม่มีผล", info: "ติดตามค่า" };
+  const avgOf = a => a.length ? a.reduce((t, v) => t + v, 0) / a.length : null;
+  const r2 = v => v == null ? null : Math.abs(v) < 1 ? +(+v).toPrecision(3) : Math.round(v * 100) / 100;
+  const cellTxt = list => { if (!list || !list.length) return ""; const r = list[0];
+    if (r.qual) return list.length > 1 ? `${QUAL[r.qual]} (${list.length} ครั้ง)` : QUAL[r.qual];
+    if (list.length > 1) { const v = avgOf(list.filter(x => x.value != null).map(x => +x.value)); return `เฉลี่ย ${num(r2(v))} (${list.length} ครั้ง)`; }
+    return r.val_text || num(r.value); };
+  const hasLim = pl => pl.kind !== "num" || pl.lo != null || pl.hi != null;
+  function catYears() { const y = +today().slice(0, 4), ys = [...new Set([y, y - 1, ...results.map(r => +r.sampled_on.slice(0, 4))])].sort((a, b) => b - a), v = $("#cY").value;
+    $("#cY").innerHTML = ys.map(x => `<option value="${x}">พ.ศ. ${x + 543}</option>`).join(""); if (ys.includes(+v)) $("#cY").value = v; }
+  function catPoints(g) { const v = $("#cPt").value, L = points.filter(p => p.active && grpOf(p.system) === g).sort((a, b) => CAT_SYS[g].indexOf(a.system) - CAT_SYS[g].indexOf(b.system) || a.code.localeCompare(b.code));
+    $("#cPt").innerHTML = `<option value="">ทุกจุดใน${GRP[g]}</option>` + L.map(p => `<option value="${p.id}">${esc(p.code)} · ${esc(p.name)}</option>`).join(""); if (L.some(p => String(p.id) === v)) $("#cPt").value = v; }
+  function rowAssess(x) { const pl = x.pl;
+    if (!x.n) return { st: "none", txt: "ยังไม่มีผลตรวจในปีนี้" };
+    if (!hasLim(pl)) return { st: "info", txt: "ไม่มีค่ามาตรฐาน ใช้ติดตามแนวโน้มและคำนวณ % การบำบัด" };
+    if (x.fail) return { st: "fail", txt: `นอกเกณฑ์ ${x.fail} ครั้ง จาก ${x.n} ครั้ง ต้องแก้ไขและตรวจซ้ำ` };
+    // near a limit: within 10% of the range when both limits exist, else 80% of the upper limit / 110% of the lower limit
+    const both = pl.lo != null && pl.hi != null, gap = both ? (pl.hi - pl.lo) * 0.1 : 0;
+    const nearHi = pl.hi != null && x.max != null && x.max >= (both ? pl.hi - gap : 0.8 * pl.hi), nearLo = pl.lo != null && x.min != null && x.min <= (both ? +pl.lo + gap : 1.1 * pl.lo);
+    if (pl.kind === "num" && (nearHi || nearLo)) return { st: "watch", txt: `ผ่านเกณฑ์ทุกครั้ง แต่ค่า${nearHi ? "สูงสุดใกล้เกณฑ์สูงสุด" : "ต่ำสุดใกล้เกณฑ์ต่ำสุด"} ควรเฝ้าระวัง` };
+    if (x.warn) return { st: "watch", txt: `ผ่านเกณฑ์ มีระดับเฝ้าระวัง ${x.warn} ครั้ง` };
+    return { st: "pass", txt: `ผ่านเกณฑ์ทุกครั้ง (${x.n} ครั้ง)` }; }
+  function catData(g) {
+    const Y = $("#cY").value, pid = +$("#cPt").value || null, curM = Y === today().slice(0, 4) ? +today().slice(5, 7) : 12;
+    const pts = points.filter(p => p.active && grpOf(p.system) === g && (!pid || p.id === pid)).sort((a, b) => CAT_SYS[g].indexOf(a.system) - CAT_SYS[g].indexOf(b.system) || a.code.localeCompare(b.code));
+    const blocks = pts.map(pt => { const pls = plans.filter(pl => pl.point_id === pt.id && pl.active && (!ttF() || pl.test_type === ttF())).sort((a, b) => a.sort - b.sort);
+      const rows = pls.map(pl => { const rs = results.filter(r => r.plan_id === pl.id && r.sampled_on.startsWith(Y));
+        const cell = MON.map((_, i) => rs.filter(r => +r.sampled_on.slice(5, 7) === i + 1));
+        const vals = rs.filter(r => !r.qual && r.value != null).map(r => +r.value);
+        const x = { pl, pt, rs, cell, n: rs.length, fail: rs.filter(r => r.status === "fail").length, warn: rs.filter(r => r.status === "warn").length,
+          min: vals.length ? Math.min(...vals) : null, max: vals.length ? Math.max(...vals) : null, avg: r2(avgOf(vals)),
+          mAvg: cell.map(l => { const v = l.filter(r => !r.qual && r.value != null).map(r => +r.value); return v.length ? avgOf(v) : null; }),
+          missing: ["D", "W", "M"].includes(pl.freq) ? MON.map((m, i) => i < curM && !cell[i].length ? m : null).filter(Boolean) : [] };
+        // min / max shown as the lab wrote them (e.g. >16,000, <0.1)
+        const nr = rs.filter(r => !r.qual && r.value != null), lo = nr.find(r => +r.value === x.min), hi = nr.find(r => +r.value === x.max);
+        x.minT = lo ? lo.val_text || num(lo.value) : ""; x.maxT = hi ? hi.val_text || num(hi.value) : "";
+        x.as = rowAssess(x); return x; });
+      const dates = MON.map((_, i) => [...new Set(rows.flatMap(x => x.cell[i].map(r => r.sampled_on)))].sort());
+      const reps = MON.map((_, i) => [...new Set(rows.flatMap(x => x.cell[i].map(r => r.report_no).filter(Boolean)))]);
+      return { pt, rows, dates, reps }; });
+    const all = blocks.flatMap(b => b.rows), res = all.flatMap(x => x.rs);
+    // months in which every result passed
+    const mons = MON.map((_, i) => all.flatMap(x => x.cell[i])), tested = mons.filter(l => l.length), clean = tested.filter(l => l.every(r => r.status !== "fail"));
+    const removal = g !== "WASTE" ? [] : REMOVAL.map(([name, tin, tout, target]) => {
+      const pIn = all.filter(x => x.pt.system === "WW_IN" && x.pl.template_code === tin), pOut = all.filter(x => x.pt.system === "WW" && x.pl.template_code === tout);
+      if (!pIn.length || !pOut.length) return null;
+      const m = MON.map((_, i) => { const a = avgOf(pIn.map(x => x.mAvg[i]).filter(v => v != null)), b = avgOf(pOut.map(x => x.mAvg[i]).filter(v => v != null));
+        return a != null && b != null && a > 0 ? Math.round((a - b) * 1000 / a) / 10 : null; });
+      const v = m.filter(x => x != null), av = v.length ? Math.round(avgOf(v) * 10) / 10 : null, low = v.filter(x => x < target).length;
+      return { name, target, m, avg: av, low, n: v.length, st: !v.length ? "none" : low ? "fail" : "pass" }; }).filter(Boolean);
+    const ids = new Set(all.map(x => x.pl.id));
+    const acts = actions.filter(a => { const r = results.find(x => x.id === a.result_id); return r && ids.has(r.plan_id) && (a.status === "open" || r.sampled_on.startsWith(Y)); })
+      .map(a => ({ a, r: results.find(x => x.id === a.result_id) })).sort((p, q) => (p.a.due || "9") < (q.a.due || "9") ? -1 : 1);
+    return { g, Y, YT: +Y + 543, pts, blocks, all, res, tested, clean, removal, acts, curM };
+  }
+  function catTexts(D) {
+    const H = hosp().code || "", G = GRP[D.g], pass = D.res.filter(r => r.status !== "fail").length, bio = D.res.filter(r => plOf(r.plan_id).test_type === "bio"), chem = D.res.filter(r => plOf(r.plan_id).test_type !== "bio");
+    const nm = x => `${x.pl.param} (${x.pt.code})`, fails = D.all.filter(x => x.as.st === "fail"), watch = D.all.filter(x => x.as.st === "watch");
+    const find = [
+      `${H} หมวด ${CAT_NO[D.g]} ${G} ปี พ.ศ. ${D.YT}: จุดตรวจ ${D.pts.length} จุด รายการตรวจ ${D.all.length} รายการ ผลตรวจรวม ${D.res.length} ครั้ง ผ่านเกณฑ์ ${pass} ครั้ง${D.res.length ? ` (${pct(pass, D.res.length)}%)` : ""}`,
+      `ตรวจเชื้อ ${bio.length} ครั้ง นอกเกณฑ์ ${bio.filter(r => r.status === "fail").length} ครั้ง · สารเคมี ${chem.length} ครั้ง นอกเกณฑ์ ${chem.filter(r => r.status === "fail").length} ครั้ง`,
+      `อัตราการผ่านเกณฑ์รายเดือน (Compliance rate): เดือนที่ผลทุกรายการผ่านเกณฑ์ ${D.clean.length} จาก ${D.tested.length} เดือนที่มีผลตรวจ${D.tested.length ? ` (${pct(D.clean.length, D.tested.length)}%)` : ""}`,
+      fails.length ? `รายการนอกเกณฑ์ ${fails.length} รายการ: ${fails.map(x => `${nm(x)} ${x.fail} ครั้ง`).join(" · ")}` : D.res.length ? "ไม่มีผลนอกเกณฑ์ตลอดช่วงที่มีผลตรวจ" : "ยังไม่มีผลตรวจในปีนี้",
+      watch.length ? `รายการเฝ้าระวัง (ผ่านเกณฑ์แต่ใกล้ค่ามาตรฐาน) ${watch.length} รายการ: ${watch.map(x => `${nm(x)} สูงสุด ${num(x.max)}${x.pl.unit ? " " + x.pl.unit : ""} เกณฑ์ ${crit(x.pl)}`).join(" · ")}` : null,
+      ...D.removal.map(r => `ประสิทธิภาพการบำบัด ${r.name}: เฉลี่ย ${r.avg == null ? "-" : r.avg + "%"} (เป้าหมายมากกว่า ${r.target}%)${r.low ? ` ต่ำกว่าเป้าหมาย ${r.low} เดือน` : r.n ? " ผ่านเป้าหมายทุกเดือน" : " ยังไม่มีผลน้ำเข้าและน้ำทิ้งในเดือนเดียวกัน"}`),
+      (() => { const m = D.all.filter(x => x.missing.length); return m.length ? `ขาดผลตรวจตามความถี่ ${m.length} รายการ: ${m.map(x => `${nm(x)} ขาด ${x.missing.length} เดือน (${x.missing.join(" ")})`).join(" · ")}` : D.all.length ? "ตรวจครบทุกเดือนตามความถี่ของรายการรายวัน รายสัปดาห์ และรายเดือน" : null; })(),
+      (() => { const o = D.acts.filter(p => p.a.status === "open"), late = o.filter(p => p.a.due && p.a.due < today()); return `รายการแก้ไข ${D.acts.length} รายการ ยังไม่ปิด ${o.length} รายการ${late.length ? ` เลยกำหนด ${late.length} รายการ` : ""}`; })()
+    ].filter(Boolean);
+    const anal = [];
+    D.blocks.forEach((b, i) => { const f = b.rows.filter(x => x.as.st === "fail"), w = b.rows.filter(x => x.as.st === "watch"), n = b.rows.reduce((t, x) => t + x.n, 0);
+      anal.push(`ส่วนที่ ${i + 1} ${b.pt.code} ${b.pt.name} (${SYS[b.pt.system]}): ผลตรวจ ${n} ครั้ง${f.length ? ` นอกเกณฑ์ ${f.length} รายการ` : n ? " ผ่านเกณฑ์ทุกรายการ" : ""}${w.length ? ` เฝ้าระวัง ${w.length} รายการ` : ""}`);
+      b.rows.filter(x => x.as.st === "fail").forEach(x => anal.push(`${nm(x)} นอกเกณฑ์ ${x.fail} ครั้ง${x.max != null ? ` ค่าสูงสุด ${num(x.max)} ค่าต่ำสุด ${num(x.min)}` : ""} เกณฑ์ ${crit(x.pl)}${x.pl.note ? ` · แนวทางแก้ไข: ${x.pl.note}` : ""}`));
+      b.rows.filter(x => x.pl.kind === "num" && x.mAvg.filter(v => v != null).length >= 4).forEach(x => { const v = x.mAvg.filter(v => v != null), a = avgOf(v.slice(0, 3)), z = avgOf(v.slice(-3));
+        if (a > 0 && z > a * 1.2 && x.pl.hi != null) anal.push(`${nm(x)} มีแนวโน้มสูงขึ้น (เฉลี่ย 3 เดือนแรก ${num(r2(a))} → 3 เดือนล่าสุด ${num(r2(z))}) ควรหาสาเหตุก่อนเกินเกณฑ์`); }); });
+    D.removal.filter(r => r.low).forEach(r => anal.push(`% การบำบัด ${r.name} ต่ำกว่าเป้าหมาย ${r.low} เดือน: ${{ "BOD": "ตรวจออกซิเจนละลาย (DO) ในบ่อเติมอากาศ ค่า MLSS และเวลากักน้ำ", "COD": "ตรวจสารเคมีที่ทิ้งลงระบบ (น้ำยาฆ่าเชื้อ น้ำยาซักฟอก) และการเติมอากาศ", "SS (TSS)": "ตรวจถังตกตะกอน การสูบตะกอนส่วนเกิน และตะกอนลอย", "TKN": "เพิ่มเวลาเติมอากาศให้เกิดไนตริฟิเคชัน (Nitrification) และตรวจ DO" }[r.name] || "ตรวจการเดินระบบบำบัด"}`));
+    if (D.g === "WASTE") { const ml = D.all.find(x => x.pl.template_code === "WA01"); if (ml && ml.n) anal.push(`ตะกอนจุลินทรีย์ MLSS เฉลี่ย ${num(ml.avg)} mg/L ช่วง ${num(ml.min)} ถึง ${num(ml.max)} (ช่วงควบคุม ${crit(ml.pl)})${ml.fail ? ` นอกช่วงควบคุม ${ml.fail} ครั้ง ให้ปรับการสูบตะกอนส่วนเกิน` : " อยู่ในช่วงควบคุม"}`); }
+    if (!D.res.length) anal.push(`ยังไม่มีผลตรวจของ${G}ในปี พ.ศ. ${D.YT} ให้บันทึกผลที่แท็บ "บันทึกผลตรวจ" ตามรายงานของห้องปฏิบัติการ`);
+    watch.forEach(x => anal.push(`ข้อเสนอสำหรับรายการเฝ้าระวัง ${nm(x)}: เพิ่มความถี่การตรวจและทบทวนการเดินระบบก่อนค่าเกินเกณฑ์${x.pl.note ? ` (${x.pl.note})` : ""}`));
+    const notes = [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`, "แต่ละโรงต้องยืนยันเกณฑ์และความถี่ในแท็บ \"ทะเบียนจุดตรวจ\" ให้ตรงกับแผนจัดการน้ำที่คณะกรรมการของโรงพยาบาลอนุมัติ", "หลักฐานสำหรับ JCI 8th FMS.08.04: ผลตรวจตามความถี่ ผลนอกเกณฑ์พร้อมการแก้ไข และผลตรวจซ้ำ"];
+    return { find, anal, notes };
+  }
+  const EXEC_HEAD = ["ส่วน / จุดตรวจ", "รายการ", "ชนิดการตรวจ", "หน่วย", "ค่าเฉลี่ย", "ต่ำสุด – สูงสุด", "ค่ามาตรฐาน", "ตรวจ (ครั้ง)", "นอกเกณฑ์", "การประเมิน", "สถานะ"];
+  const execRow = x => [x.pt.code, x.pl.param, TT[x.pl.test_type] || "", x.pl.unit || "", x.pl.kind === "num" ? (x.avg == null ? "-" : num(x.avg)) : `ไม่พบ ${x.rs.filter(r => r.qual === "nd" || r.qual === "pass").length} / พบ ${x.rs.filter(r => r.qual === "detected" || r.qual === "fail").length}`,
+    x.min == null ? "-" : `${x.minT} – ${x.maxT}`, hasLim(x.pl) ? crit(x.pl) : "ไม่กำหนด", x.n, x.fail, x.as.txt, ST_TH[x.as.st]];
+  const monHead = () => ["รายการ", "หน่วย", "ค่ามาตรฐาน", ...MON, "ต่ำสุด", "สูงสุด", "เฉลี่ย", "สถานะ"];
+  const monRows = b => [["วันที่เก็บตัวอย่าง (วันที่ของเดือน)", "", "", ...b.dates.map(l => l.map(d => +d.slice(8, 10)).join(", ")), "", "", "", ""], ["เลขที่รายงานผล", "", "", ...b.reps.map(l => l.join(", ")), "", "", "", ""],
+    ...b.rows.map(x => [x.pl.param, x.pl.unit || "", hasLim(x.pl) ? crit(x.pl).replace(x.pl.unit ? " " + x.pl.unit : "", "") : "ไม่กำหนด", ...x.cell.map(cellTxt), x.minT, x.maxT, x.avg == null ? "" : num(x.avg), ST_TH[x.as.st]])];
+  const REM_HEAD = ["พารามิเตอร์", "เป้าหมาย", ...MON, "เฉลี่ย", "สถานะ"];
+  const remRow = r => [r.name, `มากกว่า ${r.target}%`, ...r.m.map(v => v == null ? "" : v + "%"), r.avg == null ? "-" : r.avg + "%", ST_TH[r.st] === "นอกเกณฑ์" ? "ต่ำกว่าเป้าหมาย" : ST_TH[r.st]];
+  const PLAN_HEAD = ["ลำดับ", "วันที่พบ", "ประเด็น", "สาเหตุ", "มาตรการ / การแก้ไข", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "ใบแจ้งซ่อม", "สถานะ"];
+  const planRow = (p, i) => [i + 1, dTH(p.r.sampled_on), p.a.problem || "", p.a.cause || "", p.a.action || "", p.a.owner || "", dTH(p.a.due), p.a.job_no || "", p.a.status === "done" ? "ปิดแล้ว" : p.a.due && p.a.due < today() ? "เลยกำหนด" : "กำลังแก้ไข"];
+  // one monthly chart (12 months, averages) with the limit lines; only line / rect / text so it becomes editable shapes in Office files
+  function monChart(x, ox, oy, W, H) {
+    const TL = wrapTxt(`${x.pt.code} · ${x.pl.param}${x.pl.unit ? " (" + x.pl.unit + ")" : ""}`, Math.floor((W - 24) / 8.6));
+    const pl = x.pl, L = ox + 56, R = ox + W - 14, T = oy + 18 + TL.length * 17, B = oy + H - 30, v = x.mAvg, vals = v.filter(a => a != null), lim = [pl.lo, pl.hi, pl.warn].filter(a => a != null).map(Number);
+    let mn = Math.min(0, ...vals, ...lim), mx = Math.max(...vals, ...lim); if (!isFinite(mx) || mx === mn) mx = mn + 1; mx += (mx - mn) * 0.12;
+    const X = i => L + (i + 0.5) * (R - L) / 12, Yv = a => B - (a - mn) * (B - T) / (mx - mn), t = s => esc(String(s));
+    let s = `<rect x="${ox + 2}" y="${oy + 2}" width="${W - 4}" height="${H - 4}" fill="#ffffff" stroke="#d5dde7" stroke-width="1"/>` +
+      TL.map((l, k) => `<text x="${ox + 12}" y="${oy + 20 + k * 17}" font-size="14" font-weight="bold" fill="#17212b">${t(l)}</text>`).join("") +
+      `<line x1="${L}" y1="${B}" x2="${R}" y2="${B}" stroke="#9aa7b4" stroke-width="1"/><line x1="${L}" y1="${T}" x2="${L}" y2="${B}" stroke="#9aa7b4" stroke-width="1"/>` +
+      [mn, (mn + mx) / 2, mx].map(a => `<text x="${L - 6}" y="${Yv(a) + 4}" text-anchor="end" font-size="11" fill="#4b5563">${t(num(mx - mn >= 10 ? Math.round(a) : r2(a)))}</text>`).join("") +
+      MON.map((m, i) => `<text x="${X(i)}" y="${B + 16}" text-anchor="middle" font-size="11" fill="#4b5563">${m}</text>`).join("");
+    [[pl.hi, "#B42318", "เกณฑ์สูงสุด"], [pl.lo, "#B42318", "เกณฑ์ต่ำสุด"], [pl.warn, "#B7791F", "เฝ้าระวัง"]].forEach(([a, c, n]) => { if (a == null) return; const y = Yv(+a);
+      s += `<line x1="${L}" y1="${y}" x2="${R}" y2="${y}" stroke="${c}" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${R - 2}" y="${y - 4}" text-anchor="end" font-size="11" fill="${c}">${t(n + " " + num(a))}</text>`; });
+    let prev = null; v.forEach((a, i) => { if (a == null) { prev = null; return; } const xx = X(i), y = Yv(a), bad = x.cell[i].some(r => r.status === "fail");
+      if (prev) s += `<line x1="${prev[0]}" y1="${prev[1]}" x2="${xx}" y2="${y}" stroke="#0B5CAD" stroke-width="2"/>`;
+      s += `<rect x="${xx - 4}" y="${y - 4}" width="8" height="8" fill="${bad ? "#B42318" : "#0B5CAD"}"/><text x="${xx}" y="${y - 8}" text-anchor="middle" font-size="10" fill="${bad ? "#B42318" : "#17212b"}">${t(num(r2(a)))}</text>`; prev = [xx, y]; });
+    return s;
+  }
+  const chartList = D => D.all.filter(x => x.pl.kind === "num" && x.mAvg.some(a => a != null));
+  const svgWrap = (W, H, body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Tahoma, 'IBM Plex Sans Thai', sans-serif"><rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>${body}</svg>`;
+  // 4 charts per picture for the PPT / Word / PDF / Excel files
+  const chartGrids = D => { const L = chartList(D), out = []; for (let i = 0; i < L.length; i += 4) { const c = L.slice(i, i + 4);
+    out.push(svgWrap(1300, 620, c.map((x, j) => monChart(x, (j % 2) * 650, Math.floor(j / 2) * 310, 650, 310)).join(""))); } return out; };
+  // Gantt of the action plan: from the day the result was found to the due day (red = late)
+  function planGantt(D) {
+    const P = D.acts.filter(p => p.r).map(p => ({ p, s: p.r.sampled_on, e: p.a.due || addD(p.r.sampled_on, 7) })); if (!P.length) return null;
+    const d0 = P.reduce((m, x) => x.s < m ? x.s : m, P[0].s), d1 = P.reduce((m, x) => x.e > m ? x.e : m, P[0].e), span = Math.max(14, daysBetween(d0, d1) + 1);
+    P.forEach((x, i) => { x.lines = wrapTxt(`${i + 1}. ${plOf(x.p.r.plan_id).param} (${ptOf(plOf(x.p.r.plan_id).point_id).code})${x.p.a.owner ? " · " + x.p.a.owner : ""}`, 56); x.h = Math.max(34, 14 + x.lines.length * 18); });
+    const YS = P.map((_, i) => P.slice(0, i).reduce((t, x) => t + x.h, 0));
+    const W = 1300, L = 560, R = 1280, top = 56, H = top + P.reduce((t, x) => t + x.h, 0) + 20, px = d => L + (R - L) * daysBetween(d0, d) / span, t = today();
+    let s = `<text x="16" y="30" font-size="16" font-weight="bold" fill="#17212b">ประเด็น · ผู้รับผิดชอบ</text><text x="${L - 10}" y="30" text-anchor="end" font-size="14" fill="#4b5563">กำหนดเสร็จ</text>`;
+    for (let k = 0; k <= span; k += Math.max(7, Math.ceil(span / 6 / 7) * 7)) { const d = addD(d0, k); s += `<line x1="${px(d)}" y1="${top - 8}" x2="${px(d)}" y2="${H - 10}" stroke="#e3e9f1" stroke-width="1"/><text x="${px(d) + 3}" y="30" font-size="12" fill="#4b5563">${esc(dTH(d))}</text>`; }
+    P.forEach((x, i) => { const y = top + YS[i], RH = x.h, done = x.p.a.status === "done", late = !done && x.e < t, col = done ? "#1F7A3D" : late ? "#B42318" : "#0B5CAD";
+      if (i % 2) s += `<rect x="8" y="${y}" width="${W - 16}" height="${RH}" fill="#f6f8fb"/>`;
+      s += x.lines.map((l, k) => `<text x="16" y="${y + 22 + k * 18}" font-size="13" fill="#17212b">${esc(l)}</text>`).join("") + `<text x="${L - 10}" y="${y + 22}" text-anchor="end" font-size="12" fill="${col}">${esc(dTH(x.e))}</text>` +
+        `<rect x="${px(x.s)}" y="${y + RH / 2 - 9}" width="${Math.max(6, px(addD(x.e, 1)) - px(x.s))}" height="18" rx="4" fill="${col}"/>`; });
+    if (t >= d0 && t <= d1) s += `<line x1="${px(t)}" y1="${top - 8}" x2="${px(t)}" y2="${H - 10}" stroke="#B42318" stroke-width="2"/><text x="${px(t) + 4}" y="${top - 12}" font-size="12" fill="#B42318">วันนี้</text>`;
+    return svgWrap(W, H, s);
+  }
+  // full text, never cut (user rule): wrap at word boundaries (Thai words via Intl.Segmenter)
+  const wrapTxt = (str, max) => { const seg = typeof Intl !== "undefined" && Intl.Segmenter ? [...new Intl.Segmenter("th", { granularity: "word" }).segment(str)].map(x => x.segment) : str.split(/(\s+)/), out = [""];
+    seg.forEach(w => { if ((out[out.length - 1] + w).length > max && out[out.length - 1].trim()) out.push(w.trimStart()); else out[out.length - 1] += w; }); return out.filter(l => l.trim()); };
+  let catCur = "DRINK";
+  function rCat(g) {
+    catCur = g; catYears(); catPoints(g); const D = catData(g), T = catTexts(D), pass = D.res.filter(r => r.status !== "fail").length;
+    $("#cTitle").textContent = `หมวด ${CAT_NO[g]} ${GRP[g]} · สรุปผลการตรวจวัดคุณภาพน้ำ ${hosp().name || ""} ปี พ.ศ. ${D.YT}`;
+    $("#cSub").textContent = `ค่ามาตรฐานอ้างอิง: ${CAT_LAW[g]}`;
+    const cr = pct(D.clean.length, D.tested.length), pr = pct(pass, D.res.length), o = D.acts.filter(p => p.a.status === "open").length;
+    $("#cKpi").innerHTML = [["จุดตรวจ", D.pts.length, ""], ["รายการตรวจ", D.all.length, ""], ["ผลตรวจ (ครั้ง)", D.res.length, ""], ["ผ่านเกณฑ์", pr == null ? "-" : pr + "%", cls(pr)],
+      ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`, cls(cr)], ["แก้ไขยังไม่ปิด", o, o ? "bad" : "good"]].map(([l, v, c]) => `<div class="kpi"><span>${l}</span><b class="${c}">${esc(String(v))}</b></div>`).join("");
+    $("#cFind").innerHTML = T.find.map(x => `<li>${esc(x)}</li>`).join("");
+    $("#cExec").innerHTML = `<tr>${EXEC_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + (D.all.length ? D.all.map(x => { const r = execRow(x); return `<tr>${r.map((c, i) => `<td class="${i === 10 ? { fail: "fail", watch: "warn", pass: "ok", none: "never", info: "" }[x.as.st] : [4, 5, 7, 8].includes(i) ? "n" : ""}">${i === 2 ? ttPill(x.pl) : esc(String(c))}</td>`).join("")}</tr>`; }).join("")
+      : `<tr><td colspan="11">ยังไม่มีจุดตรวจใน${GRP[g]} ให้หัวหน้าเพิ่มที่แท็บ "ทะเบียนจุดตรวจ" (เลือกระบบน้ำในกลุ่ม${GRP[g]})</td></tr>`);
+    $("#cRemBox").hidden = g !== "WASTE";
+    $("#cRem").innerHTML = `<tr>${REM_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + (D.removal.length ? D.removal.map(r => `<tr>${remRow(r).map((c, i) => `<td class="${i >= 2 && i < 14 && r.m[i - 2] != null && r.m[i - 2] < r.target ? "fail" : i === 15 ? { fail: "fail", pass: "ok", none: "never" }[r.st] : i >= 2 ? "n" : ""}">${esc(String(c))}</td>`).join("")}</tr>`).join("")
+      : `<tr><td colspan="16">ต้องมีจุดน้ำเสียเข้าระบบ (Influent) และจุดน้ำทิ้ง (Effluent) ที่มีรายการ BOD / COD / SS / TKN จึงคำนวณ % การบำบัดได้</td></tr>`);
+    $("#cAnal").innerHTML = T.anal.map(x => `<li>${esc(x)}</li>`).join("");
+    $("#cMon").innerHTML = D.blocks.length ? D.blocks.map((b, i) => `<h3>ส่วนที่ ${i + 1} ${esc(b.pt.code)} ${esc(b.pt.name)} · ${esc(SYS[b.pt.system])}${b.pt.location ? " · " + esc(b.pt.location) : ""}</h3>
+      <div class="tw"><table class="tt mon"><tr>${monHead().map(h => `<th>${h}</th>`).join("")}</tr>${monRows(b).map((r, k) => { const x = k > 1 ? b.rows[k - 2] : null;
+        return `<tr>${r.map((c, j) => { const m = j - 3, l = x && m >= 0 && m < 12 ? x.cell[m] : null, st = l && l.length ? (l.some(z => z.status === "fail") ? "fail" : l.some(z => z.status === "warn") ? "warn" : "") : "";
+          return `<td class="${k < 2 ? "sub" : ""} ${st} ${j === 18 && x ? { fail: "fail", watch: "warn", pass: "ok", none: "never", info: "" }[x.as.st] : ""} ${j >= 3 && j < 18 ? "n" : ""}">${j === 0 && x ? ttPill(x.pl) + " " : ""}${esc(String(c))}</td>`; }).join("")}</tr>`; }).join("")}</table></div>`).join("")
+      : `<p class="sub">ยังไม่มีจุดตรวจในหมวดนี้</p>`;
+    const cl = chartList(D);
+    $("#cChart").innerHTML = cl.length ? `<div class="charts">${cl.map(x => `<svg class="trend" viewBox="0 0 640 300" role="img" aria-label="กราฟ ${esc(x.pl.param)}">${monChart(x, 0, 0, 640, 300)}</svg>`).join("")}</div>` : `<p class="sub">ยังไม่มีผลตรวจที่เป็นตัวเลขในปีนี้</p>`;
+    $("#cPlan").innerHTML = `<tr>${PLAN_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + (D.acts.length ? D.acts.map((p, i) => `<tr>${planRow(p, i).map((c, j) => `<td class="${j === 8 ? (p.a.status === "done" ? "ok" : p.a.due && p.a.due < today() ? "fail" : "warn") : ""}">${esc(String(c))}</td>`).join("")}</tr>`).join("")
+      : `<tr><td colspan="9">ไม่มีผลนอกเกณฑ์ที่ต้องแก้ไขในปีนี้</td></tr>`);
+    const gs = planGantt(D); $("#cGantt").innerHTML = gs ? `<p class="sub"><b>แผนการแก้ไข (Gantt)</b> จากวันที่พบถึงวันกำหนดเสร็จ · น้ำเงิน = กำลังแก้ไข · แดง = เลยกำหนด · เขียว = ปิดแล้ว</p><div class="tw">${gs.replace("<svg ", '<svg class="trend" ')}</div>` : "";
+  }
+  ["#cY", "#cPt"].forEach(s => $(s).onchange = () => rCat(catCur));
+  const catName = k => `น้ำ_หมวด${CAT_NO[catCur]}_${GRP[catCur]}_${k}_${hosp().code || ""}_${dTH(today()).replace(/\s/g, "")}`;
+  $("#wcX").onclick = () => { const D = catData(catCur), T = catTexts(D), title = `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`;
+    const mon = [["ตารางสรุปข้อมูลผลตรวจรายเดือน " + GRP[catCur] + " ปี พ.ศ. " + D.YT], []], st = { 0: 2 };
+    D.blocks.forEach((b, i) => { st[mon.length] = 2; mon.push([`ส่วนที่ ${i + 1} ${b.pt.code} ${b.pt.name} · ${SYS[b.pt.system]}`]); st[mon.length] = 1; mon.push(monHead()); monRows(b).forEach(r => mon.push(r)); mon.push([]); });
+    const sheets = [Office.summarySheet({ title, org: hosp().name, period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`, findings: [...T.find, ...T.anal], notes: T.notes,
+        kpis: [["จุดตรวจ", D.pts.length], ["ผลตรวจ (ครั้ง)", D.res.length], ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`]] }),
+      { name: "ตารางบทสรุป KPI", header: 0, rows: [EXEC_HEAD, ...D.all.map(execRow)] },
+      { name: "ตารางสรุปข้อมูล", rows: mon, styles: st },
+      ...(catCur === "WASTE" ? [{ name: "% การบำบัด", header: 0, rows: [REM_HEAD, ...D.removal.map(remRow)] }] : []),
+      { name: "แผนการแก้ไข", header: 0, rows: [PLAN_HEAD, ...D.acts.map(planRow)] },
+      { name: "ผลตรวจทั้งหมด", header: 0, rows: [RES_HEAD, ...D.res.map(resRow)] }];
+    const gs = planGantt(D); if (gs) sheets.push({ name: "Gantt แผนแก้ไข", rows: [["แผนการแก้ไข (Gantt)"]], styles: { 0: 2 }, svg: gs });
+    chartGrids(D).forEach((svg, i) => sheets.push({ name: `กราฟ ${i + 1}`, rows: [[`กราฟแนวโน้มรายเดือนเทียบค่ามาตรฐาน ชุดที่ ${i + 1}`]], styles: { 0: 2 }, svg }));
+    Office.xlsx(catName("รายงาน"), sheets); };
+  $("#wcP").onclick = () => { const D = catData(catCur), T = catTexts(D), gs = planGantt(D);
+    const d = { title: `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`, org: hosp().name, period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`,
+      findings: T.find, analysis: T.anal, notes: T.notes,
+      kpis: [["จุดตรวจ", D.pts.length], ["ผลตรวจ (ครั้ง)", D.res.length], ["ผ่านเกณฑ์", (pct(D.res.filter(r => r.status !== "fail").length, D.res.length) ?? "-") + "%"], ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`]],
+      sections: [
+        { title: "ตารางบทสรุป (ค่าเฉลี่ย ต่ำสุด–สูงสุด เทียบค่ามาตรฐาน)", head: ["จุดตรวจ", "รายการ", "ชนิด", "ค่าเฉลี่ย", "ต่ำสุด – สูงสุด", "ค่ามาตรฐาน", "การประเมิน"], colW: [1.0, 3.5, 0.9, 1.1, 1.5, 1.8, 2.5], rows: D.all.map(x => { const r = execRow(x); return [x.pt.code, x.pl.param + (x.pl.unit ? ` (${x.pl.unit})` : ""), r[2], r[4], r[5], r[6], r[9]]; }) },
+        ...(catCur === "WASTE" ? [{ title: "ประสิทธิภาพการบำบัด (% Removal)", head: ["พารามิเตอร์", "เป้าหมาย", "เฉลี่ย", "เดือนที่ต่ำกว่าเป้าหมาย", "สถานะ"], colW: [3, 2.3, 2, 2.5, 2.5], rows: D.removal.map(r => [r.name, `มากกว่า ${r.target}%`, r.avg == null ? "-" : r.avg + "%", r.low, remRow(r)[15]]) }] : []),
+        ...D.blocks.map((b, i) => ({ title: `ส่วนที่ ${i + 1} ${b.pt.code} ${b.pt.name}: ผลรายเดือน`, head: ["รายการ", "เกณฑ์", ...MON], colW: [3.1, 1.6, ...MON.map(() => 7.6 / 12)], rows: b.rows.map(x => [x.pl.param, hasLim(x.pl) ? crit(x.pl) : "ไม่กำหนด", ...x.cell.map(cellTxt)]) })),
+        ...chartGrids(D).map((svg, i) => ({ title: `กราฟแนวโน้มรายเดือนเทียบค่ามาตรฐาน ชุดที่ ${i + 1}`, svg, note: "เส้นประสีแดง = ค่ามาตรฐาน · จุดสีแดง = เดือนที่นอกเกณฑ์" })),
+        { title: "แผนการแก้ไข (Action plan)", head: ["ลำดับ", "ประเด็น", "มาตรการ / การแก้ไข", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "สถานะ"], colW: [0.7, 4.2, 3.4, 1.6, 1.3, 1.1], rows: D.acts.map((p, i) => { const r = planRow(p, i); return [r[0], r[2], r[4] || "ยังไม่ได้เขียนการแก้ไข", r[5], r[6], r[8]]; }) },
+        ...(gs ? [{ title: "แผนการแก้ไข (Gantt)", svg: gs, note: "น้ำเงิน = กำลังแก้ไข · แดง = เลยกำหนด · เขียว = ปิดแล้ว" }] : [])] };
+    return Office.pptx(catName("บทสรุปผู้บริหาร"), d).catch(e => toast(errText(e), true)); };
+
 })();
