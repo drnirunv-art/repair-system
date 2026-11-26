@@ -469,9 +469,17 @@
     if (list.length > 1) { const v = avgOf(list.filter(x => x.value != null).map(x => +x.value)); return `เฉลี่ย ${num(r2(v))} (${list.length} ครั้ง)`; }
     return r.val_text || num(r.value); };
   const hasLim = pl => pl.kind !== "num" || pl.lo != null || pl.hi != null;
+  // a hospital with buildings far apart (e.g. PTS ศรีราชา 1 / 2) marks each point's building at the start of its location: "[ศรีราชา 1] ..."
+  // the หมวด report, AI summary and exports are then made per building
+  const siteOf = p => ((p && p.location || "").match(/^\[([^\]]+)\]/) || [])[1] || "";
+  const siteCur = () => $("#cSiteW").hidden ? "" : $("#cSite").value;
+  const catOrg = () => `${hosp().name || ""}${siteCur() ? " · อาคาร " + siteCur() : ""}`;
+  function catSites(g) { const v = $("#cSite").value, S = [...new Set(points.filter(p => p.active && grpOf(p.system) === g).map(siteOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, "th", { numeric: true }));
+    $("#cSiteW").hidden = !S.length; $("#cSite").innerHTML = S.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("") + `<option value="">รวมทุกอาคาร</option>`;
+    $("#cSite").value = S.includes(v) || (v === "" && S.length && $("#cSite").dataset.all) ? v : S[0] || ""; }
   function catYears() { const y = +today().slice(0, 4), ys = [...new Set([y, y - 1, ...results.map(r => +r.sampled_on.slice(0, 4))])].sort((a, b) => b - a), v = $("#cY").value;
     $("#cY").innerHTML = ys.map(x => `<option value="${x}">พ.ศ. ${x + 543}</option>`).join(""); if (ys.includes(+v)) $("#cY").value = v; }
-  function catPoints(g) { const v = $("#cPt").value, L = points.filter(p => p.active && grpOf(p.system) === g).sort((a, b) => CAT_SYS[g].indexOf(a.system) - CAT_SYS[g].indexOf(b.system) || a.code.localeCompare(b.code));
+  function catPoints(g) { const v = $("#cPt").value, st = siteCur(), L = points.filter(p => p.active && grpOf(p.system) === g && (!st || siteOf(p) === st)).sort((a, b) => CAT_SYS[g].indexOf(a.system) - CAT_SYS[g].indexOf(b.system) || a.code.localeCompare(b.code));
     $("#cPt").innerHTML = `<option value="">ทุกจุดใน${GRP[g]}</option>` + L.map(p => `<option value="${p.id}">${esc(p.code)} · ${esc(p.name)}</option>`).join(""); if (L.some(p => String(p.id) === v)) $("#cPt").value = v; }
   function rowAssess(x) { const pl = x.pl;
     if (!x.n) return { st: "none", txt: "ยังไม่มีผลตรวจในปีนี้" };
@@ -485,9 +493,9 @@
     return { st: "pass", txt: `ผ่านเกณฑ์ทุกครั้ง (${x.n} ครั้ง)` }; }
   // C = the data to use (default: the hospital open on the page); the 12-hospital view passes each hospital's own data
   function catData(g, C) {
-    C = C || { points, plans, results, actions, Y: $("#cY").value, pid: +$("#cPt").value || null, tt: ttF(), hcode: hosp().code || "" };
+    C = C || { points, plans, results, actions, Y: $("#cY").value, pid: +$("#cPt").value || null, tt: ttF(), hcode: hosp().code || "", site: siteCur() };
     const Y = String(C.Y), pid = C.pid || null, curM = Y === today().slice(0, 4) ? +today().slice(5, 7) : 12;
-    const pts = C.points.filter(p => p.active && grpOf(p.system) === g && (!pid || p.id === pid)).sort((a, b) => CAT_SYS[g].indexOf(a.system) - CAT_SYS[g].indexOf(b.system) || a.code.localeCompare(b.code));
+    const pts = C.points.filter(p => p.active && grpOf(p.system) === g && (!pid || p.id === pid) && (!C.site || siteOf(p) === C.site)).sort((a, b) => CAT_SYS[g].indexOf(a.system) - CAT_SYS[g].indexOf(b.system) || a.code.localeCompare(b.code));
     const blocks = pts.map(pt => { const pls = C.plans.filter(pl => pl.point_id === pt.id && pl.active && (!C.tt || pl.test_type === C.tt)).sort((a, b) => a.sort - b.sort);
       const rows = pls.map(pl => { const rs = C.results.filter(r => r.plan_id === pl.id && r.sampled_on.startsWith(Y));
         const cell = MON.map((_, i) => rs.filter(r => +r.sampled_on.slice(5, 7) === i + 1));
@@ -613,8 +621,8 @@
       ["% BOD Removal เฉลี่ย (เป้ามากกว่า 85%)", bod && bod.avg != null ? bod.avg + "%" : "-"], ["MLSS เฉลี่ย (ช่วงควบคุม 1,500–3,000)", u(by("WA01"))]]; };
   let catCur = "DRINK";
   function rCat(g) {
-    catCur = g; catYears(); catPoints(g); rCatAi(); $("#wcV4").hidden = g !== "WASTE"; const D = catData(g), T = catTexts(D), pass = D.res.filter(r => r.status !== "fail").length;
-    $("#cTitle").textContent = `หมวด ${CAT_NO[g]} ${GRP[g]} · สรุปผลการตรวจวัดคุณภาพน้ำ ${hosp().name || ""} ปี พ.ศ. ${D.YT}`;
+    catCur = g; catYears(); catSites(g); catPoints(g); rCatAi(); $("#wcV4").hidden = g !== "WASTE"; const D = catData(g), T = catTexts(D), pass = D.res.filter(r => r.status !== "fail").length;
+    $("#cTitle").textContent = `หมวด ${CAT_NO[g]} ${GRP[g]} · สรุปผลการตรวจวัดคุณภาพน้ำ ${catOrg()} ปี พ.ศ. ${D.YT}`;
     $("#cSub").textContent = `ค่ามาตรฐานอ้างอิง: ${CAT_LAW[g]}`;
     $("#cRef").innerHTML = `<tr>${REF_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + refRows(g).map(r => `<tr>${r.map((c, i) => `<td>${i === 1 ? `<b>${esc(c)}</b>` : esc(c)}</td>`).join("")}</tr>`).join("");
     const cr = pct(D.clean.length, D.tested.length), pr = pct(pass, D.res.length), o = D.acts.filter(p => p.a.status === "open").length;
@@ -641,12 +649,13 @@
     const gs = planGantt(D); $("#cGantt").innerHTML = gs ? `<p class="sub"><b>แผนการแก้ไข (Gantt)</b> จากวันที่พบถึงวันกำหนดเสร็จ · น้ำเงิน = กำลังแก้ไข · แดง = เลยกำหนด · เขียว = ปิดแล้ว</p><div class="tw">${gs.replace("<svg ", '<svg class="trend" ')}</div>` : "";
   }
   ["#cY", "#cPt"].forEach(s => $(s).onchange = () => rCat(catCur));
+  $("#cSite").onchange = () => { $("#cSite").dataset.all = $("#cSite").value === "" ? "1" : ""; $("#cPt").value = ""; rCat(catCur); };
   const catAi = () => { const a = aiOf(hosp().id, catCur, $("#cY").value); return a && a.report; };
-  const catName = k => `น้ำ_หมวด${CAT_NO[catCur]}_${GRP[catCur]}_${k}_${hosp().code || ""}_${dTH(today()).replace(/\s/g, "")}`;
+  const catName = k => `น้ำ_หมวด${CAT_NO[catCur]}_${GRP[catCur]}_${k}_${hosp().code || ""}${siteCur() ? "_" + siteCur().replace(/\s/g, "") : ""}_${dTH(today()).replace(/\s/g, "")}`;
   $("#wcX").onclick = () => { const D = catData(catCur), T = catTexts(D), title = `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`;
     const mon = [["ตารางสรุปข้อมูลผลตรวจรายเดือน " + GRP[catCur] + " ปี พ.ศ. " + D.YT], []], st = { 0: 2 };
     D.blocks.forEach((b, i) => { st[mon.length] = 2; mon.push([`ส่วนที่ ${i + 1} ${b.pt.code} ${b.pt.name} · ${SYS[b.pt.system]}`]); st[mon.length] = 1; mon.push(monHead()); monRows(b).forEach(r => mon.push(r)); mon.push([]); });
-    const sheets = [Office.summarySheet({ title, org: hosp().name, period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`, findings: [...T.find, ...T.anal], notes: T.notes,
+    const sheets = [Office.summarySheet({ title, org: catOrg(), period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`, findings: [...T.find, ...T.anal], notes: T.notes,
         kpis: [["จุดตรวจ", D.pts.length], ["ผลตรวจ (ครั้ง)", D.res.length], ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`], ...wwKpi(D)] }),
       { name: "ตารางบทสรุป KPI", header: 0, rows: [EXEC_HEAD, ...D.all.map(execRow)] },
       { name: "อ้างอิง JCI ME กฎหมาย", header: 0, rows: [REF_HEAD, ...refRows(catCur)] },
@@ -659,7 +668,7 @@
     chartGrids(D).forEach((svg, i) => sheets.push({ name: `กราฟ ${i + 1}`, rows: [[`กราฟแนวโน้มรายเดือนเทียบค่ามาตรฐาน ชุดที่ ${i + 1}`]], styles: { 0: 2 }, svg }));
     Office.xlsx(catName("รายงาน"), sheets); };
   $("#wcP").onclick = () => { const D = catData(catCur), T = catTexts(D), gs = planGantt(D);
-    const d = { title: `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`, org: hosp().name, period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`,
+    const d = { title: `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`, org: catOrg(), period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`,
       findings: T.find, analysis: T.anal, notes: T.notes,
       kpis: [["จุดตรวจ", D.pts.length], ["ผลตรวจ (ครั้ง)", D.res.length], ["ผ่านเกณฑ์", (pct(D.res.filter(r => r.status !== "fail").length, D.res.length) ?? "-") + "%"], ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`], ...wwKpi(D)],
       sections: [...v4Sections(D), ...aiSections(catAi()), refSec(catCur),
@@ -755,7 +764,7 @@
     return { compliance: F.tm ? `${F.comp === 100 ? "ผ่านเกณฑ์มาตรฐาน (Pass)" : "ไม่ผ่านเกณฑ์บางเดือน"} — น้ำทิ้งผ่านเกณฑ์ ${F.ok} จาก ${F.tm} เดือน` : "ยังไม่มีผลตรวจน้ำทิ้ง",
       bod: k(by("WW", "WW03"), F.ranges.bod), bod_removal: rem && rem.n ? `เฉลี่ย ${rem.avg}% ต่ำกว่าเป้าหมาย ${rem.low} เดือน จาก ${rem.n} เดือน` : "ยังคำนวณไม่ได้",
       tss: k(by("WW", "WW04"), F.ranges.tss), tkn: k(by("WW", "WW05"), F.ranges.tkn), fecal: k(by("WW", "WW09"), F.ranges.fecal), mlss: k(by("WW_AER", "WA01"), F.ranges.mlss) }; };
-  const v4Report = Y => aiReps.find(r => r.hospital_id === hosp().id && r.grp === "WASTE" && +r.year === +Y && !r.month && r.report && r.report.ww4);
+  const v4Report = Y => aiReps.find(r => r.hospital_id === hosp().id && r.grp === "WASTE" && +r.year === +Y && !r.month && r.report && r.report.ww4 && aiSite(r, hosp().id));
   // the v4 texts and figures, shared by the screen (section 1), the PPT / Word / PDF / Excel of หมวด 3 and the v4 workbook
   function v4Parts(D, R) {
     const F = v4Fig(D), W = (R && R.ww4) || {}, K = { ...v4Kpi(D, F), ...(W.kpi || {}) }, rem = D.removal.find(r => r.name === "BOD");
@@ -803,7 +812,7 @@
       ...(P.plan.length ? [{ name: "Gantt แผนไตรมาสถัดไป", rows: [[P.title]], styles: { 0: 2 }, svg: P.gantt }] : [])]; };
   async function v4Build(D, R) {
     const res = await fetch("assets/water-ww-v4.xlsx", { cache: "no-cache" }); if (!res.ok) throw new Error("เปิดแม่แบบรายงาน v4 ไม่ได้ (รหัส " + res.status + ")");
-    const files = await unzipAll(await res.arrayBuffer()), dec = new TextDecoder(), F = v4Fig(D), W = (R && R.ww4) || {}, K = { ...v4Kpi(D, F), ...(W.kpi || {}) }, H = hosp().name || hosp().code || "";
+    const files = await unzipAll(await res.arrayBuffer()), dec = new TextDecoder(), F = v4Fig(D), W = (R && R.ww4) || {}, K = { ...v4Kpi(D, F), ...(W.kpi || {}) }, H = catOrg() || hosp().code || "";
     const PK = v4Parts(D, R).kpi, KW = Object.fromEntries(["compliance", "bod", "bod_removal", "tss", "tkn", "fecal", "mlss"].map((k, i) => [k, PK[i][5]]));
     const T = catTexts(D), col = i => String.fromCharCode(68 + i); // D..O = ม.ค...ธ.ค.
     // แผ่น 2 ตารางสรุปข้อมูล
@@ -855,14 +864,14 @@
   // the wait message and the result sit beside the button itself (the AI box is far up the page)
   $("#wcV4").onclick = guard(async () => {
     const btns = [$("#wcV4"), $("#cV4Btn")], msg = $("#wcV4Msg"), say = t => { [msg, $("#cV4Msg")].forEach(m => { m.textContent = t; }); }, labels = btns.map(b => b.textContent);
-    const D = catData("WASTE", { points, plans, results, actions, Y: $("#cY").value, pid: null, tt: "", hcode: hosp().code || "" });
+    const D = catData("WASTE", { points, plans, results, actions, Y: $("#cY").value, pid: null, tt: "", hcode: hosp().code || "", site: siteCur() });
     if (!D.res.length) throw new Error("ยังไม่มีผลตรวจน้ำเสียในปีที่เลือก");
     btns.forEach(b => { b.disabled = true; b.textContent = "⏳ กำลังสร้างไฟล์ v4..."; });
     try {
       let rep = v4Report(D.Y); const newest = D.res.reduce((m, r) => r.created_at > m ? r.created_at : m, "");
       if ((!rep || rep.created_at < newest) && canRec) {
         say("AI กำลังเขียนข้อความในรายงาน ใช้เวลาประมาณ 1 นาที กรุณารอ ไฟล์จะดาวน์โหลดเองเมื่อเสร็จ");
-        try { const F = v4Fig(D), body = { step: "summary", layout: "ww4", hospital_id: hosp().id, grp: "WASTE", year: +D.Y,
+        try { const F = v4Fig(D), body = { step: "summary", layout: "ww4", hospital_id: hosp().id, site: siteCur() || null, grp: "WASTE", year: +D.Y,
             input: { ...aiInputOf(D), ww4_figures: { period: F.period, compliance_pct: F.comp, months_pass: F.ok, months_tested: F.tm, ranges: F.ranges, next_quarter: F.next_quarter, labs: F.labs } } };
           let r = await aiCall(body, msg);
           // the AI sometimes leaves out the v4 texts: ask once more before falling back to the computed texts
@@ -1042,14 +1051,15 @@
 
   // ---------- AI สรุปผู้บริหาร + วิเคราะห์ ----------
   // the figures the AI gets: computed here from the saved results (no personal data)
-  const aiInputOf = D => ({ hospital: D.hcode, group: GRP[D.g], year_be: D.YT, references: refAi(D.g), sampling_points: D.pts.map(p => `${p.code} ${p.name} (${SYS[p.system]})`),
+  const aiInputOf = D => ({ hospital: D.hcode, ...(siteOf(D.pts.find(siteOf)) ? { building: siteCur() || "รวมทุกอาคาร: " + [...new Set(D.pts.map(siteOf).filter(Boolean))].join(" / ") } : {}), group: GRP[D.g], year_be: D.YT, references: refAi(D.g), sampling_points: D.pts.map(p => `${p.code} ${p.name} (${SYS[p.system]})${p.location ? " · " + p.location : ""}`),
     results: D.res.length, passed: D.res.filter(r => r.status !== "fail").length, months_all_pass: D.clean.length, months_with_results: D.tested.length,
     items: D.all.map(x => ({ point: x.pt.code, item: x.pl.param, type: TT[x.pl.test_type], unit: x.pl.unit || "", standard: hasLim(x.pl) ? crit(x.pl) : "ไม่กำหนด", reference: refTag(x.pl, x.pt), tests: x.n, out_of_range: x.fail,
       avg: x.avg, min: x.minT, max: x.maxT, monthly: Object.fromEntries(x.cell.map((l, i) => [MON[i], cellTxt(l)]).filter(([, v]) => v)), assessment: x.as.txt, missing_months: x.missing })),
     removal: D.removal.map(r => ({ parameter: r.name, target: `>${r.target}%`, avg: r.avg, months_below_target: r.low, monthly: r.m })),
     corrective_actions: D.acts.map(p => ({ problem: p.a.problem, action: p.a.action || "", owner: p.a.owner || "", due: p.a.due, status: p.a.status })) });
-  const aiOf = (h, g, y) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && !r.month);
-  const aiOfM = (h, g, y, m) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && +r.month === +m);
+  const aiSite = (r, h) => !h || ((r.report && r.report.site) || "") === siteCur();
+  const aiOf = (h, g, y) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && !r.month && aiSite(r, h));
+  const aiOfM = (h, g, y, m) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && +r.month === +m && aiSite(r, h));
   function aiHtml(rep, when, model) {
     if (!rep) return ""; const R = rep, G = aiGantt(R);
     return `<h3>บทสรุปผู้บริหารโดย AI</h3><ol>${(R.summary || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><h3>บทวิเคราะห์โดย AI</h3><ol>${(R.analysis || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol>
@@ -1074,7 +1084,7 @@
     $("#cAiBtn").hidden = !canRec; }
   $("#cAiBtn").onclick = guard(async () => { const D = catData(catCur); if (!D.res.length) throw new Error("ยังไม่มีผลตรวจของหมวดนี้ในปีที่เลือก");
     $("#cAiMsg").textContent = "AI กำลังอ่านผลทั้งปีและเขียนบทสรุป (ประมาณ 20-60 วินาที)";
-    try { const r = await aiCall({ step: "summary", hospital_id: hosp().id, grp: catCur, year: +D.Y, input: aiInputOf(D) }, $("#cAiMsg"));
+    try { const r = await aiCall({ step: "summary", hospital_id: hosp().id, site: siteCur() || null, grp: catCur, year: +D.Y, input: aiInputOf(D) }, $("#cAiMsg"));
       aiReps.unshift({ hospital_id: hosp().id, grp: catCur, year: +D.Y, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() }); $("#cAiMsg").textContent = "เสร็จแล้ว"; rCatAi(); if (catCur === "WASTE") rV4(catData("WASTE")); }
     catch (e) { $("#cAiMsg").textContent = ""; throw e; } });
 
@@ -1149,7 +1159,7 @@
     $("#cMoAi").hidden = !canRec;
   }
   $("#cMo").onchange = () => rCat(catCur);
-  const monthInput = (D, M) => ({ hospital: D.hcode, group: GRP[D.g], month: `${MON[M.m]} ${D.YT}`, standard: CAT_LAW[D.g], references: refAi(D.g),
+  const monthInput = (D, M) => ({ hospital: D.hcode, ...(siteOf(D.pts.find(siteOf)) ? { building: siteCur() || "รวมทุกอาคาร: " + [...new Set(D.pts.map(siteOf).filter(Boolean))].join(" / ") } : {}), group: GRP[D.g], month: `${MON[M.m]} ${D.YT}`, standard: CAT_LAW[D.g], references: refAi(D.g),
     items: M.rows.map(r => ({ point: `${r.x.pt.code} ${r.x.pt.name}`, item: r.x.pl.param, type: TT[r.x.pl.test_type], value: r.v, unit: r.x.pl.unit || "", standard: hasLim(r.x.pl) ? crit(r.x.pl) : "ไม่กำหนด", reference: refTag(r.x.pl, r.x.pt), result: moRow(r)[6], previous_month: r.prev ? `${r.prev.t} (${MON[r.prev.m]})` : null, year_avg: r.x.avg, year_max: r.x.maxT, times_out_this_year: r.x.fail })),
     removal_this_month: M.rem.filter(r => r.mv != null).map(r => ({ parameter: r.name, value: r.mv, target: r.target, year_avg: r.avg })),
     corrective_actions: M.acts.map(p => ({ problem: p.a.problem, action: p.a.action || "", owner: p.a.owner || "", due: p.a.due, status: p.a.status })),
@@ -1157,18 +1167,18 @@
   async function monthAi(g, Y, m, el) { // m = 1..12
     const D = catData(g, { points, plans, results, actions, Y, pid: null, tt: "", hcode: hosp().code || "" }), M = monthData(D, m - 1);
     if (!M.rows.length) throw new Error(`ยังไม่มีผลของเดือน ${MON[m - 1]} ${+Y + 543}`);
-    const r = await aiCall({ step: "summary", hospital_id: hosp().id, grp: g, year: +Y, month: m, input: monthInput(D, M) }, el);
+    const r = await aiCall({ step: "summary", hospital_id: hosp().id, site: siteCur() || null, grp: g, year: +Y, month: m, input: monthInput(D, M) }, el);
     aiReps.unshift({ hospital_id: hosp().id, grp: g, year: +Y, month: m, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() });
   }
   $("#cMoAi").onclick = guard(async () => { $("#cMoMsg").textContent = "AI กำลังเขียนสรุปประจำเดือน (ประมาณ 20-60 วินาที)";
     try { await monthAi(catCur, $("#cY").value, +$("#cMo").value + 1, $("#cMoMsg")); $("#cMoMsg").textContent = "เสร็จแล้ว"; rCat(catCur); } catch (e) { $("#cMoMsg").textContent = ""; throw e; } });
   const moTitle = D => `สรุปผลตรวจคุณภาพน้ำประจำเดือน ${MON[moD.m]} ${D.YT} · หมวด ${CAT_NO[D.g]} ${GRP[D.g]}`;
   $("#wmX").onclick = () => { const D = catData(catCur), M = moD = monthData(D, +$("#cMo").value), a = aiOfM(hosp().id, D.g, D.Y, M.m + 1), R = a && a.report;
-    Office.xlsx(catName(`สรุปเดือน${MON[M.m]}`), [Office.summarySheet({ title: moTitle(D), org: hosp().name, period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`, findings: [...(R ? R.summary : []), ...M.find, ...(R ? R.analysis : [])], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`] }),
+    Office.xlsx(catName(`สรุปเดือน${MON[M.m]}`), [Office.summarySheet({ title: moTitle(D), org: catOrg(), period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`, findings: [...(R ? R.summary : []), ...M.find, ...(R ? R.analysis : [])], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`] }),
       { name: "ผลเดือนนี้", header: 0, rows: [MO_HEAD, ...M.rows.map(moRow)] }, { name: "อ้างอิง JCI ME กฎหมาย", header: 0, rows: [REF_HEAD, ...refRows(D.g)] }, ...(D.g === "WASTE" ? [{ name: "% การบำบัด", header: 0, rows: [["พารามิเตอร์", "เป้าหมาย", "เดือนนี้", "เฉลี่ยทั้งปี"], ...M.rem.map(r => [r.name, `มากกว่า ${r.target}%`, r.mv == null ? "-" : r.mv + "%", r.avg == null ? "-" : r.avg + "%"])] }] : []),
       ...aiSheets(R, "")]); };
   $("#wmP").onclick = () => { const D = catData(catCur), M = moD = monthData(D, +$("#cMo").value), a = aiOfM(hosp().id, D.g, D.Y, M.m + 1), R = a && a.report;
-    return Office.pptx(catName(`สรุปเดือน${MON[M.m]}`), { title: moTitle(D), org: hosp().name, period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`,
+    return Office.pptx(catName(`สรุปเดือน${MON[M.m]}`), { title: moTitle(D), org: catOrg(), period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`,
       findings: R ? R.summary : M.find, analysis: R ? [...R.analysis, ...(R.risks || []).map(x => "ความเสี่ยง: " + x)] : [], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`],
       sections: [{ title: `ผลตรวจเดือน ${MON[M.m]} ${D.YT} เทียบค่ามาตรฐาน`, head: ["จุดตรวจ", "รายการ", "ผลเดือนนี้", "ค่ามาตรฐาน", "สรุป", "เดือนก่อน"], colW: [1.1, 4.2, 1.6, 2.3, 1.2, 1.9], rows: M.rows.map(r => { const x = moRow(r); return [x[0], x[1] + (x[4] ? ` (${x[4]})` : ""), x[3], x[5], x[6], x[7]]; }) },
         ...(D.g === "WASTE" && M.rem.some(r => r.mv != null) ? [{ title: "% การบำบัดเดือนนี้", head: ["พารามิเตอร์", "เป้าหมาย", "เดือนนี้", "เฉลี่ยทั้งปี"], colW: [3.3, 3, 3, 3], rows: M.rem.map(r => [r.name, `มากกว่า ${r.target}%`, r.mv == null ? "-" : r.mv + "%", r.avg == null ? "-" : r.avg + "%"]) }] : []),
