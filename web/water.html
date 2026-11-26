@@ -94,8 +94,17 @@
       <div class="hsel"><label for="cY">ปี</label><select id="cY"></select><label for="cPt">จุดตรวจ</label><select id="cPt"></select></div>
       <h2 id="cTitle"></h2>
       <p class="sub" id="cSub"></p>
+      <details class="aibox" id="cRefBox" open><summary><b>อ้างอิง JCI 8th FMS ME และกฎหมายควบคุมของหมวดนี้</b></summary>
+        <p class="sub">ทุกผลนอกเกณฑ์ในรายงานนี้ระบุ ME และกฎหมายที่เกี่ยวข้อง ผู้ตรวจ JCI ถามหลักฐานตาม ME เหล่านี้ ฝ่ายสิ่งแวดล้อมของแต่ละโรงควรยืนยันว่ากฎหมายเป็นฉบับล่าสุด</p>
+        <div class="tw"><table class="tt" id="cRef"></table></div></details>
       <div class="kpis" id="cKpi"></div>
       <div class="aibox"><div class="acts"><button class="btn" type="button" id="cAiBtn">🤖 AI สรุปผู้บริหาร + วิเคราะห์ (หมวดนี้ ของโรงนี้)</button><span class="sub" id="cAiMsg" role="status"></span></div><div id="cAi"></div></div>
+      <div class="aibox"><h2>สรุปผู้บริหารประจำเดือน</h2>
+        <div class="hsel"><label for="cMo">เดือน</label><select id="cMo"></select><button class="btn" type="button" id="cMoAi">🤖 AI สรุปผู้บริหาร + วิเคราะห์ เดือนนี้</button><span class="sub" id="cMoMsg" role="status"></span></div>
+        <ol id="cMoFind"></ol>
+        <div class="tw"><table class="tt" id="cMoT"></table></div>
+        <div id="cMoOut"></div>
+        <div class="acts"><button class="btn primary" type="button" id="wmX">Excel (สรุปเดือนนี้)</button><button class="btn" type="button" id="wmP">PPT (บทสรุป + วิเคราะห์ เดือนนี้)</button></div></div>
       <h2>1. บทสรุปผู้บริหาร</h2>
       <ol id="cFind"></ol>
       <div class="tw"><table class="tt" id="cExec"></table></div>

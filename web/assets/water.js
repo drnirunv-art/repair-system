@@ -414,7 +414,42 @@
   const CAT_NO = { DRINK: 1, USE: 2, WASTE: 3 };
   const CAT_LAW = { DRINK: "ประกาศกระทรวงสาธารณสุข ฉบับที่ 61 (พ.ศ. 2524) เรื่อง น้ำบริโภคในภาชนะบรรจุที่ปิดสนิท และฉบับแก้ไขเพิ่มเติม",
     USE: "เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย · ISO 23500 (น้ำไตเทียม) · AAMI ST108 (น้ำหน่วยจ่ายกลาง) · HSE ACOP L8 / ASHRAE 188 (Legionella) ตาม JCI FMS.08.04",
-    WASTE: "ประกาศกระทรวงทรัพยากรธรรมชาติและสิ่งแวดล้อม เรื่อง กำหนดมาตรฐานควบคุมการระบายน้ำทิ้งจากอาคารบางประเภทและบางขนาด พ.ศ. 2548 · อาคารประเภท ก (โรงพยาบาลตั้งแต่ 30 เตียง)" };
+    WASTE: "ประกาศกระทรวงทรัพยากรธรรมชาติและสิ่งแวดล้อม เรื่อง กำหนดมาตรฐานควบคุมการระบายน้ำทิ้งจากอาคารบางประเภทและบางขนาด พ.ศ. 2567" };
+  // ---------- อ้างอิง JCI 8th FMS ME + กฎหมายควบคุม ----------
+  // ME wording = the FMS ME list used in fms.html (0037); FMS.08.04 = the hospital's Water Management Program in the JCI tracker
+  const ME = { "FMS.08.00 ME 2": "กำหนดเป้าหมาย ติดตามข้อมูล และปรับปรุงเพื่อลดความเสี่ยงระบบสาธารณูปโภค",
+    "FMS.08.00 ME 4": "กำหนดกิจกรรมและรอบการตรวจ บำรุงรักษาระบบสาธารณูปโภคทุกส่วน",
+    "FMS.08.01 ME 2": "ทดสอบแหล่งน้ำสำรองอย่างน้อยปีละครั้ง และบันทึกผล",
+    "FMS.08.02 ME 1": "ตรวจคุณภาพน้ำดื่มอย่างน้อยทุกไตรมาส และบันทึกผล",
+    "FMS.08.02 ME 2": "ตรวจคุณภาพน้ำที่ไม่ใช่น้ำดื่มอย่างน้อยทุก 6 เดือน และบันทึกผล",
+    "FMS.08.02 ME 3": "มีมาตรการป้องกันการปนเปื้อนและการเติบโตของเชื้อในระบบน้ำ (เช่น Legionella)",
+    "FMS.08.03 ME 1": "บริการไตเทียมปฏิบัติตามมาตรฐานคุณภาพน้ำและการป้องกันการติดเชื้อ",
+    "FMS.08.03 ME 2": "ตรวจน้ำไตเทียม: เชื้อและ Endotoxin รายเดือน สารเคมีรายปี บันทึกผล",
+    "FMS.08.03 ME 3": "ฆ่าเชื้อระบบจ่ายน้ำไตเทียมตามรอบ",
+    "FMS.08.04": "แผนจัดการน้ำ (Water Management Program): ประเมินความเสี่ยง มาตรการควบคุม ตรวจติดตามตามความถี่ ผลนอกเกณฑ์ต้องแก้ไขและตรวจซ้ำ" };
+  const LAW = {
+    DW: ["ประกาศกระทรวงสาธารณสุข ฉบับที่ 61 (พ.ศ. 2524) เรื่อง น้ำบริโภคในภาชนะบรรจุที่ปิดสนิท และฉบับแก้ไขเพิ่มเติม (ออกตาม พ.ร.บ. อาหาร พ.ศ. 2522)", "คุณภาพทางกายภาพ เคมี และจุลินทรีย์ของน้ำดื่ม เช่น ไม่พบ Coliform, E. coli, Salmonella, Staphylococcus aureus"],
+    POT: ["เกณฑ์คุณภาพน้ำประปาดื่มได้ กรมอนามัย กระทรวงสาธารณสุข", "น้ำประปาที่จ่ายในอาคาร: ความขุ่น pH คลอรีนอิสระคงเหลือ และจุลินทรีย์"],
+    CT: ["HSE ACOP L8 (Legionnaires' disease: The control of legionella bacteria in water systems) และ ASHRAE Standard 188", "หอผึ่งเย็น: ควบคุม Legionella, จุลินทรีย์รวม (TBC) และการเติมสารเคมี มีแผนประเมินความเสี่ยง"],
+    HW: ["HSE ACOP L8 และ ASHRAE Standard 188", "ระบบน้ำร้อน: อุณหภูมิจ่ายและไหลกลับ และการตรวจ Legionella"],
+    RO_HD: ["ISO 23500 (คุณภาพน้ำและน้ำยาสำหรับการฟอกเลือดด้วยเครื่องไตเทียม)", "น้ำ RO ไตเทียม: แบคทีเรีย Endotoxin รายเดือน และสารเคมีปีละครั้ง"],
+    RO_CSSD: ["AAMI ST108 (คุณภาพน้ำสำหรับการล้างและฆ่าเชื้อเครื่องมือแพทย์)", "น้ำหน่วยจ่ายกลาง (CSSD): ค่าการนำไฟฟ้า แบคทีเรีย และ Endotoxin"],
+    OTH: ["เกณฑ์ที่คณะกรรมการแผนจัดการน้ำของโรงพยาบาลกำหนด", "ระบบน้ำอื่นตามการประเมินความเสี่ยง"],
+    WW: ["ประกาศกระทรวงทรัพยากรธรรมชาติและสิ่งแวดล้อม เรื่อง กำหนดมาตรฐานควบคุมการระบายน้ำทิ้งจากอาคารบางประเภทและบางขนาด พ.ศ. 2567", "น้ำทิ้งหลังบำบัดก่อนระบายออกนอกโรงพยาบาลต้องไม่เกินค่ามาตรฐาน"],
+    WW_LAW: ["พระราชบัญญัติส่งเสริมและรักษาคุณภาพสิ่งแวดล้อมแห่งชาติ พ.ศ. 2535 (หมวดการควบคุมมลพิษทางน้ำ)", "เจ้าของแหล่งกำเนิดมลพิษต้องบำบัดน้ำเสียให้ได้มาตรฐานก่อนระบาย ต้องเก็บสถิติและข้อมูลการทำงานของระบบบำบัดรายวัน และรายงานสรุปต่อเจ้าพนักงานท้องถิ่นตามแบบที่กำหนด (แบบ ทส. 1 และ ทส. 2)"],
+    WW_IN: ["ไม่มีค่ามาตรฐานตามกฎหมาย (ใช้คำนวณ % การบำบัด)", "น้ำเสียเข้าระบบบำบัด"],
+    WW_AER: ["เกณฑ์ควบคุมการเดินระบบบำบัด (ไม่ใช่ค่ามาตรฐานตามกฎหมาย)", "บ่อเติมอากาศ: MLSS, DO, SV30"] };
+  const SYS_ME = { DW: ["FMS.08.02 ME 1", "FMS.08.02 ME 3"], POT: ["FMS.08.02 ME 1", "FMS.08.02 ME 3", "FMS.08.01 ME 2"], CT: ["FMS.08.02 ME 2", "FMS.08.02 ME 3"], HW: ["FMS.08.02 ME 2", "FMS.08.02 ME 3"],
+    RO_HD: ["FMS.08.03 ME 1", "FMS.08.03 ME 2", "FMS.08.03 ME 3"], RO_CSSD: ["FMS.08.02 ME 2", "FMS.08.02 ME 3"], OTH: ["FMS.08.02 ME 2"], WW: ["FMS.08.00 ME 2"], WW_IN: ["FMS.08.00 ME 2"], WW_AER: ["FMS.08.00 ME 2", "FMS.08.00 ME 4"] };
+  const lawOf = s => LAW[s] || LAW.OTH;
+  // short citation for one finding: ME codes + the law of the item (plan.ref if the hospital wrote one)
+  const refTag = (pl, pt) => { const s = (pt && pt.system) || "OTH", m = (SYS_ME[s] || []).join(", "); return `อ้างอิง JCI ${m}${m ? ", " : ""}FMS.08.04 · ${pl && pl.ref ? pl.ref : lawOf(s)[0]}`; };
+  // full reference table of a group: [ประเภท, รหัส / ชื่อ, ข้อกำหนด, ใช้กับ]
+  const refRows = g => { const sys = CAT_SYS[g], mes = [...new Set(["FMS.08.04", "FMS.08.00 ME 4", ...sys.flatMap(s => SYS_ME[s] || [])])];
+    return [...mes.map(c => ["JCI 8th ME", c, ME[c], sys.filter(s => (SYS_ME[s] || []).includes(c)).map(s => SYS[s]).join(", ") || "ทุกระบบน้ำ"]),
+      ...sys.map(s => ["กฎหมาย / มาตรฐาน", lawOf(s)[0], lawOf(s)[1], SYS[s]]), ...(g === "WASTE" ? [["กฎหมาย", LAW.WW_LAW[0], LAW.WW_LAW[1], "ระบบบำบัดน้ำเสียทั้งระบบ"]] : [])]; };
+  const REF_HEAD = ["ประเภท", "รหัส / ชื่อกฎหมาย", "ข้อกำหนดที่ต้องทำ", "ใช้กับ"];
+  const refAi = g => refRows(g).map(r => `${r[1]}: ${r[2]} (ใช้กับ ${r[3]})`);
   // % removal pairs: influent template → effluent template, target %
   const REMOVAL = [["BOD", "WI02", "WW03", 85], ["COD", "WI03", "WW10", 70], ["SS (TSS)", "WI04", "WW04", 80], ["TKN", "WI09", "WW05", 60]];
   const ST_TH = { fail: "นอกเกณฑ์", watch: "เฝ้าระวัง", pass: "ผ่าน", none: "ไม่มีผล", info: "ติดตามค่า" };
@@ -458,7 +493,8 @@
         x.as = rowAssess(x); return x; });
       const dates = MON.map((_, i) => [...new Set(rows.flatMap(x => x.cell[i].map(r => r.sampled_on)))].sort());
       const reps = MON.map((_, i) => [...new Set(rows.flatMap(x => x.cell[i].map(r => r.report_no).filter(Boolean)))]);
-      return { pt, rows, dates, reps }; });
+      const obs = MON.map((_, i) => [...new Set(rows.flatMap(x => x.cell[i].map(r => (String(r.note || "").match(/ลักษณะตัวอย่าง:\s*(.+)$/) || [])[1]).filter(Boolean)))]);
+      return { pt, rows, dates, reps, obs }; });
     const all = blocks.flatMap(b => b.rows), res = all.flatMap(x => x.rs);
     // months in which every result passed
     const mons = MON.map((_, i) => all.flatMap(x => x.cell[i])), tested = mons.filter(l => l.length), clean = tested.filter(l => l.every(r => r.status !== "fail"));
@@ -490,21 +526,22 @@
     const anal = [];
     D.blocks.forEach((b, i) => { const f = b.rows.filter(x => x.as.st === "fail"), w = b.rows.filter(x => x.as.st === "watch"), n = b.rows.reduce((t, x) => t + x.n, 0);
       anal.push(`ส่วนที่ ${i + 1} ${b.pt.code} ${b.pt.name} (${SYS[b.pt.system]}): ผลตรวจ ${n} ครั้ง${f.length ? ` นอกเกณฑ์ ${f.length} รายการ` : n ? " ผ่านเกณฑ์ทุกรายการ" : ""}${w.length ? ` เฝ้าระวัง ${w.length} รายการ` : ""}`);
-      b.rows.filter(x => x.as.st === "fail").forEach(x => anal.push(`${nm(x)} นอกเกณฑ์ ${x.fail} ครั้ง${x.max != null ? ` ค่าสูงสุด ${num(x.max)} ค่าต่ำสุด ${num(x.min)}` : ""} เกณฑ์ ${crit(x.pl)}${x.pl.note ? ` · แนวทางแก้ไข: ${x.pl.note}` : ""}`));
+      b.rows.filter(x => x.as.st === "fail").forEach(x => anal.push(`${nm(x)} นอกเกณฑ์ ${x.fail} ครั้ง${x.max != null ? ` ค่าสูงสุด ${num(x.max)} ค่าต่ำสุด ${num(x.min)}` : ""} เกณฑ์ ${crit(x.pl)}${x.pl.note ? ` · แนวทางแก้ไข: ${x.pl.note}` : ""} (${refTag(x.pl, x.pt)})`));
       b.rows.filter(x => x.pl.kind === "num" && x.mAvg.filter(v => v != null).length >= 4).forEach(x => { const v = x.mAvg.filter(v => v != null), a = avgOf(v.slice(0, 3)), z = avgOf(v.slice(-3));
         if (a > 0 && z > a * 1.2 && x.pl.hi != null) anal.push(`${nm(x)} มีแนวโน้มสูงขึ้น (เฉลี่ย 3 เดือนแรก ${num(r2(a))} → 3 เดือนล่าสุด ${num(r2(z))}) ควรหาสาเหตุก่อนเกินเกณฑ์`); }); });
     D.removal.filter(r => r.low).forEach(r => anal.push(`% การบำบัด ${r.name} ต่ำกว่าเป้าหมาย ${r.low} เดือน: ${{ "BOD": "ตรวจออกซิเจนละลาย (DO) ในบ่อเติมอากาศ ค่า MLSS และเวลากักน้ำ", "COD": "ตรวจสารเคมีที่ทิ้งลงระบบ (น้ำยาฆ่าเชื้อ น้ำยาซักฟอก) และการเติมอากาศ", "SS (TSS)": "ตรวจถังตกตะกอน การสูบตะกอนส่วนเกิน และตะกอนลอย", "TKN": "เพิ่มเวลาเติมอากาศให้เกิดไนตริฟิเคชัน (Nitrification) และตรวจ DO" }[r.name] || "ตรวจการเดินระบบบำบัด"}`));
     if (D.g === "WASTE") { const ml = D.all.find(x => x.pl.template_code === "WA01"); if (ml && ml.n) anal.push(`ตะกอนจุลินทรีย์ MLSS เฉลี่ย ${num(ml.avg)} mg/L ช่วง ${num(ml.min)} ถึง ${num(ml.max)} (ช่วงควบคุม ${crit(ml.pl)})${ml.fail ? ` นอกช่วงควบคุม ${ml.fail} ครั้ง ให้ปรับการสูบตะกอนส่วนเกิน` : " อยู่ในช่วงควบคุม"}`); }
     if (!D.res.length) anal.push(`ยังไม่มีผลตรวจของ${G}ในปี พ.ศ. ${D.YT} ให้บันทึกผลที่แท็บ "บันทึกผลตรวจ" ตามรายงานของห้องปฏิบัติการ`);
     watch.forEach(x => anal.push(`ข้อเสนอสำหรับรายการเฝ้าระวัง ${nm(x)}: เพิ่มความถี่การตรวจและทบทวนการเดินระบบก่อนค่าเกินเกณฑ์${x.pl.note ? ` (${x.pl.note})` : ""}`));
-    const notes = [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`, "แต่ละโรงต้องยืนยันเกณฑ์และความถี่ในแท็บ \"ทะเบียนจุดตรวจ\" ให้ตรงกับแผนจัดการน้ำที่คณะกรรมการของโรงพยาบาลอนุมัติ", "หลักฐานสำหรับ JCI 8th FMS.08.04: ผลตรวจตามความถี่ ผลนอกเกณฑ์พร้อมการแก้ไข และผลตรวจซ้ำ"];
+    const notes = [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`, ...refRows(D.g).map(r => `${r[0]} ${r[1]}: ${r[2]}`), "แต่ละโรงต้องยืนยันเกณฑ์และความถี่ในแท็บ \"ทะเบียนจุดตรวจ\" ให้ตรงกับแผนจัดการน้ำที่คณะกรรมการของโรงพยาบาลอนุมัติ", "หลักฐานสำหรับ JCI 8th FMS.08.04: ผลตรวจตามความถี่ ผลนอกเกณฑ์พร้อมการแก้ไข และผลตรวจซ้ำ"];
     return { find, anal, notes };
   }
-  const EXEC_HEAD = ["ส่วน / จุดตรวจ", "รายการ", "ชนิดการตรวจ", "หน่วย", "ค่าเฉลี่ย", "ต่ำสุด – สูงสุด", "ค่ามาตรฐาน", "ตรวจ (ครั้ง)", "นอกเกณฑ์", "การประเมิน", "สถานะ"];
+  const EXEC_HEAD = ["ส่วน / จุดตรวจ", "รายการ", "ชนิดการตรวจ", "หน่วย", "ค่าเฉลี่ย", "ต่ำสุด – สูงสุด", "ค่ามาตรฐาน", "ตรวจ (ครั้ง)", "นอกเกณฑ์", "การประเมิน", "สถานะ", "อ้างอิง JCI ME · กฎหมาย"];
   const execRow = x => [x.pt.code, x.pl.param, TT[x.pl.test_type] || "", x.pl.unit || "", x.pl.kind === "num" ? (x.avg == null ? "-" : num(x.avg)) : `ไม่พบ ${x.rs.filter(r => r.qual === "nd" || r.qual === "pass").length} / พบ ${x.rs.filter(r => r.qual === "detected" || r.qual === "fail").length}`,
-    x.min == null ? "-" : `${x.minT} – ${x.maxT}`, hasLim(x.pl) ? crit(x.pl) : "ไม่กำหนด", x.n, x.fail, x.as.txt, ST_TH[x.as.st]];
+    x.min == null ? "-" : `${x.minT} – ${x.maxT}`, hasLim(x.pl) ? crit(x.pl) : "ไม่กำหนด", x.n, x.fail, x.as.txt, ST_TH[x.as.st], refTag(x.pl, x.pt).replace(/^อ้างอิง /, "")];
   const monHead = () => ["รายการ", "หน่วย", "ค่ามาตรฐาน", ...MON, "ต่ำสุด", "สูงสุด", "เฉลี่ย", "สถานะ"];
-  const monRows = b => [["วันที่เก็บตัวอย่าง (วันที่ของเดือน)", "", "", ...b.dates.map(l => l.map(d => +d.slice(8, 10)).join(", ")), "", "", "", ""], ["เลขที่รายงานผล", "", "", ...b.reps.map(l => l.join(", ")), "", "", "", ""],
+  const monRows = b => [["วันที่เก็บตัวอย่าง (วันที่ของเดือน)", "", "", ...b.dates.map(l => l.map(d => +d.slice(8, 10)).join(", ")), "", "", "", ""], ["เลขที่รายงานผล / รหัสตัวอย่าง", "", "", ...b.reps.map(l => l.join(", ")), "", "", "", ""],
+    ...(b.obs && b.obs.some(l => l.length) ? [["ลักษณะตัวอย่าง / หมายเหตุจากแล็บ", "", "", ...b.obs.map(l => l.join(", ")), "", "", "", ""]] : []),
     ...b.rows.map(x => [x.pl.param, x.pl.unit || "", hasLim(x.pl) ? crit(x.pl).replace(x.pl.unit ? " " + x.pl.unit : "", "") : "ไม่กำหนด", ...x.cell.map(cellTxt), x.minT, x.maxT, x.avg == null ? "" : num(x.avg), ST_TH[x.as.st]])];
   const REM_HEAD = ["พารามิเตอร์", "เป้าหมาย", ...MON, "เฉลี่ย", "สถานะ"];
   const remRow = r => [r.name, `มากกว่า ${r.target}%`, ...r.m.map(v => v == null ? "" : v + "%"), r.avg == null ? "-" : r.avg + "%", ST_TH[r.st] === "นอกเกณฑ์" ? "ต่ำกว่าเป้าหมาย" : ST_TH[r.st]];
@@ -559,17 +596,24 @@
   const isD = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
   const aiGantt = R => ganttSvg(((R && R.plan) || []).filter(x => isD(x.due)).map((x, i) => { const s0 = isD(x.start) && x.start <= x.due ? x.start : today() <= x.due ? today() : x.due;
     return { label: `${i + 1}. ${x.issue}: ${x.action} · ${x.owner}`, s: s0, e: x.due, col: x.due < today() ? "#B42318" : "#0B5CAD" }; }));
+  // wastewater KPI cards (as in the hospital's own Dashboard sheet): compliance, effluent BOD / TSS, % BOD removal, MLSS
+  const wwKpi = D => { if (D.g !== "WASTE") return []; const by = c => D.all.find(x => x.pl.template_code === c), u = x => x && x.avg != null ? `${num(x.avg)} ${x.pl.unit || ""}`.trim() : "-";
+    const eff = D.all.filter(x => x.pt.system === "WW" && hasLim(x.pl)), mo = MON.map((_, i) => eff.filter(x => x.cell[i].length)), tm = mo.filter(l => l.length).length,
+      okm = mo.filter((l, i) => l.length && !l.some(x => x.cell[i].some(r => r.status === "fail"))).length, bod = D.removal.find(r => r.name === "BOD");
+    return [["อัตราผ่านเกณฑ์น้ำทิ้ง", tm ? `${pct(okm, tm)}% (${okm}/${tm} เดือน)` : "-"], ["BOD น้ำทิ้งเฉลี่ย (เกณฑ์ไม่เกิน 20)", u(by("WW03"))], ["TSS น้ำทิ้งเฉลี่ย (เกณฑ์ไม่เกิน 30)", u(by("WW04"))],
+      ["% BOD Removal เฉลี่ย (เป้ามากกว่า 85%)", bod && bod.avg != null ? bod.avg + "%" : "-"], ["MLSS เฉลี่ย (ช่วงควบคุม 1,500–3,000)", u(by("WA01"))]]; };
   let catCur = "DRINK";
   function rCat(g) {
     catCur = g; catYears(); catPoints(g); rCatAi(); const D = catData(g), T = catTexts(D), pass = D.res.filter(r => r.status !== "fail").length;
     $("#cTitle").textContent = `หมวด ${CAT_NO[g]} ${GRP[g]} · สรุปผลการตรวจวัดคุณภาพน้ำ ${hosp().name || ""} ปี พ.ศ. ${D.YT}`;
     $("#cSub").textContent = `ค่ามาตรฐานอ้างอิง: ${CAT_LAW[g]}`;
+    $("#cRef").innerHTML = `<tr>${REF_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + refRows(g).map(r => `<tr>${r.map((c, i) => `<td>${i === 1 ? `<b>${esc(c)}</b>` : esc(c)}</td>`).join("")}</tr>`).join("");
     const cr = pct(D.clean.length, D.tested.length), pr = pct(pass, D.res.length), o = D.acts.filter(p => p.a.status === "open").length;
     $("#cKpi").innerHTML = [["จุดตรวจ", D.pts.length, ""], ["รายการตรวจ", D.all.length, ""], ["ผลตรวจ (ครั้ง)", D.res.length, ""], ["ผ่านเกณฑ์", pr == null ? "-" : pr + "%", cls(pr)],
-      ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`, cls(cr)], ["แก้ไขยังไม่ปิด", o, o ? "bad" : "good"]].map(([l, v, c]) => `<div class="kpi"><span>${l}</span><b class="${c}">${esc(String(v))}</b></div>`).join("");
+      ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`, cls(cr)], ["แก้ไขยังไม่ปิด", o, o ? "bad" : "good"], ...wwKpi(D).map(([l, v]) => [l, v, ""])].map(([l, v, c]) => `<div class="kpi"><span>${l}</span><b class="${c}">${esc(String(v))}</b></div>`).join("");
     $("#cFind").innerHTML = T.find.map(x => `<li>${esc(x)}</li>`).join("");
     $("#cExec").innerHTML = `<tr>${EXEC_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + (D.all.length ? D.all.map(x => { const r = execRow(x); return `<tr>${r.map((c, i) => `<td class="${i === 10 ? { fail: "fail", watch: "warn", pass: "ok", none: "never", info: "" }[x.as.st] : [4, 5, 7, 8].includes(i) ? "n" : ""}">${i === 2 ? ttPill(x.pl) : esc(String(c))}</td>`).join("")}</tr>`; }).join("")
-      : `<tr><td colspan="11">ยังไม่มีจุดตรวจใน${GRP[g]} ให้หัวหน้าเพิ่มที่แท็บ "ทะเบียนจุดตรวจ" (เลือกระบบน้ำในกลุ่ม${GRP[g]})</td></tr>`);
+      : `<tr><td colspan="12">ยังไม่มีจุดตรวจใน${GRP[g]} ให้หัวหน้าเพิ่มที่แท็บ "ทะเบียนจุดตรวจ" (เลือกระบบน้ำในกลุ่ม${GRP[g]})</td></tr>`);
     $("#cRemBox").hidden = g !== "WASTE";
     $("#cRem").innerHTML = `<tr>${REM_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + (D.removal.length ? D.removal.map(r => `<tr>${remRow(r).map((c, i) => `<td class="${i >= 2 && i < 14 && r.m[i - 2] != null && r.m[i - 2] < r.target ? "fail" : i === 15 ? { fail: "fail", pass: "ok", none: "never" }[r.st] : i >= 2 ? "n" : ""}">${esc(String(c))}</td>`).join("")}</tr>`).join("")
       : `<tr><td colspan="16">ต้องมีจุดน้ำเสียเข้าระบบ (Influent) และจุดน้ำทิ้ง (Effluent) ที่มีรายการ BOD / COD / SS / TKN จึงคำนวณ % การบำบัดได้</td></tr>`);
@@ -583,6 +627,7 @@
     $("#cChart").innerHTML = cl.length ? `<div class="charts">${cl.map(x => `<svg class="trend" viewBox="0 0 640 300" role="img" aria-label="กราฟ ${esc(x.pl.param)}">${monChart(x, 0, 0, 640, 300)}</svg>`).join("")}</div>` : `<p class="sub">ยังไม่มีผลตรวจที่เป็นตัวเลขในปีนี้</p>`;
     $("#cPlan").innerHTML = `<tr>${PLAN_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + (D.acts.length ? D.acts.map((p, i) => `<tr>${planRow(p, i).map((c, j) => `<td class="${j === 8 ? (p.a.status === "done" ? "ok" : p.a.due && p.a.due < today() ? "fail" : "warn") : ""}">${esc(String(c))}</td>`).join("")}</tr>`).join("")
       : `<tr><td colspan="9">ไม่มีผลนอกเกณฑ์ที่ต้องแก้ไขในปีนี้</td></tr>`);
+    rMonth(D);
     const gs = planGantt(D); $("#cGantt").innerHTML = gs ? `<p class="sub"><b>แผนการแก้ไข (Gantt)</b> จากวันที่พบถึงวันกำหนดเสร็จ · น้ำเงิน = กำลังแก้ไข · แดง = เลยกำหนด · เขียว = ปิดแล้ว</p><div class="tw">${gs.replace("<svg ", '<svg class="trend" ')}</div>` : "";
   }
   ["#cY", "#cPt"].forEach(s => $(s).onchange = () => rCat(catCur));
@@ -592,8 +637,9 @@
     const mon = [["ตารางสรุปข้อมูลผลตรวจรายเดือน " + GRP[catCur] + " ปี พ.ศ. " + D.YT], []], st = { 0: 2 };
     D.blocks.forEach((b, i) => { st[mon.length] = 2; mon.push([`ส่วนที่ ${i + 1} ${b.pt.code} ${b.pt.name} · ${SYS[b.pt.system]}`]); st[mon.length] = 1; mon.push(monHead()); monRows(b).forEach(r => mon.push(r)); mon.push([]); });
     const sheets = [Office.summarySheet({ title, org: hosp().name, period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`, findings: [...T.find, ...T.anal], notes: T.notes,
-        kpis: [["จุดตรวจ", D.pts.length], ["ผลตรวจ (ครั้ง)", D.res.length], ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`]] }),
+        kpis: [["จุดตรวจ", D.pts.length], ["ผลตรวจ (ครั้ง)", D.res.length], ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`], ...wwKpi(D)] }),
       { name: "ตารางบทสรุป KPI", header: 0, rows: [EXEC_HEAD, ...D.all.map(execRow)] },
+      { name: "อ้างอิง JCI ME กฎหมาย", header: 0, rows: [REF_HEAD, ...refRows(catCur)] },
       { name: "ตารางสรุปข้อมูล", rows: mon, styles: st },
       ...(catCur === "WASTE" ? [{ name: "% การบำบัด", header: 0, rows: [REM_HEAD, ...D.removal.map(remRow)] }] : []),
       { name: "แผนการแก้ไข", header: 0, rows: [PLAN_HEAD, ...D.acts.map(planRow)] },
@@ -605,8 +651,8 @@
   $("#wcP").onclick = () => { const D = catData(catCur), T = catTexts(D), gs = planGantt(D);
     const d = { title: `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`, org: hosp().name, period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`,
       findings: T.find, analysis: T.anal, notes: T.notes,
-      kpis: [["จุดตรวจ", D.pts.length], ["ผลตรวจ (ครั้ง)", D.res.length], ["ผ่านเกณฑ์", (pct(D.res.filter(r => r.status !== "fail").length, D.res.length) ?? "-") + "%"], ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`]],
-      sections: [...aiSections(catAi()),
+      kpis: [["จุดตรวจ", D.pts.length], ["ผลตรวจ (ครั้ง)", D.res.length], ["ผ่านเกณฑ์", (pct(D.res.filter(r => r.status !== "fail").length, D.res.length) ?? "-") + "%"], ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`], ...wwKpi(D)],
+      sections: [...aiSections(catAi()), refSec(catCur),
         { title: "ตารางบทสรุป (ค่าเฉลี่ย ต่ำสุด–สูงสุด เทียบค่ามาตรฐาน)", head: ["จุดตรวจ", "รายการ", "ชนิด", "ค่าเฉลี่ย", "ต่ำสุด – สูงสุด", "ค่ามาตรฐาน", "การประเมิน"], colW: [1.0, 3.5, 0.9, 1.1, 1.5, 1.8, 2.5], rows: D.all.map(x => { const r = execRow(x); return [x.pt.code, x.pl.param + (x.pl.unit ? ` (${x.pl.unit})` : ""), r[2], r[4], r[5], r[6], r[9]]; }) },
         ...(catCur === "WASTE" ? [{ title: "ประสิทธิภาพการบำบัด (% Removal)", head: ["พารามิเตอร์", "เป้าหมาย", "เฉลี่ย", "เดือนที่ต่ำกว่าเป้าหมาย", "สถานะ"], colW: [3, 2.3, 2, 2.5, 2.5], rows: D.removal.map(r => [r.name, `มากกว่า ${r.target}%`, r.avg == null ? "-" : r.avg + "%", r.low, remRow(r)[15]]) }] : []),
         ...D.blocks.map((b, i) => ({ title: `ส่วนที่ ${i + 1} ${b.pt.code} ${b.pt.name}: ผลรายเดือน`, head: ["รายการ", "เกณฑ์", ...MON], colW: [3.1, 1.6, ...MON.map(() => 7.6 / 12)], rows: b.rows.map(x => [x.pl.param, hasLim(x.pl) ? crit(x.pl) : "ไม่กำหนด", ...x.cell.map(cellTxt)]) })),
@@ -692,6 +738,10 @@
     try {
       if (!fileObj && /^(xlsx|xlsm|docx|csv|txt|tsv|json|xml|html|htm)$/.test(extOf(row.file_name))) { const d = await sb.storage.from("water-lab").download(row.path); if (d.error) throw d.error; fileObj = d.data; }
       if (fileObj) text = await fileText(fileObj, row.file_name);
+      // same central template in every hospital: make the standard points of this group when the hospital has none yet
+      if (["WASTE", "DRINK"].includes(row.grp) && !points.some(p => p.active && grpOf(p.system) === row.grp)) {
+        const sp = await sb.rpc("water_std_points", { p_hospital: row.hospital_id, p_grp: row.grp }); if (sp.error) throw sp.error;
+        if (sp.data) { toast(`สร้างจุดตรวจมาตรฐานของ${GRP[row.grp]}ให้แล้ว ${sp.data} จุด (แก้ชื่อได้ที่แท็บทะเบียนจุดตรวจ)`); await load(); } }
       await aiCall({ step: "read", file_id: row.id, text }, msg);
       msg.textContent = `AI อ่าน ${row.file_name} แล้ว ตรวจผลด้านล่างก่อนกดบันทึก`;
     } catch (e) { msg.textContent = ""; toast(`AI อ่าน ${row.file_name} ไม่สำเร็จ: ${errText(e)}`, true); }
@@ -739,36 +789,43 @@
       const { data, error } = await sb.from("water_results").insert(out).select(); if (error) throw error;
       const up = await sb.from("water_files").update({ status: "saved", saved_count: (f.saved_count || 0) + data.length, saved_at: new Date().toISOString(), saved_by: me.id }).eq("id", f.id); if (up.error) throw up.error;
       const bad = data.filter(r => r.status === "fail").length;
-      toast(`บันทึกแล้ว ${data.length} ค่า${bad ? ` · นอกเกณฑ์ ${bad} ค่า ระบบเปิดรายการแก้ไขให้แล้ว` : ""}`, !!bad); await load(); rImp(); });
+      toast(`บันทึกแล้ว ${data.length} ค่า${bad ? ` · นอกเกณฑ์ ${bad} ค่า ระบบเปิดรายการแก้ไขให้แล้ว` : ""}`, !!bad); await load(); rImp();
+      // every month: the AI writes that month's executive summary + analysis for each group the saved values belong to
+      const Y = f.month.slice(0, 4), M = +f.month.slice(5, 7), gs = [...new Set(data.map(r => grpOf(ptOf(plOf(r.plan_id).point_id).system)))];
+      for (const g of gs) { const el = $("#uMsg"); el.textContent = `AI กำลังเขียนสรุปผู้บริหารประจำเดือน ${MON[M - 1]} ${+Y + 543} ของ${GRP[g]}`;
+        try { await monthAi(g, Y, M, el); el.textContent = `สรุปผู้บริหารประจำเดือน ${MON[M - 1]} ${+Y + 543} ของ${GRP[g]} เสร็จแล้ว ดูได้ที่แท็บหมวด ${CAT_NO[g]}`; }
+        catch (e) { el.textContent = ""; toast(`AI สรุปประจำเดือนไม่สำเร็จ: ${errText(e)} (กดปุ่ม 🤖 ในแท็บหมวดเพื่อลองใหม่)`, true); } } });
   }
 
   // ---------- AI สรุปผู้บริหาร + วิเคราะห์ ----------
   // the figures the AI gets: computed here from the saved results (no personal data)
-  const aiInputOf = D => ({ hospital: D.hcode, group: GRP[D.g], year_be: D.YT, sampling_points: D.pts.map(p => `${p.code} ${p.name} (${SYS[p.system]})`),
+  const aiInputOf = D => ({ hospital: D.hcode, group: GRP[D.g], year_be: D.YT, references: refAi(D.g), sampling_points: D.pts.map(p => `${p.code} ${p.name} (${SYS[p.system]})`),
     results: D.res.length, passed: D.res.filter(r => r.status !== "fail").length, months_all_pass: D.clean.length, months_with_results: D.tested.length,
-    items: D.all.map(x => ({ point: x.pt.code, item: x.pl.param, type: TT[x.pl.test_type], unit: x.pl.unit || "", standard: hasLim(x.pl) ? crit(x.pl) : "ไม่กำหนด", tests: x.n, out_of_range: x.fail,
+    items: D.all.map(x => ({ point: x.pt.code, item: x.pl.param, type: TT[x.pl.test_type], unit: x.pl.unit || "", standard: hasLim(x.pl) ? crit(x.pl) : "ไม่กำหนด", reference: refTag(x.pl, x.pt), tests: x.n, out_of_range: x.fail,
       avg: x.avg, min: x.minT, max: x.maxT, monthly: Object.fromEntries(x.cell.map((l, i) => [MON[i], cellTxt(l)]).filter(([, v]) => v)), assessment: x.as.txt, missing_months: x.missing })),
     removal: D.removal.map(r => ({ parameter: r.name, target: `>${r.target}%`, avg: r.avg, months_below_target: r.low, monthly: r.m })),
     corrective_actions: D.acts.map(p => ({ problem: p.a.problem, action: p.a.action || "", owner: p.a.owner || "", due: p.a.due, status: p.a.status })) });
-  const aiOf = (h, g, y) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y);
+  const aiOf = (h, g, y) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && !r.month);
+  const aiOfM = (h, g, y, m) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && +r.month === +m);
   function aiHtml(rep, when, model) {
     if (!rep) return ""; const R = rep, G = aiGantt(R);
     return `<h3>บทสรุปผู้บริหารโดย AI</h3><ol>${(R.summary || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><h3>บทวิเคราะห์โดย AI</h3><ol>${(R.analysis || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol>
       ${(R.risks || []).length ? `<h3>ความเสี่ยง</h3><ol>${R.risks.map(x => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}
-      ${(R.plan || []).length ? `<h3>แผนงานที่ AI เสนอ</h3><div class="tw"><table class="tt"><tr><th>ลำดับ</th><th>ประเด็น</th><th>มาตรการ</th><th>ผู้รับผิดชอบ</th><th>เริ่ม</th><th>กำหนดเสร็จ</th></tr>${R.plan.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.issue)}</td><td>${esc(p.action)}</td><td>${esc(p.owner)}</td><td>${dTH(p.start)}</td><td>${dTH(p.due)}</td></tr>`).join("")}</table></div>` : ""}
+      ${(R.plan || []).length ? `<h3>แผนงานที่ AI เสนอ</h3><div class="tw"><table class="tt"><tr><th>ลำดับ</th><th>ประเด็น</th><th>มาตรการ</th><th>ผู้รับผิดชอบ</th><th>เริ่ม</th><th>กำหนดเสร็จ</th><th>เป้าหมาย (KPI)</th><th>อ้างอิง JCI ME · กฎหมาย</th></tr>${R.plan.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.issue)}</td><td>${esc(p.action)}</td><td>${esc(p.owner)}</td><td>${dTH(p.start)}</td><td>${dTH(p.due)}</td><td>${esc(p.target || "")}</td><td>${esc(p.ref || "")}</td></tr>`).join("")}</table></div>` : ""}
       ${G ? `<p class="sub"><b>แผนงาน (Gantt)</b></p><div class="tw">${G.replace("<svg ", '<svg class="trend" ')}</div>` : ""}
       ${(R.data_gaps || []).length ? `<h3>ข้อมูลที่ยังขาด</h3><ol>${R.data_gaps.map(x => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}
       <p class="sub">ทำเมื่อ ${dTH(when)}${model ? " · " + esc(model) : ""} · ตัวเลขมาจากผลที่บันทึกในระบบ ให้ผู้รับผิดชอบตรวจทานก่อนนำเสนอ</p>`;
   }
   // AI parts for the exports of a deck / workbook
+  const refSec = g => ({ title: "อ้างอิง JCI 8th FMS ME และกฎหมายควบคุม", head: REF_HEAD, colW: [1.5, 3.9, 5.0, 1.9], rows: refRows(g) });
   const aiSections = R => !R ? [] : [
     { title: "บทสรุปผู้บริหารโดย AI", head: ["ข้อ", "สรุป"], colW: [0.8, 11.5], rows: (R.summary || []).map((x, i) => [i + 1, x]) },
     { title: "บทวิเคราะห์โดย AI", head: ["ข้อ", "วิเคราะห์"], colW: [0.8, 11.5], rows: [...(R.analysis || []), ...(R.risks || []).map(x => "ความเสี่ยง: " + x), ...(R.data_gaps || []).map(x => "ข้อมูลที่ยังขาด: " + x)].map((x, i) => [i + 1, x]) },
-    { title: "แผนงานที่ AI เสนอ", head: ["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ"], colW: [0.7, 3.2, 4.4, 1.8, 1.1, 1.1], rows: (R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due)]) },
+    { title: "แผนงานที่ AI เสนอ", head: ["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ", "เป้าหมาย (KPI)", "อ้างอิง"], colW: [0.5, 2.1, 3.2, 1.3, 0.9, 0.9, 1.6, 1.8], rows: (R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due), p.target || "", p.ref || ""]) },
     ...(aiGantt(R) ? [{ title: "แผนงานที่ AI เสนอ (Gantt)", svg: aiGantt(R), note: "แถบสีแดง = เลยกำหนดแล้ว" }] : [])];
   const aiSheets = (R, tag) => !R ? [] : [{ name: `AI สรุป${tag}`, header: 0, rows: [["ข้อ", "บทสรุปผู้บริหารโดย AI"], ...(R.summary || []).map((x, i) => [i + 1, x]), [], ["ข้อ", "บทวิเคราะห์โดย AI"], ...(R.analysis || []).map((x, i) => [i + 1, x]),
       ...((R.risks || []).length ? [[], ["ข้อ", "ความเสี่ยง"], ...R.risks.map((x, i) => [i + 1, x])] : []), ...((R.data_gaps || []).length ? [[], ["ข้อ", "ข้อมูลที่ยังขาด"], ...R.data_gaps.map((x, i) => [i + 1, x])] : [])] },
-    { name: `AI แผนงาน${tag}`, header: 0, rows: [["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ"], ...(R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due)])] },
+    { name: `AI แผนงาน${tag}`, header: 0, rows: [["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ", "เป้าหมาย (KPI)", "อ้างอิง JCI ME · กฎหมาย"], ...(R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due), p.target || "", p.ref || ""])] },
     ...(aiGantt(R) ? [{ name: `AI Gantt${tag}`, rows: [["แผนงานที่ AI เสนอ (Gantt)"]], styles: { 0: 2 }, svg: aiGantt(R) }] : [])];
   function rCatAi() { const a = aiOf(hosp().id, catCur, $("#cY").value); $("#cAi").innerHTML = a ? aiHtml(a.report, a.created_at, a.model) : `<p class="sub">ยังไม่มีบทสรุปจาก AI ของหมวดนี้ปีนี้ กดปุ่ม 🤖 เพื่อให้ AI อ่านผลทั้งปีแล้วเขียนบทสรุปผู้บริหาร บทวิเคราะห์ และแผนงาน</p>`;
     $("#cAiBtn").hidden = !canRec; }
@@ -800,8 +857,8 @@
     $("#vGrp").innerHTML = `<tr>${vHead().map(h => `<th>${h}</th>`).join("")}</tr>` + V.rows.map(r => `<tr>${vRow(r).map((c, i) => `<td class="${i === 5 ? cls2(r.pr) : i === 7 && r.fails.length ? "fail" : ""} ${[2, 3, 4, 5].includes(i) ? "n" : ""}">${esc(String(c))}</td>`).join("")}</tr>`).join("");
     $("#vAiBtn").hidden = !exec; $("#vAi").innerHTML = V.ai ? aiHtml(V.ai.report, V.ai.created_at, V.ai.model) : `<p class="sub">${exec ? "กดปุ่ม 🤖 เพื่อให้ AI สรุปและวิเคราะห์หมวดนี้ของทุกโรง" : "สรุป 12 โรงโดย AI ทำได้เฉพาะผู้บริหาร"}</p>`; }
   const cls2 = v => v == null ? "never" : v >= 95 ? "ok" : v >= 80 ? "warn" : "fail";
-  const vInput = () => ({ group: GRP[V.g], year_be: V.YT, hospitals: V.rows.map(r => ({ hospital: r.code, sampling_points: r.D.pts.length, items: r.D.all.length, results: r.D.res.length, pass_rate: r.pr, months_all_pass: r.D.clean.length, months_with_results: r.D.tested.length,
-    out_of_range: r.D.all.filter(x => x.fail).map(x => ({ item: x.pl.param, point: x.pt.code, times: x.fail, max: x.maxT, min: x.minT, standard: crit(x.pl) })), watch: r.watch,
+  const vInput = () => ({ group: GRP[V.g], year_be: V.YT, references: refAi(V.g), hospitals: V.rows.map(r => ({ hospital: r.code, sampling_points: r.D.pts.length, items: r.D.all.length, results: r.D.res.length, pass_rate: r.pr, months_all_pass: r.D.clean.length, months_with_results: r.D.tested.length,
+    out_of_range: r.D.all.filter(x => x.fail).map(x => ({ item: x.pl.param, point: x.pt.code, times: x.fail, max: x.maxT, min: x.minT, standard: crit(x.pl), reference: refTag(x.pl, x.pt) })), watch: r.watch,
     removal: r.D.removal.map(x => ({ parameter: x.name, avg: x.avg, target: x.target, months_below: x.low })), missing: r.D.all.filter(x => x.missing.length).map(x => `${x.pl.param} (${x.pt.code}) ขาด ${x.missing.length} เดือน`),
     open_actions: r.D.acts.filter(p => p.a.status === "open").length, lab_files: r.nf })) });
   $("#vAiBtn").onclick = guard(async () => { if (!V) throw new Error("กด \"แสดงข้อมูล\" ก่อน"); $("#vAiMsg").textContent = "AI กำลังเปรียบเทียบ 12 โรง (ประมาณ 30-90 วินาที)";
@@ -814,11 +871,63 @@
       `ไฟล์ผลแล็บที่แนบในปีนี้รวม ${V.rows.reduce((t, r) => t + r.nf, 0)} ไฟล์`]; };
   $("#vgX").onclick = () => { if (!V) return toast("กด \"แสดงข้อมูล\" ก่อน", true);
     Office.xlsx(`น้ำ_${GRP[V.g]}_12โรง_${V.YT}`, [Office.summarySheet({ title: `ผลตรวจคุณภาพน้ำ ${GRP[V.g]} เปรียบเทียบ 12 โรง ปี พ.ศ. ${V.YT}`, org: "โรงพยาบาลในเครือ 12 โรง", period: `ข้อมูล ณ ${dTH(today())}`, findings: vFind(), notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[V.g]}`] }),
-      { name: "เปรียบเทียบ 12 โรง", header: 0, rows: [vHead(), ...V.rows.map(vRow)] }, ...aiSheets(V.ai && V.ai.report, "")]); };
+      { name: "เปรียบเทียบ 12 โรง", header: 0, rows: [vHead(), ...V.rows.map(vRow)] }, { name: "อ้างอิง JCI ME กฎหมาย", header: 0, rows: [REF_HEAD, ...refRows(V.g)] }, ...aiSheets(V.ai && V.ai.report, "")]); };
   $("#vgP").onclick = () => { if (!V) return toast("กด \"แสดงข้อมูล\" ก่อน", true); const R = V.ai && V.ai.report;
     return Office.pptx(`น้ำ_${GRP[V.g]}_12โรง_บทสรุปผู้บริหาร_${V.YT}`, { title: `ผลตรวจคุณภาพน้ำ ${GRP[V.g]} เปรียบเทียบ 12 โรง ปี พ.ศ. ${V.YT}`, org: "โรงพยาบาลในเครือ 12 โรง", period: `ข้อมูล ณ ${dTH(today())}`,
       findings: R ? R.summary : vFind(), analysis: R ? R.analysis : [], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[V.g]}`],
       sections: [{ title: "เปรียบเทียบ 12 โรง", head: ["โรง", "ผลตรวจ", "ผ่านเกณฑ์", "เดือนผ่านทุกรายการ", "รายการนอกเกณฑ์", "แก้ไขยังไม่ปิด"], colW: [0.9, 1.1, 1.2, 1.6, 6.3, 1.2], rows: V.rows.map(r => [r.code, r.D.res.length, r.pr == null ? "-" : r.pr + "%", `${r.D.clean.length}/${r.D.tested.length}`, r.fails.join(" · ") || "-", r.D.acts.filter(p => p.a.status === "open").length]) },
-        ...aiSections(R).slice(2)] }).catch(e => toast(errText(e), true)); };
+        ...aiSections(R).slice(2), refSec(V.g)] }).catch(e => toast(errText(e), true)); };
 
+  // ---------- สรุปผู้บริหารประจำเดือน (one month of one group, compared with the month before and the year) ----------
+  const prevOf = (x, m) => { for (let k = m - 1; k >= 0; k--) if (x.cell[k].length) return { m: k, t: cellTxt(x.cell[k]) }; return null; };
+  const monStat = l => !l.length ? "" : l.some(r => r.status === "fail") ? "fail" : l.some(r => r.status === "warn") ? "warn" : "pass";
+  function monthData(D, m) { // m = 0..11
+    const rows = D.all.filter(x => x.cell[m].length).map(x => ({ x, v: cellTxt(x.cell[m]), st: monStat(x.cell[m]), prev: prevOf(x, m) }));
+    const fails = rows.filter(r => r.st === "fail"), rem = D.removal.map(r => ({ ...r, mv: r.m[m] }));
+    const acts = D.acts.filter(p => +p.r.sampled_on.slice(5, 7) === m + 1);
+    const find = !rows.length ? [`ยังไม่มีผลของเดือน ${MON[m]} ${D.YT}`] : [
+      `${D.hcode} ${GRP[D.g]} เดือน ${MON[m]} ${D.YT}: ตรวจ ${rows.length} รายการ ผ่านเกณฑ์ ${rows.length - fails.length} รายการ${fails.length ? ` นอกเกณฑ์ ${fails.length} รายการ` : " ผ่านเกณฑ์ทุกรายการ"}`,
+      ...fails.map(r => `นอกเกณฑ์: ${r.x.pl.param} (${r.x.pt.code}) ${r.v}${r.x.pl.unit ? " " + r.x.pl.unit : ""} เกณฑ์ ${crit(r.x.pl)}${r.prev ? ` · เดือนก่อน (${MON[r.prev.m]}) ${r.prev.t}` : ""} (${refTag(r.x.pl, r.x.pt)})`),
+      ...rem.filter(r => r.mv != null).map(r => `% การบำบัด ${r.name} เดือนนี้ ${r.mv}% (เป้าหมายมากกว่า ${r.target}%)${r.mv < r.target ? " ต่ำกว่าเป้าหมาย" : " ผ่านเป้าหมาย"}`),
+      acts.length ? `รายการแก้ไขจากผลเดือนนี้ ${acts.length} รายการ ยังไม่ปิด ${acts.filter(p => p.a.status === "open").length} รายการ` : null].filter(Boolean);
+    return { m, rows, fails, rem, acts, find };
+  }
+  const MO_HEAD = ["จุดตรวจ", "รายการ", "ชนิด", "ผลเดือนนี้", "หน่วย", "ค่ามาตรฐาน", "สรุป", "เดือนก่อน", "เฉลี่ยทั้งปี", "อ้างอิง JCI ME · กฎหมาย"];
+  const moRow = r => [r.x.pt.code, r.x.pl.param, TT[r.x.pl.test_type] || "", r.v, r.x.pl.unit || "", hasLim(r.x.pl) ? crit(r.x.pl) : "ไม่กำหนด", r.st === "fail" ? "นอกเกณฑ์" : r.st === "warn" ? "เฝ้าระวัง" : hasLim(r.x.pl) ? "ผ่าน" : "ติดตามค่า", r.prev ? `${r.prev.t} (${MON[r.prev.m]})` : "-", r.x.avg == null ? "-" : num(r.x.avg), refTag(r.x.pl, r.x.pt).replace(/^อ้างอิง /, "")];
+  let moD = null;
+  function rMonth(D) {
+    const has = MON.map((_, i) => D.all.some(x => x.cell[i].length)), v = $("#cMo").value, last = has.lastIndexOf(true);
+    $("#cMo").innerHTML = MON.map((m, i) => `<option value="${i}">${m} ${D.YT}${has[i] ? "" : " (ยังไม่มีผล)"}${aiOfM(hosp().id, D.g, D.Y, i + 1) ? " · มีสรุป AI" : ""}</option>`).join("");
+    $("#cMo").value = v !== "" && v != null && $("#cMo").dataset.g === D.g + D.Y ? v : String(Math.max(0, last)); $("#cMo").dataset.g = D.g + D.Y;
+    const M = moD = monthData(D, +$("#cMo").value), a = aiOfM(hosp().id, D.g, D.Y, M.m + 1);
+    $("#cMoFind").innerHTML = M.find.map(x => `<li>${esc(x)}</li>`).join("");
+    $("#cMoT").innerHTML = `<tr>${MO_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + (M.rows.length ? M.rows.map(r => `<tr>${moRow(r).map((c, i) => `<td class="${i === 6 ? { fail: "fail", warn: "warn", pass: hasLim(r.x.pl) ? "ok" : "" }[r.st] : i === 3 ? "n" : ""}">${i === 2 ? ttPill(r.x.pl) : esc(String(c))}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="10">ยังไม่มีผลของเดือนนี้ แนบไฟล์ผลแล็บที่แท็บ "แนบไฟล์ผลแล็บ · AI"</td></tr>`);
+    $("#cMoOut").innerHTML = a ? aiHtml(a.report, a.created_at, a.model) : M.rows.length ? `<p class="sub">ยังไม่มีสรุปจาก AI ของเดือนนี้ กดปุ่ม 🤖 (หลังบันทึกผลจากไฟล์ ระบบให้ AI สรุปให้อัตโนมัติ)</p>` : "";
+    $("#cMoAi").hidden = !canRec;
+  }
+  $("#cMo").onchange = () => rCat(catCur);
+  const monthInput = (D, M) => ({ hospital: D.hcode, group: GRP[D.g], month: `${MON[M.m]} ${D.YT}`, standard: CAT_LAW[D.g], references: refAi(D.g),
+    items: M.rows.map(r => ({ point: `${r.x.pt.code} ${r.x.pt.name}`, item: r.x.pl.param, type: TT[r.x.pl.test_type], value: r.v, unit: r.x.pl.unit || "", standard: hasLim(r.x.pl) ? crit(r.x.pl) : "ไม่กำหนด", reference: refTag(r.x.pl, r.x.pt), result: moRow(r)[6], previous_month: r.prev ? `${r.prev.t} (${MON[r.prev.m]})` : null, year_avg: r.x.avg, year_max: r.x.maxT, times_out_this_year: r.x.fail })),
+    removal_this_month: M.rem.filter(r => r.mv != null).map(r => ({ parameter: r.name, value: r.mv, target: r.target, year_avg: r.avg })),
+    corrective_actions: M.acts.map(p => ({ problem: p.a.problem, action: p.a.action || "", owner: p.a.owner || "", due: p.a.due, status: p.a.status })),
+    files: wfiles.filter(f => f.month.startsWith(`${D.Y}-${String(M.m + 1).padStart(2, "0")}`)).map(f => f.file_name) });
+  async function monthAi(g, Y, m, el) { // m = 1..12
+    const D = catData(g, { points, plans, results, actions, Y, pid: null, tt: "", hcode: hosp().code || "" }), M = monthData(D, m - 1);
+    if (!M.rows.length) throw new Error(`ยังไม่มีผลของเดือน ${MON[m - 1]} ${+Y + 543}`);
+    const r = await aiCall({ step: "summary", hospital_id: hosp().id, grp: g, year: +Y, month: m, input: monthInput(D, M) }, el);
+    aiReps.unshift({ hospital_id: hosp().id, grp: g, year: +Y, month: m, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() });
+  }
+  $("#cMoAi").onclick = guard(async () => { $("#cMoMsg").textContent = "AI กำลังเขียนสรุปประจำเดือน (ประมาณ 20-60 วินาที)";
+    try { await monthAi(catCur, $("#cY").value, +$("#cMo").value + 1, $("#cMoMsg")); $("#cMoMsg").textContent = "เสร็จแล้ว"; rCat(catCur); } catch (e) { $("#cMoMsg").textContent = ""; throw e; } });
+  const moTitle = D => `สรุปผลตรวจคุณภาพน้ำประจำเดือน ${MON[moD.m]} ${D.YT} · หมวด ${CAT_NO[D.g]} ${GRP[D.g]}`;
+  $("#wmX").onclick = () => { const D = catData(catCur), M = moD = monthData(D, +$("#cMo").value), a = aiOfM(hosp().id, D.g, D.Y, M.m + 1), R = a && a.report;
+    Office.xlsx(catName(`สรุปเดือน${MON[M.m]}`), [Office.summarySheet({ title: moTitle(D), org: hosp().name, period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`, findings: [...(R ? R.summary : []), ...M.find, ...(R ? R.analysis : [])], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`] }),
+      { name: "ผลเดือนนี้", header: 0, rows: [MO_HEAD, ...M.rows.map(moRow)] }, { name: "อ้างอิง JCI ME กฎหมาย", header: 0, rows: [REF_HEAD, ...refRows(D.g)] }, ...(D.g === "WASTE" ? [{ name: "% การบำบัด", header: 0, rows: [["พารามิเตอร์", "เป้าหมาย", "เดือนนี้", "เฉลี่ยทั้งปี"], ...M.rem.map(r => [r.name, `มากกว่า ${r.target}%`, r.mv == null ? "-" : r.mv + "%", r.avg == null ? "-" : r.avg + "%"])] }] : []),
+      ...aiSheets(R, "")]); };
+  $("#wmP").onclick = () => { const D = catData(catCur), M = moD = monthData(D, +$("#cMo").value), a = aiOfM(hosp().id, D.g, D.Y, M.m + 1), R = a && a.report;
+    return Office.pptx(catName(`สรุปเดือน${MON[M.m]}`), { title: moTitle(D), org: hosp().name, period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`,
+      findings: R ? R.summary : M.find, analysis: R ? [...R.analysis, ...(R.risks || []).map(x => "ความเสี่ยง: " + x)] : [], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`],
+      sections: [{ title: `ผลตรวจเดือน ${MON[M.m]} ${D.YT} เทียบค่ามาตรฐาน`, head: ["จุดตรวจ", "รายการ", "ผลเดือนนี้", "ค่ามาตรฐาน", "สรุป", "เดือนก่อน"], colW: [1.1, 4.2, 1.6, 2.3, 1.2, 1.9], rows: M.rows.map(r => { const x = moRow(r); return [x[0], x[1] + (x[4] ? ` (${x[4]})` : ""), x[3], x[5], x[6], x[7]]; }) },
+        ...(D.g === "WASTE" && M.rem.some(r => r.mv != null) ? [{ title: "% การบำบัดเดือนนี้", head: ["พารามิเตอร์", "เป้าหมาย", "เดือนนี้", "เฉลี่ยทั้งปี"], colW: [3.3, 3, 3, 3], rows: M.rem.map(r => [r.name, `มากกว่า ${r.target}%`, r.mv == null ? "-" : r.mv + "%", r.avg == null ? "-" : r.avg + "%"]) }] : []),
+        ...aiSections(R).slice(2), refSec(D.g)] }).catch(e => toast(errText(e), true)); };
 })();

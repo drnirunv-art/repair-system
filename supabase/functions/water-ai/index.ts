@@ -24,11 +24,11 @@ const READ_SHAPE = `ตอบเป็น JSON อย่างเดียว �
 {"lab":"ชื่อห้องปฏิบัติการตามไฟล์","report_no":"เลขที่รายงานหลัก","rows":[{"plan_id":123,"point_in_file":"จุดเก็บตัวอย่างตามที่เขียนในไฟล์","param_in_file":"ชื่อรายการตามที่เขียนในไฟล์","value":"ค่าตามที่เขียนในไฟล์ เช่น 12 หรือ <0.1 หรือ >16,000 หรือ ND หรือ ไม่พบ หรือ พบ หรือ ผ่าน","sampled_on":"YYYY-MM-DD (ค.ศ.)","report_no":"","note":""}],"notes":["ข้อสังเกตสั้น ๆ"]}`;
 const Sum = z.object({
   summary: z.array(z.string()), analysis: z.array(z.string()), risks: z.array(z.string()).optional().default([]),
-  plan: z.array(z.object({ issue: z.string(), action: z.string(), owner: z.string(), start: z.string(), due: z.string() })),
+  plan: z.array(z.object({ issue: z.string(), action: z.string(), owner: z.string(), start: z.string(), due: z.string(), target: z.string().optional().default(""), ref: z.string().optional().default("") })),
   data_gaps: z.array(z.string()).optional().default([]),
 });
 const SUM_SHAPE = `ตอบเป็น JSON อย่างเดียว รูปแบบ:
-{"summary":["บทสรุปผู้บริหาร ข้อละ 1 ประโยค 4-7 ข้อ"],"analysis":["บทวิเคราะห์ 4-10 ข้อ"],"risks":["ความเสี่ยงต่อผู้ป่วย การตรวจ JCI หรือกฎหมาย"],"plan":[{"issue":"ประเด็น","action":"มาตรการ","owner":"ตำแหน่งผู้รับผิดชอบ","start":"YYYY-MM-DD","due":"YYYY-MM-DD"}],"data_gaps":["ข้อมูลที่ยังขาด"]}
+{"summary":["บทสรุปผู้บริหาร ข้อละ 1 ประโยค 4-7 ข้อ"],"analysis":["บทวิเคราะห์ 4-10 ข้อ"],"risks":["ความเสี่ยงต่อผู้ป่วย การตรวจ JCI หรือกฎหมาย"],"plan":[{"issue":"ประเด็น","action":"มาตรการ","owner":"ตำแหน่งผู้รับผิดชอบ","start":"YYYY-MM-DD","due":"YYYY-MM-DD","target":"เป้าหมาย (KPI) ที่วัดได้ เช่น TSS ไม่เกิน 20 mg/L","ref":"รหัส JCI FMS ME และกฎหมายที่แผนนี้ตอบ"}],"data_gaps":["ข้อมูลที่ยังขาด"]}
 start / due เป็นวันที่ ค.ศ. รูปแบบ YYYY-MM-DD เริ่มไม่ก่อนวันนี้ แผน 3-8 ข้อ`;
 
 // Google retires model names over time, so the model is picked from the key's own model list when the preferred one is gone.
@@ -174,6 +174,8 @@ Deno.serve(async (req) => {
 - sampled_on คือวันที่เก็บตัวอย่าง เป็น ค.ศ. (พ.ศ. ลบ 543) ถ้าไม่มีวันที่ในไฟล์ ให้ใช้วันที่ 1 ของเดือน ${m}
 - ไฟล์อาจมีหลายเดือน (เช่นตาราง ม.ค.-ธ.ค.) ให้แยกแถวตามเดือนพร้อมวันที่ของแต่ละเดือน
 - ค่าสถิติสรุป (ต่ำสุด สูงสุด เฉลี่ย % การบำบัด) ไม่ใช่ผลตรวจ ห้ามใส่เป็นแถว
+- รายงานน้ำเสียมักแยกหน้าละจุด: น้ำเสียก่อนบำบัด / น้ำเสียเข้าระบบ = Influent, น้ำเสียหลังบำบัด / น้ำทิ้ง = Effluent, บ่อเติมอากาศ = Aeration tank (MLSS) แต่ละหน้ามีเลขที่รายงานของตัวเอง ให้ใส่ report_no ของหน้านั้นในแต่ละแถว
+- ช่องมาตรฐานคุณภาพน้ำในรายงานไม่ใช่ผลตรวจ ห้ามใส่เป็นแถว · ผลสังเกตลักษณะตัวอย่าง (เช่น สี ตะกอน) ให้เขียนใน note ของแถว MLSS หรือแถวแรกของจุดเก็บนั้น ขึ้นต้นว่า "ลักษณะตัวอย่าง: " · report_no ของแต่ละแถวให้ใช้เลขที่รายงานหรือรหัสตัวอย่างของหน้านั้น
 ${FULL}`;
       const user = `เดือนของไฟล์นี้: ${m} · หมวด: ${F.grp} · ห้องปฏิบัติการที่ผู้แนบระบุ: ${F.lab ?? "-"}
 แบบฟอร์มกลาง (รายการที่จับคู่ได้):\n${JSON.stringify(tpl)}
@@ -193,17 +195,19 @@ ${text ? `\nเนื้อหาไฟล์ "${F.file_name}" (แปลงเ�
     }
 
     if (body.step === "summary") {
-      const h = body.hospital_id ?? null, grp = String(body.grp ?? "ALL"), year = +body.year;
+      const h = body.hospital_id ?? null, grp = String(body.grp ?? "ALL"), year = +body.year, month = body.month ? +body.month : null;
+      if (month !== null && !(month >= 1 && month <= 12)) return out({ error: "เดือนไม่ถูกต้อง" }, 400);
       if (h) { const ok = await db.rpc("water_can_record", { h }); if (!ok.data) return out({ error: "ไม่มีสิทธิ์ของโรงพยาบาลนี้" }, 403); }
       else { const ex = await db.rpc("am_exec"); if (!ex.data) return out({ error: "สรุป 12 โรงทำได้เฉพาะผู้บริหาร" }, 403); }
       const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
       const sys = `คุณคือผู้เชี่ยวชาญระบบน้ำโรงพยาบาลและแผนจัดการน้ำตาม JCI 8th FMS.08.04 เขียนบทสรุปผู้บริหารและบทวิเคราะห์ผลตรวจคุณภาพน้ำ
-${h ? "ของโรงพยาบาลหนึ่งโรง" : "ของโรงพยาบาลในเครือ 12 โรง เปรียบเทียบระหว่างโรง ชี้โรงที่ต้องเร่งแก้ และสิ่งที่ส่วนกลางควรทำ"} สำหรับผู้บริหารและ Owner
-ค่ามาตรฐาน: น้ำทิ้งตามประกาศกระทรวงทรัพยากรธรรมชาติฯ มาตรฐานน้ำทิ้งจากอาคารประเภท ก (พ.ศ. 2548) · น้ำดื่มตามประกาศกระทรวงสาธารณสุข ฉบับที่ 61 · น้ำประปาตามเกณฑ์กรมอนามัย · น้ำ RO ไตเทียมตาม ISO 23500 · Legionella ตาม HSE ACOP L8
+${month ? "ประจำเดือน (เน้นผลของเดือนนี้ เทียบเดือนก่อนและค่าเฉลี่ยของปี บอกว่าดีขึ้นหรือแย่ลง) " : "ทั้งปี "}${h ? "ของโรงพยาบาลหนึ่งโรง" : "ของโรงพยาบาลในเครือ 12 โรง เปรียบเทียบระหว่างโรง ชี้โรงที่ต้องเร่งแก้ และสิ่งที่ส่วนกลางควรทำ"} สำหรับผู้บริหารและ Owner
+ค่ามาตรฐาน: น้ำทิ้งตามประกาศกระทรวงทรัพยากรธรรมชาติและสิ่งแวดล้อม เรื่อง กำหนดมาตรฐานควบคุมการระบายน้ำทิ้งจากอาคารบางประเภทและบางขนาด พ.ศ. 2567 · น้ำดื่มตามประกาศกระทรวงสาธารณสุข ฉบับที่ 61 · น้ำประปาตามเกณฑ์กรมอนามัย · น้ำ RO ไตเทียมตาม ISO 23500 · Legionella ตาม HSE ACOP L8
+การอ้างอิง (บังคับ): ทุกข้อใน summary, analysis และ risks ที่พูดถึงผลนอกเกณฑ์ ผลเฝ้าระวัง ค่าที่แตะเพดานเกณฑ์ การตรวจไม่ครบความถี่ หรือการแก้ไข ต้องปิดท้ายด้วย "(อ้างอิง: JCI FMS.xx.xx ME n · ชื่อกฎหมายหรือมาตรฐาน)" และทุกข้อของ plan ต้องกรอก target และ ref ใช้เฉพาะรหัส ME และกฎหมายที่อยู่ใน references หรือ reference ของข้อมูลที่ให้ ห้ามแต่งรหัส ME หรือชื่อกฎหมายเอง
 ทุกตัวเลขต้องมาจากข้อมูลที่ให้เท่านั้น ห้ามแต่ง ถ้าข้อมูลไม่พอให้ระบุใน data_gaps · ผู้รับผิดชอบเขียนเป็นตำแหน่ง ไม่ใส่ชื่อคน · วันนี้คือ ${today}
 ${FULL}`;
-      const S = await obj(sys, SUM_SHAPE, `หมวด: ${grp} · ปี ค.ศ. ${year} (พ.ศ. ${year + 543})\nข้อมูลที่ระบบคำนวณแล้ว (JSON):\n${JSON.stringify(body.input ?? {}).slice(0, 60000)}`, Sum);
-      const ins = await db.from("water_ai").insert({ hospital_id: h, grp, year, report: S, model: model(), created_by: u.user.id }).select("id,created_at").single();
+      const S = await obj(sys, SUM_SHAPE, `หมวด: ${grp} · ${month ? `เดือนที่ ${month} ` : ""}ปี ค.ศ. ${year} (พ.ศ. ${year + 543})\nข้อมูลที่ระบบคำนวณแล้ว (JSON):\n${JSON.stringify(body.input ?? {}).slice(0, 60000)}`, Sum);
+      const ins = await db.from("water_ai").insert({ hospital_id: h, grp, year, month, report: S, model: model(), created_by: u.user.id }).select("id,created_at").single();
       if (ins.error) throw ins.error;
       return out({ report: S, model: model(), id: ins.data.id, created_at: ins.data.created_at });
     }
