@@ -803,21 +803,34 @@
     const parts = Office.zip(Object.entries(files).map(([name, data]) => ({ name, data })));
     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob(parts, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })),
       download: `สรุปผลการตรวจวัดคุณภาพน้ำเสีย_${hosp().code || ""}_${D.YT}.xlsx` });
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    document.body.appendChild(a); a.click(); a.remove();
+    return { url: a.href, name: a.download };
   }
   // the AI texts are written again when results were saved after the last AI run
+  // the wait message and the result sit beside the button itself (the AI box is far up the page)
   $("#wcV4").onclick = guard(async () => {
+    const btn = $("#wcV4"), msg = $("#wcV4Msg"), say = t => { msg.textContent = t; }, label = btn.textContent;
     const D = catData("WASTE", { points, plans, results, actions, Y: $("#cY").value, pid: null, tt: "", hcode: hosp().code || "" });
     if (!D.res.length) throw new Error("ยังไม่มีผลตรวจน้ำเสียในปีที่เลือก");
-    let rep = v4Report(D.Y); const newest = D.res.reduce((m, r) => r.created_at > m ? r.created_at : m, "");
-    if ((!rep || rep.created_at < newest) && canRec) {
-      $("#cAiMsg").textContent = "AI กำลังเขียนข้อความในรายงานแบบ v4 (ประมาณ 20-60 วินาที)";
-      try { const F = v4Fig(D), r = await aiCall({ step: "summary", layout: "ww4", hospital_id: hosp().id, grp: "WASTE", year: +D.Y,
-          input: { ...aiInputOf(D), ww4_figures: { period: F.period, compliance_pct: F.comp, months_pass: F.ok, months_tested: F.tm, ranges: F.ranges, next_quarter: F.next_quarter, labs: F.labs } } }, $("#cAiMsg"));
-        rep = { hospital_id: hosp().id, grp: "WASTE", year: +D.Y, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() }; aiReps.unshift(rep); rCatAi(); $("#cAiMsg").textContent = "เสร็จแล้ว"; }
-      catch (e) { $("#cAiMsg").textContent = ""; toast(`AI เขียนข้อความไม่สำเร็จ: ${errText(e)} · ไฟล์ใช้ข้อความที่ระบบคำนวณแทน`, true); }
-    }
-    await v4Build(D, rep && rep.report);
+    btn.disabled = true; btn.textContent = "⏳ กำลังสร้างไฟล์ v4...";
+    try {
+      let rep = v4Report(D.Y); const newest = D.res.reduce((m, r) => r.created_at > m ? r.created_at : m, "");
+      if ((!rep || rep.created_at < newest) && canRec) {
+        say("AI กำลังเขียนข้อความในรายงาน ใช้เวลาประมาณ 1 นาที กรุณารอ ไฟล์จะดาวน์โหลดเองเมื่อเสร็จ");
+        try { const F = v4Fig(D), body = { step: "summary", layout: "ww4", hospital_id: hosp().id, grp: "WASTE", year: +D.Y,
+            input: { ...aiInputOf(D), ww4_figures: { period: F.period, compliance_pct: F.comp, months_pass: F.ok, months_tested: F.tm, ranges: F.ranges, next_quarter: F.next_quarter, labs: F.labs } } };
+          let r = await aiCall(body, msg);
+          // the AI sometimes leaves out the v4 texts: ask once more before falling back to the computed texts
+          if (!(r.report && r.report.ww4)) { say("AI ยังเขียนข้อความแบบ v4 ไม่ครบ กำลังให้เขียนใหม่อีกครั้ง กรุณารอ"); const r2 = await aiCall(body, msg); if (r2.report && r2.report.ww4) r = r2; }
+          rep = { hospital_id: hosp().id, grp: "WASTE", year: +D.Y, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() }; aiReps.unshift(rep); rCatAi(); }
+        catch (e) { toast(`AI เขียนข้อความไม่สำเร็จ: ${errText(e)} · ไฟล์ใช้ข้อความที่ระบบคำนวณแทน`, true); }
+      }
+      say("กำลังเติมข้อมูลลงแบบ v4...");
+      const f = await v4Build(D, rep && rep.report);
+      // the browser may hold back a download that starts long after the click, so a link to the same file stays here
+      msg.innerHTML = `ดาวน์โหลดแล้ว ถ้าไฟล์ไม่ขึ้น <a href="${f.url}" download="${esc(f.name)}">กดที่นี่เพื่อดาวน์โหลด ${esc(f.name)}</a>`;
+    } catch (e) { say(""); throw e; }
+    finally { btn.disabled = false; btn.textContent = label; }
   });
 
   // ---------- AI helper (edge function water-ai): retries when the AI is busy or slow ----------
