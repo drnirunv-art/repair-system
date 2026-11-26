@@ -26,7 +26,21 @@ const Sum = z.object({
   summary: z.array(z.string()), analysis: z.array(z.string()), risks: z.array(z.string()).optional().default([]),
   plan: z.array(z.object({ issue: z.string(), action: z.string(), owner: z.string(), start: z.string(), due: z.string(), target: z.string().optional().default(""), ref: z.string().optional().default("") })),
   data_gaps: z.array(z.string()).optional().default([]),
+  // only when the page asks for layout "ww4": the texts of the hospital's own yearly wastewater report (Excel v4)
+  ww4: z.object({
+    kpi: z.object({ compliance: z.string(), bod: z.string(), bod_removal: z.string(), tss: z.string(), tkn: z.string(), fecal: z.string(), mlss: z.string() }).partial().optional().default({}),
+    sec: z.array(z.object({ title: z.string(), text: z.string() })).optional().default([]),
+    plan: z.array(z.object({ issue: z.string(), action: z.string(), owner: z.string(), target: z.string().optional().default("") })).optional().default([]),
+    mlss_status: z.string().optional().default(""), obs_status: z.string().optional().default(""),
+  }).optional(),
 });
+const WW4_SHAPE = `
+และต้องมี "ww4" (ข้อความของรายงานน้ำเสียประจำปีแบบ v4 ของโรงพยาบาล ใช้ตัวเลขจาก ww4_figures และ items เท่านั้น เขียนเชิงวิศวกรรมแบบรายงานจริง):
+"ww4":{"kpi":{"compliance":"ผลการประเมินและข้อสังเกตเชิงวิศวกรรม ของอัตราการผ่านเกณฑ์มาตรฐานน้ำทิ้ง เช่น ผ่านเกณฑ์มาตรฐาน (Pass) — ไม่พบค่าเกินเกณฑ์กฎหมายตลอด 9 เดือน","bod":"ของ BOD น้ำทิ้ง เช่น ดีมาก (Excellent) — ค่าเฉลี่ยต่ำกว่าเกณฑ์มาตรฐานกว่า 60%","bod_removal":"ของ % BOD Removal","tss":"ของ TSS น้ำทิ้ง (ถ้าแตะหรือใกล้เพดานให้เขียน เฝ้าระวัง (Watchlist) — และบอกเดือน)","tkn":"ของ TKN น้ำทิ้ง","fecal":"ของ Fecal coliform น้ำทิ้ง","mlss":"ของ MLSS บ่อเติมอากาศ"},
+"sec":[{"title":"2.1 การปฏิบัติตามกฎหมายสิ่งแวดล้อม (xx% Compliance):","text":"..."},{"title":"2.2 ประสิทธิภาพการบำบัดทางชีวภาพและความสัมพันธ์ของ MLSS:","text":"..."},{"title":"2.3 จุดเฝ้าระวังเชิงรุก (Proactive Watchlist — ชื่อพารามิเตอร์):","text":"• ข้อที่ 1\n• ข้อที่ 2"},{"title":"2.4 แนวโน้มภาระมลพิษน้ำเสียเข้า (Influent Loading):","text":"..."}],
+"plan":[{"issue":"ประเด็นการควบคุม / เฝ้าระวัง","action":"มาตรการดำเนินการเชิงวิศวกรรม","owner":"ตำแหน่ง/หน่วยงาน เช่น วิศวกรรมอาคาร","target":"เป้าหมาย (KPI) สั้น ๆ เช่น TSS ≤ 20 mg/L"}],
+"mlss_status":"สถานะสั้น ๆ ของ MLSS ทั้งปี เช่น ฟื้นตัวดีใน Q3","obs_status":"สถานะสั้น ๆ ของลักษณะตัวอย่าง เช่น ปกติ"}
+sec ต้องมี 4 ข้อตามลำดับนี้เสมอ · plan ของ ww4 คือแผนของไตรมาสถัดไปตาม next_quarter 3-6 ข้อ · kpi ทุกช่องขึ้นต้นด้วยผลประเมินสั้น ๆ (Pass / ดีมาก (Excellent) / มีประสิทธิภาพสูง / เฝ้าระวัง (Watchlist) / ไม่ผ่านเกณฑ์) ตามด้วย — และเหตุผลพร้อมตัวเลข`;
 const SUM_SHAPE = `ตอบเป็น JSON อย่างเดียว รูปแบบ:
 {"summary":["บทสรุปผู้บริหาร ข้อละ 1 ประโยค 4-7 ข้อ"],"analysis":["บทวิเคราะห์ 4-10 ข้อ"],"risks":["ความเสี่ยงต่อผู้ป่วย การตรวจ JCI หรือกฎหมาย"],"plan":[{"issue":"ประเด็น","action":"มาตรการ","owner":"ตำแหน่งผู้รับผิดชอบ","start":"YYYY-MM-DD","due":"YYYY-MM-DD","target":"เป้าหมาย (KPI) ที่วัดได้ เช่น TSS ไม่เกิน 20 mg/L","ref":"รหัส JCI FMS ME และกฎหมายที่แผนนี้ตอบ"}],"data_gaps":["ข้อมูลที่ยังขาด"]}
 start / due เป็นวันที่ ค.ศ. รูปแบบ YYYY-MM-DD เริ่มไม่ก่อนวันนี้ แผน 3-8 ข้อ`;
@@ -206,7 +220,8 @@ ${month ? "ประจำเดือน (เน้นผลของเดื�
 การอ้างอิง (บังคับ): ทุกข้อใน summary, analysis และ risks ที่พูดถึงผลนอกเกณฑ์ ผลเฝ้าระวัง ค่าที่แตะเพดานเกณฑ์ การตรวจไม่ครบความถี่ หรือการแก้ไข ต้องปิดท้ายด้วย "(อ้างอิง: JCI FMS.xx.xx ME n · ชื่อกฎหมายหรือมาตรฐาน)" และทุกข้อของ plan ต้องกรอก target และ ref ใช้เฉพาะรหัส ME และกฎหมายที่อยู่ใน references หรือ reference ของข้อมูลที่ให้ ห้ามแต่งรหัส ME หรือชื่อกฎหมายเอง
 ทุกตัวเลขต้องมาจากข้อมูลที่ให้เท่านั้น ห้ามแต่ง ถ้าข้อมูลไม่พอให้ระบุใน data_gaps · ผู้รับผิดชอบเขียนเป็นตำแหน่ง ไม่ใส่ชื่อคน · วันนี้คือ ${today}
 ${FULL}`;
-      const S = await obj(sys, SUM_SHAPE, `หมวด: ${grp} · ${month ? `เดือนที่ ${month} ` : ""}ปี ค.ศ. ${year} (พ.ศ. ${year + 543})\nข้อมูลที่ระบบคำนวณแล้ว (JSON):\n${JSON.stringify(body.input ?? {}).slice(0, 60000)}`, Sum);
+      const ww4 = body.layout === "ww4" && grp === "WASTE" && !month && !!h;
+      const S = await obj(sys, SUM_SHAPE + (ww4 ? WW4_SHAPE : ""), `หมวด: ${grp} · ${month ? `เดือนที่ ${month} ` : ""}ปี ค.ศ. ${year} (พ.ศ. ${year + 543})\nข้อมูลที่ระบบคำนวณแล้ว (JSON):\n${JSON.stringify(body.input ?? {}).slice(0, 60000)}`, Sum);
       const ins = await db.from("water_ai").insert({ hospital_id: h, grp, year, month, report: S, model: model(), created_by: u.user.id }).select("id,created_at").single();
       if (ins.error) throw ins.error;
       return out({ report: S, model: model(), id: ins.data.id, created_at: ins.data.created_at });

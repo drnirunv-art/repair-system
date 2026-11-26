@@ -392,6 +392,15 @@
       L.map(t => `<tr><td>${GRP[grpOf(t.system)]}</td><td>${esc(SYS[t.system] || t.system)}</td><td>${ttPill(t)}</td><td>${esc(t.code)}</td><td>${esc(t.param)}</td><td>${esc(crit(t))}</td><td>${FREQ[t.freq]}</td><td>${esc(t.ref || "")}</td><td>${esc(t.method || "")}</td><td>${esc(t.note || "")}</td></tr>`).join("");
   }
 
+  const stdList = () => tpl.filter(t => (!grpF() || grpOf(t.system) === grpF()) && (!sysF() || t.system === sysF()) && (!ttF() || t.test_type === ttF()))
+    .sort((a, b) => Object.keys(SYS).indexOf(a.system) - Object.keys(SYS).indexOf(b.system) || (a.test_type === "bio" ? 0 : 1) - (b.test_type === "bio" ? 0 : 1) || a.sort - b.sort);
+  $("#sX").onclick = () => { const L = stdList();
+    Office.table(fileName("ค่ามาตรฐาน"), ["กลุ่มน้ำ", "ระบบน้ำ", "ชนิดการตรวจ", "รหัส", "รายการ", "เกณฑ์", "ความถี่", "อ้างอิง", "วิธีตรวจ", "เมื่อนอกเกณฑ์"],
+      L.map(t => [GRP[grpOf(t.system)], SYS[t.system] || t.system, TT[t.test_type] || "", t.code, t.param, crit(t), FREQ[t.freq], t.ref || "", t.method || "", t.note || ""]),
+      { title: "ค่ามาตรฐานกลางของการตรวจคุณภาพน้ำ (แบบฟอร์มกลาง 12 โรง)", org: hosp().name, period: period(),
+        findings: [`ค่ามาตรฐานกลาง ${L.length} รายการ: ตรวจเชื้อ ${L.filter(t => t.test_type === "bio").length} · สารเคมี ${L.filter(t => t.test_type !== "bio").length}`],
+        notes: ["แต่ละโรงปรับเกณฑ์และความถี่ของตนเองได้ที่แท็บทะเบียนจุดตรวจ ให้ตรงกับแผนจัดการน้ำที่คณะกรรมการอนุมัติ"] }); };
+
   // ---------- 12 โรง ----------
   let ov = [];
   async function rAll() {
@@ -604,7 +613,7 @@
       ["% BOD Removal เฉลี่ย (เป้ามากกว่า 85%)", bod && bod.avg != null ? bod.avg + "%" : "-"], ["MLSS เฉลี่ย (ช่วงควบคุม 1,500–3,000)", u(by("WA01"))]]; };
   let catCur = "DRINK";
   function rCat(g) {
-    catCur = g; catYears(); catPoints(g); rCatAi(); const D = catData(g), T = catTexts(D), pass = D.res.filter(r => r.status !== "fail").length;
+    catCur = g; catYears(); catPoints(g); rCatAi(); $("#wcV4").hidden = g !== "WASTE"; const D = catData(g), T = catTexts(D), pass = D.res.filter(r => r.status !== "fail").length;
     $("#cTitle").textContent = `หมวด ${CAT_NO[g]} ${GRP[g]} · สรุปผลการตรวจวัดคุณภาพน้ำ ${hosp().name || ""} ปี พ.ศ. ${D.YT}`;
     $("#cSub").textContent = `ค่ามาตรฐานอ้างอิง: ${CAT_LAW[g]}`;
     $("#cRef").innerHTML = `<tr>${REF_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + refRows(g).map(r => `<tr>${r.map((c, i) => `<td>${i === 1 ? `<b>${esc(c)}</b>` : esc(c)}</td>`).join("")}</tr>`).join("");
@@ -661,6 +670,156 @@
         ...(gs ? [{ title: "แผนการแก้ไข (Gantt)", svg: gs, note: "น้ำเงิน = กำลังแก้ไข · แดง = เลยกำหนด · เขียว = ปิดแล้ว" }] : [])] };
     return Office.pptx(catName("บทสรุปผู้บริหาร"), d).catch(e => toast(errText(e), true)); };
 
+  // ---------- Excel แบบรายงานน้ำเสีย v4: the hospital's own yearly wastewater workbook (3 sheets, formulas and 4 charts come from
+  // the template file assets/water-ww-v4.xlsx); the page fills the lab values of every month and the AI writes the texts ----------
+  const MON_FULL = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+  const MON_EN = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  // template rows of ตารางสรุปข้อมูล: [system, template code, row]
+  const V4_ROWS = [["WW_IN", ["WI01", "WI02", "WI03", "WI04", "WI05", "WI06", "WI07", "WI08", "WI09", "WI12", "WI10", "WI11"], 8, 6],
+    ["WW", ["WW02", "WW03", "WW10", "WW04", "WW11", "WW06", "WW12", "WW07", "WW05", "WW01", "WW08", "WW09"], 23, 21], ["WW_AER", ["WA01"], 38, 36]];
+  const V4_REM = { BOD: 41, COD: 42, "SS (TSS)": 43, TKN: 44 };
+  async function unzipAll(buf) {
+    const u = new Uint8Array(buf), dv = new DataView(u.buffer), out = {}; let e = u.length - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+    if (e < 0) throw new Error("แม่แบบ Excel เสียหาย");
+    let p = dv.getUint32(e + 16, true);
+    for (let n = dv.getUint16(e + 10, true); n > 0; n--) {
+      const method = dv.getUint16(p + 10, true), cs = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+      const name = new TextDecoder().decode(u.subarray(p + 46, p + 46 + nl)), st = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true), raw = u.subarray(st, st + cs);
+      out[name] = method === 0 ? raw.slice() : new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer());
+      p += 46 + nl + xl + cl;
+    }
+    return out;
+  }
+  // one worksheet XML: set cell values (keeping each cell's style), row heights, extra rows copied from a model row
+  function sheetEd(xmlText) {
+    const doc = new DOMParser().parseFromString(xmlText, "application/xml"), NS = doc.documentElement.namespaceURI, data = doc.getElementsByTagName("sheetData")[0];
+    const rowEl = r => [...data.children].find(x => +x.getAttribute("r") === r);
+    const ci = ref => { let n = 0; for (const ch of ref.replace(/\d+/g, "")) n = n * 26 + ch.charCodeAt(0) - 64; return n; };
+    const cell = ref => { const r = +ref.replace(/\D/g, ""), row = rowEl(r); if (!row) throw new Error("แม่แบบไม่มีแถว " + r);
+      let c = [...row.children].find(x => x.getAttribute("r") === ref); if (c) return c;
+      c = doc.createElementNS(NS, "c"); c.setAttribute("r", ref); const nx = [...row.children].find(x => ci(x.getAttribute("r")) > ci(ref)); row.insertBefore(c, nx || null); return c; };
+    const set = (ref, v) => { const c = cell(ref); while (c.firstChild) c.removeChild(c.firstChild); c.removeAttribute("t");
+      if (v == null || v === "") return;
+      if (typeof v === "number" && isFinite(v)) { c.setAttribute("t", "n"); const x = doc.createElementNS(NS, "v"); x.textContent = String(v); c.appendChild(x); return; }
+      c.setAttribute("t", "inlineStr"); const is = doc.createElementNS(NS, "is"), t = doc.createElementNS(NS, "t"); t.setAttribute("xml:space", "preserve"); t.textContent = String(v); is.appendChild(t); c.appendChild(is); };
+    const height = (r, ht) => { const row = rowEl(r); if (row && ht > (+row.getAttribute("ht") || 0)) { row.setAttribute("ht", String(ht)); row.setAttribute("customHeight", "1"); } };
+    const copyRow = (from, to) => { const src = rowEl(from), cp = src.cloneNode(true); cp.setAttribute("r", String(to));
+      [...cp.children].forEach(c => c.setAttribute("r", c.getAttribute("r").replace(/\d+$/, String(to)))); const nx = [...data.children].find(x => +x.getAttribute("r") > to); data.insertBefore(cp, nx || null); };
+    const merge = ref => { let m = doc.getElementsByTagName("mergeCells")[0]; const x = doc.createElementNS(NS, "mergeCell"); x.setAttribute("ref", ref); m.appendChild(x); m.setAttribute("count", String(m.children.length)); };
+    const dim = ref => { const d = doc.getElementsByTagName("dimension")[0]; if (d) d.setAttribute("ref", ref); };
+    const sty = (ref, fn) => { const c = cell(ref); c.setAttribute("s", String(fn(+c.getAttribute("s") || 0))); };
+    return { set, sty, height, copyRow, merge, dim, xml: () => new XMLSerializer().serializeToString(doc) };
+  }
+  // full text, never cut: a row grows with its text (Tahoma 10, width in Excel characters)
+  const v4Ht = (text, width, base) => Math.max(base, String(text || "").split("\n").reduce((n, l) => n + Math.max(1, Math.ceil(visLenW(l) / (width * 0.95))), 0) * 16 + 6);
+  const visLenW = t => String(t).replace(/[ัิ-ฺ็-๎]/g, "").length;
+  const v4Date = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${+d.slice(0, 4) + 543}` : "";
+  const v4Sid = r => (String(r.note || "").match(/รหัสตัวอย่าง\s*([^\s·]+)/) || [])[1] || r.report_no || "";
+  // the value of one month as the lab wrote it: a number, or text such as <0.1, >16,000, ND, ไม่พบ
+  function v4Val(x, l) { if (!l.length) return null; const r = l[l.length - 1];
+    if (l.length > 1 && l.every(z => !z.qual && !z.val_text && z.value != null)) return r2(avgOf(l.map(z => +z.value)));
+    if (r.qual) return QUAL[r.qual];
+    if (r.val_text) return r.val_text === "ND" && /^(WI12|WW01)$/.test(x.pl.template_code) ? "ไม่พบ" : r.val_text;
+    return r.value == null ? null : +r.value; }
+  // สถานะการประเมิน of one row; values under the detection limit (<x) are not counted as near the limit
+  function v4St(x, sys) {
+    if (!x || !x.n) return "-";
+    const num = x.rs.filter(r => !r.qual && r.value != null && !/^</.test(r.val_text || "")).map(r => +r.value);
+    if (sys === "WW_IN") return x.rs.some(r => !r.qual && r.value != null && !r.val_text) ? "ข้อมูลน้ำเข้า" : "-";
+    if (!hasLim(x.pl)) return "-";
+    if (x.fail) return `ไม่ผ่านเกณฑ์ ${x.fail} ครั้ง`;
+    const pl = x.pl, mx = num.length ? Math.max(...num) : null, mn = num.length ? Math.min(...num) : null, both = pl.lo != null && pl.hi != null, gap = both ? (pl.hi - pl.lo) * 0.1 : 0;
+    const near = (pl.hi != null && mx != null && mx >= (both ? pl.hi - gap : 0.8 * pl.hi)) || (pl.lo != null && mn != null && mn <= (both ? +pl.lo + gap : 1.1 * pl.lo));
+    return near ? "ผ่าน (เฝ้าระวัง)" : "ผ่านเกณฑ์"; }
+  // cell colour follows the result: green = pass, amber = watch / fail (template styles 9/15 on sheet 1, 10/16 and 52/63 on sheet 2; grey influent rows stay grey)
+  const v4Warn = st => /ไม่ผ่าน|เฝ้าระวัง|ต่ำกว่าเป้าหมาย/.test(st || "");
+  const v4Sty1 = warn => s => (s === 9 || s === 15) ? (warn ? 15 : 9) : s;
+  const v4Sty2 = warn => s => (s === 10 || s === 16) ? (warn ? 16 : 10) : (s === 52 || s === 63) ? (warn ? 63 : 52) : s;
+  // figures for the AI and for the fixed cells
+  function v4Fig(D) {
+    const by = (s, c) => D.all.find(x => x.pt.system === s && x.pl.template_code === c), mons = MON.map((_, i) => D.all.some(x => x.cell[i].length));
+    const first = mons.indexOf(true), last = mons.lastIndexOf(true), n = mons.filter(Boolean).length;
+    const eff = D.all.filter(x => x.pt.system === "WW" && hasLim(x.pl)), em = MON.map((_, i) => eff.filter(x => x.cell[i].length));
+    const tm = em.filter(l => l.length).length, ok = em.filter((l, i) => l.length && !l.some(x => x.cell[i].some(r => r.status === "fail"))).length;
+    const rng = x => x && x.n ? `${x.minT} – ${x.maxT} ${(x.pl.unit || "").replace(/ mL$/, "mL")}`.trim() : "-";
+    const rem = D.removal.find(r => r.name === "BOD"), rv = rem ? rem.m.filter(v => v != null) : [];
+    let q = Math.floor(Math.max(last, 0) / 3) + 2, qy = D.YT; if (q > 4) { q = 1; qy++; }
+    const labs = [...new Set(D.res.map(r => r.lab).filter(Boolean))];
+    return { by, first, last, n, tm, ok, comp: tm ? Math.round(ok * 1000 / tm) / 10 : null, labs, q, qy,
+      period: first < 0 ? `ปี ${D.YT}` : `${MON_FULL[first]} – ${MON_FULL[last]} ${D.YT} (${n} เดือน)`,
+      ranges: { bod: rng(by("WW", "WW03")), bod_removal: rv.length ? `${Math.min(...rv)}% – ${Math.max(...rv)}%` : "-", tss: rng(by("WW", "WW04")), tkn: rng(by("WW", "WW05")), fecal: rng(by("WW", "WW09")), mlss: rng(by("WW_AER", "WA01")) },
+      next_quarter: `ไตรมาสที่ ${q} (${MON_FULL[(q - 1) * 3]} – ${MON_FULL[(q - 1) * 3 + 2]} ${qy})` };
+  }
+  const v4Kpi = (D, F) => { const by = F.by, k = (x, r) => x && x.n ? `เฉลี่ย ${num(x.avg)} ${x.pl.unit || ""} ช่วง ${r} · ${x.as.txt}` : "ยังไม่มีผลตรวจ", rem = D.removal.find(r => r.name === "BOD");
+    return { compliance: F.tm ? `${F.comp === 100 ? "ผ่านเกณฑ์มาตรฐาน (Pass)" : "ไม่ผ่านเกณฑ์บางเดือน"} — น้ำทิ้งผ่านเกณฑ์ ${F.ok} จาก ${F.tm} เดือน` : "ยังไม่มีผลตรวจน้ำทิ้ง",
+      bod: k(by("WW", "WW03"), F.ranges.bod), bod_removal: rem && rem.n ? `เฉลี่ย ${rem.avg}% ต่ำกว่าเป้าหมาย ${rem.low} เดือน จาก ${rem.n} เดือน` : "ยังคำนวณไม่ได้",
+      tss: k(by("WW", "WW04"), F.ranges.tss), tkn: k(by("WW", "WW05"), F.ranges.tkn), fecal: k(by("WW", "WW09"), F.ranges.fecal), mlss: k(by("WW_AER", "WA01"), F.ranges.mlss) }; };
+  const v4Report = Y => aiReps.find(r => r.hospital_id === hosp().id && r.grp === "WASTE" && +r.year === +Y && !r.month && r.report && r.report.ww4);
+  async function v4Build(D, R) {
+    const res = await fetch("assets/water-ww-v4.xlsx", { cache: "no-cache" }); if (!res.ok) throw new Error("เปิดแม่แบบรายงาน v4 ไม่ได้ (รหัส " + res.status + ")");
+    const files = await unzipAll(await res.arrayBuffer()), dec = new TextDecoder(), F = v4Fig(D), W = (R && R.ww4) || {}, K = { ...v4Kpi(D, F), ...(W.kpi || {}) }, H = hosp().name || hosp().code || "";
+    const rem = D.removal.find(r => r.name === "BOD"), w = (sy, c) => v4Warn(v4St(F.by(sy, c), sy));
+    const KW = { compliance: F.comp !== 100, bod: w("WW", "WW03"), bod_removal: !rem || !rem.n || rem.low > 0, tss: w("WW", "WW04"), tkn: w("WW", "WW05"), fecal: w("WW", "WW09"), mlss: w("WW_AER", "WA01") };
+    const T = catTexts(D), col = i => String.fromCharCode(68 + i); // D..O = ม.ค...ธ.ค.
+    // แผ่น 2 ตารางสรุปข้อมูล
+    const s2 = sheetEd(dec.decode(files["xl/worksheets/sheet2.xml"]));
+    s2.set("A1", `ตารางสรุปผลการวิเคราะห์คุณภาพน้ำเสีย ประจำปี ${D.YT} (มกราคม – ธันวาคม) | ${H}`);
+    for (const [sys, codes, row0, dRow] of V4_ROWS) {
+      const xs = codes.map(c => F.by(sys, c)), any = xs.filter(Boolean);
+      for (let i = 0; i < 12; i++) { const l = any.flatMap(x => x.cell[i]).sort((a, b) => a.sampled_on < b.sampled_on ? -1 : 1);
+        s2.set(col(i) + dRow, l.length ? [...new Set(l.map(r => v4Date(r.sampled_on)))].join(", ") : null);
+        s2.set(col(i) + (dRow + 1), l.length ? [...new Set(l.map(v4Sid).filter(Boolean))].join(", ") : null);
+        xs.forEach((x, k) => s2.set(col(i) + (row0 + k), x ? v4Val(x, x.cell[i]) : null));
+        if (sys === "WW_AER") { const b = D.blocks.find(b => b.pt.system === "WW_AER"); s2.set(col(i) + 39, b && b.obs[i].length ? b.obs[i].join(" / ") : null); } }
+      xs.forEach((x, k) => { const st = v4St(x, sys); s2.set("S" + (row0 + k), sys === "WW_AER" ? (W.mlss_status || st) : st); s2.sty("S" + (row0 + k), v4Sty2(v4Warn(st))); });
+      for (const r of [dRow, dRow + 1]) s2.set("S" + r, "-");
+    }
+    s2.set("S39", D.blocks.some(b => b.pt.system === "WW_AER" && b.obs.some(o => o.length)) ? (W.obs_status || "บันทึกตามใบแล็บ") : "-");
+    for (const [name, r] of Object.entries(V4_REM)) { const m = D.removal.find(x => x.name === name); s2.set("S" + r, !m || !m.n ? "-" : m.low ? `ต่ำกว่าเป้าหมาย ${m.low} เดือน` : "มีประสิทธิภาพสูง"); s2.sty("S" + r, v4Sty2(!!(m && m.low))); }
+    files["xl/worksheets/sheet2.xml"] = s2.xml();
+    // แผ่น 1 บทสรุปผู้บริหาร
+    const s1 = sheetEd(dec.decode(files["xl/worksheets/sheet1.xml"]));
+    s1.set("A1", `บทสรุปผู้บริหาร (EXECUTIVE SUMMARY) | รายงานผลการตรวจวัดคุณภาพน้ำเสีย ${H}`);
+    s1.set("A2", `ช่วงข้อมูล: ${F.period}  |  เกณฑ์อ้างอิง: ประกาศกระทรวงทรัพยากรธรรมชาติและสิ่งแวดล้อม พ.ศ. 2567${F.labs.length ? "  |  ห้องปฏิบัติการ: " + F.labs.join(", ") : ""}`);
+    s1.set("D5", `ค่าเฉลี่ย ${F.n} เดือน`); s1.set("D6", F.comp == null ? "-" : F.comp.toFixed(1) + "%"); s1.set("E6", `ผ่าน ${F.ok} / ${F.tm} เดือน`);
+    [["bod", 7], ["bod_removal", 8], ["tss", 9], ["tkn", 10], ["fecal", 11], ["mlss", 12]].forEach(([k, r]) => { s1.set("E" + r, F.ranges[k]); s1.set("G" + r, K[k]); s1.sty("G" + r, v4Sty1(KW[k])); s1.height(r, v4Ht(K[k], 54, 21)); });
+    s1.set("G6", K.compliance); s1.sty("G6", v4Sty1(KW.compliance)); s1.height(6, v4Ht(K.compliance, 54, 21));
+    const SEC = ["2.1 การปฏิบัติตามกฎหมายสิ่งแวดล้อม:", "2.2 ประสิทธิภาพการบำบัดทางชีวภาพและความสัมพันธ์ของ MLSS:", "2.3 จุดเฝ้าระวังเชิงรุก (Proactive Watchlist):", "2.4 แนวโน้มภาระมลพิษน้ำเสียเข้า (Influent Loading):"];
+    const fb = [T.find.join(" "), D.removal.map(r => `% การบำบัด ${r.name} เฉลี่ย ${r.avg ?? "-"}% (เป้าหมายมากกว่า ${r.target}%)`).join(" · "), T.anal.join("\n"), ""];
+    SEC.forEach((t, i) => { const s = (W.sec || [])[i] || {}, txt = s.text || fb[i]; s1.set("A" + (15 + i * 2), s.title || t); s1.set("A" + (16 + i * 2), txt); s1.height(16 + i * 2, v4Ht(txt, 152, 21)); });
+    s1.set("A24", `3. แผนปฏิบัติการเชิงวิศวกรรมสำหรับ${F.next_quarter}`);
+    const P = (W.plan || []).length ? W.plan : ((R && R.plan) || []).map(p => ({ issue: p.issue, action: p.action, owner: p.owner, target: p.target || "" }));
+    for (let i = 4; i < P.length; i++) { s1.copyRow(29, 26 + i); s1.merge(`B${26 + i}:C${26 + i}`); s1.merge(`D${26 + i}:G${26 + i}`); }
+    if (P.length > 4) s1.dim(`A1:I${25 + P.length}`);
+    for (let i = 0; i < Math.max(4, P.length); i++) { const p = P[i], r = 26 + i;
+      s1.set("A" + r, p ? i + 1 : null); s1.set("B" + r, p ? p.issue : null); s1.set("D" + r, p ? p.action : null); s1.set("H" + r, p ? p.owner : null); s1.set("I" + r, p ? p.target : null);
+      if (p) s1.height(r, Math.max(v4Ht(p.action, 72, 34), v4Ht(p.issue, 36, 34), v4Ht(p.target, 18, 34), v4Ht(p.owner, 18, 34))); }
+    files["xl/worksheets/sheet1.xml"] = s1.xml();
+    // แผ่น 3 Dashboard (ตัวเลขและกราฟคำนวณจากสูตรเมื่อเปิดไฟล์)
+    const s3 = sheetEd(dec.decode(files["xl/worksheets/sheet3.xml"]));
+    s3.set("A1", `WATER QUALITY MONITORING DASHBOARD (${F.first < 0 ? "" : `${MON_EN[F.first]} – ${MON_EN[F.last]} `}${D.YT})  |  ${H}`);
+    s3.set("A5", F.comp == null ? "-" : F.comp.toFixed(1) + "%"); s3.set("A6", F.tm && F.ok === F.tm ? `ผ่านครบ ${F.ok} / ${F.tm} เดือน` : `ผ่าน ${F.ok} / ${F.tm} เดือน`); s3.set("J6", `ค่าเฉลี่ย ${F.n} เดือน`);
+    files["xl/worksheets/sheet3.xml"] = s3.xml();
+    const parts = Office.zip(Object.entries(files).map(([name, data]) => ({ name, data })));
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob(parts, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })),
+      download: `สรุปผลการตรวจวัดคุณภาพน้ำเสีย_${hosp().code || ""}_${D.YT}.xlsx` });
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  // the AI texts are written again when results were saved after the last AI run
+  $("#wcV4").onclick = guard(async () => {
+    const D = catData("WASTE", { points, plans, results, actions, Y: $("#cY").value, pid: null, tt: "", hcode: hosp().code || "" });
+    if (!D.res.length) throw new Error("ยังไม่มีผลตรวจน้ำเสียในปีที่เลือก");
+    let rep = v4Report(D.Y); const newest = D.res.reduce((m, r) => r.created_at > m ? r.created_at : m, "");
+    if ((!rep || rep.created_at < newest) && canRec) {
+      $("#cAiMsg").textContent = "AI กำลังเขียนข้อความในรายงานแบบ v4 (ประมาณ 20-60 วินาที)";
+      try { const F = v4Fig(D), r = await aiCall({ step: "summary", layout: "ww4", hospital_id: hosp().id, grp: "WASTE", year: +D.Y,
+          input: { ...aiInputOf(D), ww4_figures: { period: F.period, compliance_pct: F.comp, months_pass: F.ok, months_tested: F.tm, ranges: F.ranges, next_quarter: F.next_quarter, labs: F.labs } } }, $("#cAiMsg"));
+        rep = { hospital_id: hosp().id, grp: "WASTE", year: +D.Y, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() }; aiReps.unshift(rep); rCatAi(); $("#cAiMsg").textContent = "เสร็จแล้ว"; }
+      catch (e) { $("#cAiMsg").textContent = ""; toast(`AI เขียนข้อความไม่สำเร็จ: ${errText(e)} · ไฟล์ใช้ข้อความที่ระบบคำนวณแทน`, true); }
+    }
+    await v4Build(D, rep && rep.report);
+  });
+
   // ---------- AI helper (edge function water-ai): retries when the AI is busy or slow ----------
   async function aiCall(body, msgEl) {
     let data, error, msg;
@@ -679,6 +838,17 @@
   // ---------- แนบไฟล์ผลแล็บ · AI ----------
   const FGRP = { DRINK: "หมวด 1 น้ำกินดื่ม", USE: "หมวด 2 น้ำใช้", WASTE: "หมวด 3 น้ำเสีย", ALL: "หลายหมวด" };
   const FST = { uploaded: "แนบแล้ว ยังไม่ให้ AI อ่าน", read: "AI อ่านแล้ว รอตรวจและบันทึก", saved: "บันทึกผลแล้ว", error: "AI อ่านไม่สำเร็จ" };
+  // Excel of the lab files of the chosen year: one row per file, then every value read by the AI and whether it was saved
+  $("#iX").onclick = () => { const Y = $("#iY").value, L = wfiles.filter(f => f.month.startsWith(Y)).sort((a, b) => a.month < b.month ? -1 : a.month > b.month ? 1 : a.id - b.id);
+    const vals = L.flatMap(f => ((f.ai || {}).rows || []).map(r => { const pl = plOf(r.plan_id), saved = results.some(x => x.file_id === f.id && x.plan_id === r.plan_id);
+      return [dTH(f.month).replace(/^\d+\s/, ""), f.file_name, r.point_in_file || "", r.param_in_file || "", pl.id ? `${ptOf(pl.point_id).code || ""} · ${pl.param}` : "ไม่ได้จับคู่", r.sampled_on ? dTH(r.sampled_on) : "", r.value || "", pl.id ? crit(pl) : "", saved ? "บันทึกแล้ว" : "ยังไม่บันทึก", r.report_no || "", r.note || ""]; }));
+    Office.table(fileName(`ไฟล์ผลแล็บ_${+Y + 543}`), ["เดือนของผล", "หมวด", "ไฟล์", "ห้องปฏิบัติการ", "สถานะ", "ค่าที่ AI อ่าน", "บันทึกแล้ว (ค่า)", "อ่านโดย", "แนบเมื่อ"],
+      L.map(f => [dTH(f.month).replace(/^\d+\s/, ""), FGRP[f.grp], f.file_name, f.lab || (f.ai || {}).lab || "", FST[f.status] + (f.note ? " · " + f.note : ""), ((f.ai || {}).rows || []).length, f.saved_count || 0, f.ai_model || "", dTH(f.created_at)]),
+      { title: `ไฟล์ผลแล็บรายเดือน ปี พ.ศ. ${+Y + 543}`, org: hosp().name, period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`,
+        findings: [`ไฟล์ ${L.length} ไฟล์ · บันทึกผลแล้ว ${L.filter(f => f.status === "saved").length} ไฟล์ · รอตรวจและบันทึก ${L.filter(f => f.status === "read").length} ไฟล์ · อ่านไม่สำเร็จ ${L.filter(f => f.status === "error").length} ไฟล์`,
+          `ค่าที่ AI อ่านได้ ${vals.length} ค่า บันทึกแล้ว ${vals.filter(v => v[8] === "บันทึกแล้ว").length} ค่า`],
+        notes: ["รายละเอียดค่าที่ AI อ่านจากแต่ละไฟล์อยู่ในแผ่นงาน ค่าที่ AI อ่าน"],
+        extra: [{ name: "ค่าที่ AI อ่าน", header: 0, rows: [["เดือนของผล", "ไฟล์", "จุดในไฟล์", "รายการในไฟล์", "จับคู่กับแบบฟอร์มกลาง", "วันที่เก็บตัวอย่าง", "ค่าในไฟล์", "เกณฑ์", "สถานะ", "เลขที่รายงาน", "หมายเหตุ"], ...vals] }] }); };
   const extOf = n => (String(n).match(/\.([a-z0-9]+)$/i) || [, ""])[1].toLowerCase();
   // the text inside a .docx (word/document.xml) read in the browser, so the AI gets it as text
   async function docxText(file) {

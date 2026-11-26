@@ -132,7 +132,7 @@ window.Office = (() => {
     if (deckBuf) { deckBuf.push({ name, head, rows, opts }); return; }   // a PPT / Word / PDF button is asking: collect, build the deck afterwards
     const a = analyze(head, rows), title = opts.title || name.replace(/\.(csv|xlsx)$/i, "").replace(/-/g, " ");
     xlsx(name, [summarySheet({ title, org: opts.org, period: opts.period, findings: [...(opts.findings || []), ...a.findings], notes: opts.notes || [], figures: a.figures, groups: a.groups }),
-      { name: "ข้อมูล", rows: [head, ...rows], header: 0 }]);
+      { name: "ข้อมูล", rows: [head, ...rows], header: 0 }, ...(opts.extra || [])]);
   }
 
   let lib;
@@ -208,7 +208,7 @@ window.Office = (() => {
   // pages whose results so far had only an Excel button: PPT / Word / PDF beside it build an executive summary + analysis
   // from the very same rows the Excel file gets (the button's own handler runs; Office.table calls are collected, not saved)
   let deckBuf = null;
-  const TABLE_DECK = { "op.html": ["#sCsv", "#mCsv"], "ac.html": ["#uCsv", "#cCsv"], "gate.html": ["#x"], "survey.html": ["#vCsv"], "pmboard.html": ["#x", "#rx"], "staff.html": ["#dExport", "#qExport", "#wExport"], "training.html": ["#oX", "#mX", "#sX", "#pX"], "jci.html": ["#oX", "#tX", "#cX", "#iX", "#dX"], "energy.html": ["#yX", "#aX"], "water.html": ["#dX", "#hX", "#aX", "#rX", "#vX"] };
+  const TABLE_DECK = { "op.html": ["#sCsv", "#mCsv"], "ac.html": ["#uCsv", "#cCsv"], "gate.html": ["#x"], "survey.html": ["#vCsv"], "pmboard.html": ["#x", "#rx"], "staff.html": ["#dExport", "#qExport", "#wExport"], "training.html": ["#oX", "#mX", "#sX", "#pX"], "jci.html": ["#oX", "#tX", "#cX", "#iX", "#dX"], "energy.html": ["#yX", "#aX"], "water.html": ["#dX", "#hX", "#aX", "#rX", "#vX", "#iX", "#sX"] };
   function tableDeck(list) {
     const first = list[0], o = first.opts || {}, title = o.title || first.name.replace(/-/g, " "), many = list.length > 1;
     const d = { title, org: o.org, period: o.period, findings: [], kpis: [], analysis: [], sections: [], notes: [] };
