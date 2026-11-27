@@ -1081,7 +1081,9 @@
     { name: `AI แผนงาน${tag}`, header: 0, rows: [["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ", "เป้าหมาย (KPI)", "อ้างอิง JCI ME · กฎหมาย"], ...(R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due), p.target || "", p.ref || ""])] },
     ...(aiGantt(R) ? [{ name: `AI Gantt${tag}`, rows: [["แผนงานที่ AI เสนอ (Gantt)"]], styles: { 0: 2 }, svg: aiGantt(R) }] : [])];
   function rCatAi() { const a = aiOf(hosp().id, catCur, $("#cY").value); $("#cAi").innerHTML = a ? aiHtml(a.report, a.created_at, a.model) : `<p class="sub">ยังไม่มีบทสรุปจาก AI ของหมวดนี้ปีนี้ กดปุ่ม 🤖 เพื่อให้ AI อ่านผลทั้งปีแล้วเขียนบทสรุปผู้บริหาร บทวิเคราะห์ และแผนงาน</p>`;
-    $("#cAiBtn").hidden = !canRec; }
+    $("#cAiBtn").hidden = !canRec; $("#cAiTop").hidden = !canRec; }
+  // shortcut at the top of the หมวด tab: same as the 🤖 button further down, then jumps to its result
+  $("#cAiTop").onclick = () => { $("#cAiBtn").closest(".aibox").scrollIntoView({ behavior: "smooth", block: "start" }); $("#cAiBtn").click(); };
   $("#cAiBtn").onclick = guard(async () => { const D = catData(catCur); if (!D.res.length) throw new Error("ยังไม่มีผลตรวจของหมวดนี้ในปีที่เลือก");
     $("#cAiMsg").textContent = "AI กำลังอ่านผลทั้งปีและเขียนบทสรุป (ประมาณ 20-60 วินาที)";
     try { const r = await aiCall({ step: "summary", hospital_id: hosp().id, site: siteCur() || null, grp: catCur, year: +D.Y, input: aiInputOf(D) }, $("#cAiMsg"));
