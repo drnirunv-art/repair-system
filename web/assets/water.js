@@ -646,7 +646,7 @@
     $("#cChart").innerHTML = cl.length ? `<div class="charts">${cl.map(x => `<svg class="trend" viewBox="0 0 640 300" role="img" aria-label="กราฟ ${esc(x.pl.param)}">${monChart(x, 0, 0, 640, 300)}</svg>`).join("")}</div>` : `<p class="sub">ยังไม่มีผลตรวจที่เป็นตัวเลขในปีนี้</p>`;
     $("#cPlan").innerHTML = `<tr>${PLAN_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + (D.acts.length ? D.acts.map((p, i) => `<tr>${planRow(p, i).map((c, j) => `<td class="${j === 8 ? (p.a.status === "done" ? "ok" : p.a.due && p.a.due < today() ? "fail" : "warn") : ""}">${esc(String(c))}</td>`).join("")}</tr>`).join("")
       : `<tr><td colspan="9">ไม่มีผลนอกเกณฑ์ที่ต้องแก้ไขในปีนี้</td></tr>`);
-    rMonth(D);
+    rMonth(D); cTop();
     const gs = planGantt(D); $("#cGantt").innerHTML = gs ? `<p class="sub"><b>แผนการแก้ไข (Gantt)</b> จากวันที่พบถึงวันกำหนดเสร็จ · น้ำเงิน = กำลังแก้ไข · แดง = เลยกำหนด · เขียว = ปิดแล้ว</p><div class="tw">${gs.replace("<svg ", '<svg class="trend" ')}</div>` : "";
   }
   ["#cY", "#cPt"].forEach(s => $(s).onchange = () => rCat(catCur));
@@ -1083,7 +1083,7 @@
     { name: `AI แผนงาน${tag}`, header: 0, rows: [["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ", "เป้าหมาย (KPI)", "อ้างอิง JCI ME · กฎหมาย"], ...(R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due), p.target || "", p.ref || ""])] },
     ...(aiGantt(R) ? [{ name: `AI Gantt${tag}`, rows: [["แผนงานที่ AI เสนอ (Gantt)"]], styles: { 0: 2 }, svg: aiGantt(R) }] : [])];
   function rCatAi() { const a = aiOf(hosp().id, catCur, $("#cY").value); $("#cAi").innerHTML = a ? aiHtml(a.report, a.created_at, a.model) : `<p class="sub">ยังไม่มีบทสรุปจาก AI ของหมวดนี้ปีนี้ กดปุ่ม 🤖 เพื่อให้ AI อ่านผลทั้งปีแล้วเขียนบทสรุปผู้บริหาร บทวิเคราะห์ และแผนงาน</p>`;
-    $("#cAiBtn").hidden = !canRec; $("#cAiTop").hidden = !canRec; }
+    $("#cAiBtn").hidden = !canRec; $("#cAiTop").hidden = true; }
   // shortcut at the top of the หมวด tab: same as the 🤖 button further down, then jumps to its result
   $("#cAiTop").onclick = () => { $("#cAiBtn").closest(".aibox").scrollIntoView({ behavior: "smooth", block: "start" }); $("#cAiBtn").click(); };
   $("#cAiBtn").onclick = guard(async () => { const D = catData(catCur); if (!D.res.length) throw new Error("ยังไม่มีผลตรวจของหมวดนี้ในปีที่เลือก");
@@ -1163,6 +1163,20 @@
     $("#cMoAi").hidden = !canRec;
   }
   $("#cMo").onchange = () => rCat(catCur);
+  // every button of the หมวด tab in one place at the top (whole year + month); each one presses the original button further down
+  function cTop() {
+    const box = $("#cTop"), vis = b => b && !b.hidden, prox = (b, sc) => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bsmall\b/, ""); c.textContent = b.textContent;
+      c.onclick = () => { if (sc) $(sc).scrollIntoView({ behavior: "smooth", block: "start" }); b.click(); }; return c; };
+    const sib = id => { const b = $(id); return b ? [...b.parentElement.querySelectorAll("button")].filter(vis) : []; };
+    const yr = [[$("#cAiBtn"), "#cAi"], ...sib("#wcP").map(b => [b]), ...(catCur === "WASTE" && !$("#cV4").hidden ? [[$("#cV4Btn")]] : [])].filter(([b]) => vis(b) && b.id !== "wcV4");
+    const mo = [[$("#cMoAi"), "#cMoOut"], ...sib("#wmP").map(b => [b])].filter(([b]) => vis(b));
+    box.innerHTML = `<p><b>ปุ่มทั้งหมดของหมวดนี้</b> <span class="sub">(${esc(catOrg())} · ปี ${esc($("#cY").selectedOptions[0] ? $("#cY").selectedOptions[0].text : "")})</span></p>
+      <p class="sub">รายงานทั้งปี</p><div class="acts" id="cTopY"></div>
+      <div class="hsel"><label for="cMoTop">รายงานประจำเดือน</label><select id="cMoTop">${$("#cMo").innerHTML}</select></div><div class="acts" id="cTopM"></div>`;
+    $("#cMoTop").value = $("#cMo").value; $("#cMoTop").onchange = () => { $("#cMo").value = $("#cMoTop").value; rCat(catCur); };
+    yr.forEach(([b, sc]) => $("#cTopY").append(prox(b, sc))); mo.forEach(([b, sc]) => $("#cTopM").append(prox(b, sc)));
+    $("#cAiTop").hidden = true; box.hidden = !yr.length && !mo.length;
+  }
   const monthInput = (D, M, site = siteCur()) => ({ hospital: D.hcode, ...(siteOf(D.pts.find(siteOf)) ? { building: site || "รวมทุกอาคาร: " + [...new Set(D.pts.map(siteOf).filter(Boolean))].join(" / ") } : {}), group: GRP[D.g], month: `${MON[M.m]} ${D.YT}`, standard: CAT_LAW[D.g], references: refAi(D.g),
     items: M.rows.map(r => ({ point: `${r.x.pt.code} ${r.x.pt.name}`, item: r.x.pl.param, type: TT[r.x.pl.test_type], value: r.v, unit: r.x.pl.unit || "", standard: hasLim(r.x.pl) ? crit(r.x.pl) : "ไม่กำหนด", reference: refTag(r.x.pl, r.x.pt), result: moRow(r)[6], previous_month: r.prev ? `${r.prev.t} (${MON[r.prev.m]})` : null, year_avg: r.x.avg, year_max: r.x.maxT, times_out_this_year: r.x.fail })),
     removal_this_month: M.rem.filter(r => r.mv != null).map(r => ({ parameter: r.name, value: r.mv, target: r.target, year_avg: r.avg })),
