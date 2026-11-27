@@ -103,6 +103,25 @@
     TABS.filter(k => !k.startsWith("c_")).forEach(k => $("#tab-" + k).hidden = k !== cur); $("#tab-cat").hidden = !cur.startsWith("c_");
     if (cur.startsWith("c_")) { try { rCat(cur.slice(2)); } catch (e) { toast(errText(e), true); } return; }
     try { ({ imp: rImp, sum: rSum, due: rDue, rec: rRec, hist: rHist, act: rAct, reg: rReg, std: rStd, all: rAll })[cur](); } catch (e) { toast(errText(e), true); }
+    try { secTop(cur); } catch (e) { console.warn(e); }
+  }
+  // ดร.: every tab keeps its buttons and period pickers at the top. The original buttons stay where they were;
+  // the top box holds copies that press the original (and scroll to the result for AI buttons).
+  const TOPS = { sum: [["#oX"]], due: [["#dX"]], hist: [["#hX"]], reg: [["#rX"]], all: [["#vX", "", "ภาพรวม 12 โรง"], ["#vAiBtn", "#vAi", "ผลตรวจรายหมวด 12 โรง (ปี + หมวดที่เลือก)"], ["#vgX", "", ""]] };
+  function secTop(t) {
+    const sec = $("#tab-" + t), L = TOPS[t]; if (!sec || !L) return;
+    if (t === "all" && !sec.dataset.moved) { const h = $("#vY").closest(".hsel"); h.insertAdjacentHTML("afterbegin", `<b class="sub">ผลตรวจรายหมวด 12 โรง:</b> `); sec.prepend(h); sec.dataset.moved = 1; }
+    let box = sec.querySelector(".topbox");
+    if (!box) { box = document.createElement("div"); box.className = "aibox topbox"; const h = sec.querySelector(".hsel");
+      if (h && (h === sec.firstElementChild || h.parentElement === sec)) h.after(box); else sec.prepend(box); }
+    box.innerHTML = `<p><b>ปุ่มทั้งหมดของแท็บนี้</b></p>`;
+    L.forEach(([id, sc, cap]) => { const a = $(id); if (!a) return;
+      const bs = [...a.parentElement.querySelectorAll("button")];
+      if (cap) box.insertAdjacentHTML("beforeend", `<p class="sub"><b>${esc(cap)}</b></p>`);
+      let row = box.lastElementChild; if (!row || !row.classList.contains("acts") || cap) { row = document.createElement("div"); row.className = "acts"; box.append(row); }
+      bs.forEach(b => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bsmall\b/, ""); c.textContent = b.textContent;
+        const sync = () => { c.hidden = b.hidden; c.disabled = b.disabled; }; sync(); new MutationObserver(sync).observe(b, { attributes: true, attributeFilter: ["hidden", "disabled"] });
+        c.onclick = () => { if (sc) $(sc).scrollIntoView({ behavior: "smooth", block: "start" }); b.click(); }; row.append(c); }); });
   }
   $("#h").onchange = guard(async () => { await load(); show(cur); });
   function sysOpts() { const v = sysF(), ks = Object.keys(SYS).filter(k => !grpF() || grpOf(k) === grpF());
