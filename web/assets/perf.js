@@ -604,7 +604,7 @@
     const box = $("#aiBox"), R = AI.report; if (!R) { box.hidden = true; return; }
     box.hidden = false;
     box.innerHTML = `<h3>Action plan โดย AI 3 คน</h3>${ROLES}<p class="sub">ทำเมื่อ ${new Date(AI.at).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" })} · AI 3 ตรวจวน ${(AI.log || []).length} รอบ · ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
-      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p>` +
+      `<h3>บทสรุปผู้บริหาร ราย 2 สัปดาห์</h3><p>${esc(R.summary)}</p>` +
       (R.swot ? `<h3>SWOT ของงานวิศวกรรมรอบนี้</h3><div class="fish">${swotSvg(R.swot)}</div>` : `<p class="note">${esc(swotLines(R)[0])}</p>`) +
       ((R.kpi8 || []).length ? `<h3>KPI ตามสัญญา 8 หมวด: Action plan · วันทำเสร็จ</h3><div class="tw"><table class="pt"><thead><tr><th>หมวด</th><th>ผล</th><th>ข้อเสี่ยง</th><th>Action plan</th><th>ผู้รับผิดชอบ</th><th>ทำเสร็จ</th></tr></thead><tbody>${R.kpi8.map(x => `<tr><td>${esc(x.category)}</td><td>${esc(x.result)}</td><td>${esc(x.risk)}</td><td>${esc(x.action)}</td><td>${esc(x.owner)}</td><td>${esc(x.due)}</td></tr>`).join("")}</tbody></table></div>` : "") +
       `<h3>บทวิเคราะห์</h3><ul>${R.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
@@ -661,7 +661,7 @@
       ...(await planSlides("แผนเวลาถึงสิ้นเดือนธันวาคม (Gantt)", tlPlan(R))),
       { title: "การตรวจวนของ AI 3 และความเสี่ยง", head: ["หัวข้อ", "รายละเอียด"], chart: false, left: true, colW: [2.3, 10.0], fs: 12, rows: [...logRows().map(r => [r[0] + " " + r[1], r[2]]), ...R.risks.map((x, i) => [i ? "" : "ความเสี่ยง", x])] }]; }
   async function aiDeck() { const H = hosp(), R = AI.report;
-    return { title: `Action plan แก้ปัญหา (RCA 4M + 5 Why) ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${thd(meet())} · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)`,
+    return { title: `Action plan แก้ปัญหา ราย 2 สัปดาห์ (RCA 4M + 5 Why) ${H.code}`, org: H.name, period: `ประชุม Bi-Weekly Performance ${thd(meet())} · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)`,
       findings: [R.summary, ...swotNote(R)], lead: await swotLead(R, "SWOT ของงานวิศวกรรมรอบนี้"), kpis: [["งานค้างทั้งหมด", BL.rows.length], ["ค้างเกิน 60 วัน", BL.rows.filter(r => +r.age > 60).length], ["กลุ่มปัญหา", R.items.length], ["ขั้นตอนแก้ไข", R.items.reduce((s, it) => s + it.actions.length, 0)]],
       analysis: R.analysis, sections: await aiSlides(), notes: R.follow_up }; }
 
@@ -827,7 +827,7 @@
     if (j && j.status === "running") { box.hidden = false; box.innerHTML = `<h3>AI 3 คนกำลังวิเคราะห์ทั้งเดือน${esc(ymTh(MON.ym))}</h3>${ROLES}<ol>${(j.events || []).map(e => `<li>${esc(e.text)} ✓</li>`).join("")}<li>${esc(STEP_LAB(j))} … กำลังทำงาน</li></ol><p class="note">ปิดหน้านี้หรือไปทำอย่างอื่นได้ AI ทำงานต่อที่เซิร์ฟเวอร์ กลับมาเปิดแท็บนี้ (โรงและเดือนเดิม) เพื่อดูผล</p>`; return; }
     if (j && j.status === "error") { box.hidden = false; box.innerHTML = `<p class="note bad">AI วิเคราะห์ทั้งเดือนไม่สำเร็จ: ${esc(j.error || "")} · กดปุ่ม 🤖 อีกครั้ง</p>`; return; }
     if (!A.report) { box.hidden = true; return; }
-    box.hidden = false; box.innerHTML = `<h3>Action plan ทั้งเดือนโดย AI 3 คน</h3>${ROLES}<p class="sub">ทำเมื่อ ${esc(tsT(A.at))} น. · AI 3 ตรวจวน ${(A.log || []).length} รอบ · รายละเอียดเต็ม (SWOT, ก้างปลา 4M, 5 Why, Action plan, Gantt) อยู่ในไฟล์ PPT / Word / PDF / Excel ด้านล่าง</p><h3>บทสรุปผู้บริหาร</h3><p>${esc(A.report.summary)}</p>` +
+    box.hidden = false; box.innerHTML = `<h3>Action plan ทั้งเดือนโดย AI 3 คน</h3>${ROLES}<p class="sub">ทำเมื่อ ${esc(tsT(A.at))} น. · AI 3 ตรวจวน ${(A.log || []).length} รอบ · รายละเอียดเต็ม (SWOT, ก้างปลา 4M, 5 Why, Action plan, Gantt) อยู่ในไฟล์ PPT / Word / PDF / Excel ด้านล่าง</p><h3>บทสรุปผู้บริหาร รายเดือน</h3><p>${esc(A.report.summary)}</p>` +
       (A.report.swot ? `<div class="fish">${swotSvg(A.report.swot)}</div>` : "") + `<h3>บทวิเคราะห์</h3><ul>${A.report.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
   }
   $("#mAi").onclick = guard(async () => {
@@ -877,7 +877,7 @@
     allDeck.head = head;
   }
   function allDeck() { const n = s => allRows.filter(r => r[2] === s).length, bl = allRows.reduce((s, r) => s + (+r[4] || 0), 0), o = allRows.reduce((s, r) => s + (+r[5] || 0), 0);
-    return { title: "ประชุม Bi-Weekly Performance 12 โรงพยาบาล", org: "งานบริหารวิศวกรรมอาคาร", period: `ประชุม ${thd(meet())} 14:00–16:00 น.`,
+    return { title: "ประชุม Bi-Weekly Performance (ราย 2 สัปดาห์) 12 โรงพยาบาล", org: "งานบริหารวิศวกรรมอาคาร", period: `ประชุม ${thd(meet())} 14:00–16:00 น.`,
       findings: [`ส่งตรงเวลา ${n("ส่งตรงเวลา")} โรง · ส่งเลยเวลา ${n("ส่งเลยเวลา")} โรง · ร่าง ${n("ร่าง ยังไม่ส่ง")} โรง · ยังไม่มีรายงาน ${n("ยังไม่มีรายงาน")} โรง`, `งานค้างรวม ${bl} ใบ เกิน 60 วัน ${o} ใบ (เฉพาะโรงที่อัปโหลด Backlog)`],
       kpis: [["ส่งตรงเวลา", n("ส่งตรงเวลา")], ["งานค้างรวม", bl], ["เกิน 60 วัน", o]], analysis: allRows.filter(r => r[2] !== "ส่งตรงเวลา").map(r => `${r[0]} ${r[2]}`),
       sections: [{ title: "สถานะการส่งรายงาน 12 โรง", head: allDeck.head, rows: allRows.map(r => r.map(String)), chart: false, left: true, fs: 10 }], notes: ["Chief ส่งภายในเสาร์ 10:00 น. QC ตรวจ 10:00–12:00 น. ประชุม 14:00–16:00 น."] }; }

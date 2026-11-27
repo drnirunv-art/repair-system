@@ -163,7 +163,7 @@
     Office.table(`พลังงาน_${hosp().code || ""}_${Y() + 543}`, ["เดือน", "ไฟฟ้า kWh", "ค่าไฟ บาท", "Peak kW", "น้ำ m³", "ค่าน้ำ บาท", "ดีเซล ลิตร", "LPG กก.", "พื้นที่ ตร.ม.", "วันนอน", "ผู้ป่วยนอก", "kWh/ตร.ม./วัน", "m³/คน", "kWh/วันนอน", "kW/TR", "tCO₂e", "รีไซเคิล %", "8.1.1 เทียบปีก่อน %", "8.1.2 เทียบปีก่อน %", "8.1.3 เทียบปีก่อน %", "หมายเหตุ"],
       D.map(x => { const r = x.r || {}, r1 = v => v == null ? "" : Math.round(v * 1000) / 1000; return [TH_M[x.m - 1], ...["elec_kwh", "elec_cost", "peak_kw", "water_m3", "water_cost", "diesel_l", "lpg_kg", "area_m2", "patient_days", "opd_visits"].map(k => r[k] ?? ""),
         r1(x.I.eui), r1(x.I.wpu), r1(x.I.epd), r1(x.I.kwtr), r1(x.I.co2), r1(x.I.rec), r1(x.e1), r1(x.e2), r1(x.e3), r.note || ""]; }),
-      { title: "รายงานพลังงานและความยั่งยืน (GHI)", period: per, findings,
+      { title: "รายงานพลังงานและความยั่งยืน (GHI) รายปี", period: per, findings,
         notes: [`ค่า CO₂e ใช้ไฟฟ้า ${E.e} kgCO₂e/kWh · ดีเซล ${E.d}/ลิตร · LPG ${E.l}/กก. · น้ำ ${E.w}/m³ (ค่าตั้งต้น TGO ตรวจทานก่อนใช้ทางการ)`, "ผู้ใช้น้ำ = วันนอนผู้ป่วยใน + ผู้ป่วยนอก", "เทียบปีก่อน = ค่าต่อหน่วยปีก่อน ÷ ปีนี้ × 100"] }); };
 
   // ---------- ภาพรวม 12 โรง ----------
@@ -182,7 +182,7 @@
   $("#aX").onclick = () => { const withData = allRows.filter(a => a[2]);
     Office.table(`พลังงาน_12โรง_${Y() + 543}`, ["รหัส", "โรงพยาบาล", "เดือนที่กรอก", "ไฟฟ้า kWh", "น้ำ m³", "ค่าไฟ + ค่าน้ำ บาท", "kWh/ตร.ม./วัน", "kWh/วันนอน", "tCO₂e"],
       allRows.map(a => a.map((v, i) => i > 5 && v != null ? Math.round(v * 1000) / 1000 : v ?? "")),
-      { title: "รายงานพลังงาน ภาพรวม 12 โรง", period: `ปี ${Y() + 543}`, findings: [`มีข้อมูล ${withData.length} จาก ${allRows.length} โรง`, `ไฟฟ้ารวม ${nf(withData.reduce((s, a) => s + (a[3] || 0), 0))} kWh · ก๊าซเรือนกระจกรวม ${nf(withData.reduce((s, a) => s + (a[8] || 0), 0), 1)} tCO₂e`] }); };
+      { title: "รายงานพลังงาน รายปี ภาพรวม 12 โรง", period: `ปี ${Y() + 543}`, findings: [`มีข้อมูล ${withData.length} จาก ${allRows.length} โรง`, `ไฟฟ้ารวม ${nf(withData.reduce((s, a) => s + (a[3] || 0), 0))} kWh · ก๊าซเรือนกระจกรวม ${nf(withData.reduce((s, a) => s + (a[8] || 0), 0), 1)} tCO₂e`] }); };
 
   // ---------- ประชุม Energy รายสัปดาห์ (Chief sends by Saturday 10:00, meeting 14:00-16:00) ----------
   // Daily kWh = sum of OP usage (kWh) of meters the Chief marks "ไฟเข้า"; baseline = same month last year from the bill (energy_monthly).
@@ -548,7 +548,7 @@
     const R = A.report, li = a => `<ul>${(a || []).map(x => `<li>${esc(x)}</li>`).join("") || "<li>-</li>"}</ul>`, tb = (h, rows) => `<div class="tw"><table><tr>${h.map(x => `<th>${esc(x)}</th>`).join("")}</tr>${rows.map(r => `<tr>${r.map(x => `<td>${esc(x)}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${h.length}">-</td></tr>`}</table></div>`;
     box.hidden = false;
     box.innerHTML = `<h3>รายงานโดย AI 3 คน</h3>${AI_ROLES}<p class="sub">ทำเมื่อ ${new Date(A.at).toLocaleString("th-TH")} · ${A.rounds} รอบ · AI 3 ${A.approved ? "ให้ผ่าน" : "ยังมีข้อสังเกต (ดูตารางการตรวจ)"}${A.model ? ` · ${esc(A.model)}` : ""} · ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
-      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p>` +
+      `<h3>บทสรุปผู้บริหาร รายสัปดาห์</h3><p>${esc(R.summary)}</p>` +
       (R.swot ? `<h3>SWOT</h3><div class="fish">${swotSvg(R.swot)}</div>` : `<p class="note">${esc(swotLines(R)[0])}</p>`) +
       `<h3>บทวิเคราะห์ตัวเลข</h3>${li(R.analysis)}` +
       (R.rca ? `<h3>RCA ก้างปลา 4M</h3><div class="fish">${fishSvg("ปัญหา", R.rca.problem, aiRca(R))}</div><p><b>5 Why:</b></p><ol>${(R.rca.why5 || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><p><b>สาเหตุราก:</b> ${esc(R.rca.root_cause)}</p>` : "") +
@@ -590,7 +590,7 @@
     const fsv = R.rca ? fishSvg("ปัญหา", R.rca.problem, aiRca(R)) : null, fPic = fsv ? await pngOf(fsv) : null;
     const PR = aiPlanRows(R), ch = gChunks(PR);
     const gp = await Promise.all(ch.map(c => { const g = ganttSvg(c); return toPng(g.svg, g.w, g.h).then(img => ({ ...g, img })); }));
-    return { title: `รายงานพลังงานโดย AI 3 คน · ${H.code}`, org: H.name, period: `ประชุมวันเสาร์ที่ ${dTH($("#wk").value)} · ${C.month || ""}`,
+    return { title: `รายงานพลังงานรายสัปดาห์โดย AI 3 คน · ${H.code}`, org: H.name, period: `ประชุมวันเสาร์ที่ ${dTH($("#wk").value)} · ${C.month || ""}`,
       findings: [R.summary, ...swotNote(R), ...R.analysis.slice(0, 3)], lead: await swotLead(R), kpis: [["kWh เดือนนี้", nf(C.mtd)], ["เฉลี่ย kWh/วัน", nf(C.avg)], ["เป้าหมาย kWh/วัน", nf(C.tDay)], ["ปีก่อน kWh/วัน", nf(C.bDay)], ["ข้อมูลครบ", wScore(wData, C).pct + "%"], ["รอบที่ AI ตรวจ", String(A.rounds)]],
       analysis: R.analysis,
       sections: [...(fsv ? [{ title: "RCA ก้างปลา 4M", img: fPic, svg: fsv, note: "สาเหตุราก: " + R.rca.root_cause }] : []),

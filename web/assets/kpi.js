@@ -376,7 +376,7 @@
     const analysis = lost.map(x => `${x.it.code} ${x.it.title}: ได้ ${x.sc}/${x.it.max} ค่าจริง ${x.it.kind === "pass" ? (vals[x.it.code].v === "pass" ? "ผ่าน" : "ไม่ผ่าน") : vals[x.it.code].v + (x.it.kind === "pct" ? "%" : "")} เป้าหมาย ${x.it.target}`);
     const notes = lost.map(x => { const a = apOf(x.it.code); return `ข้อ ${x.it.code}: ${a.act.split("\n")[0].replace(/^1\. /, "")} (ผู้รับผิดชอบ ${a.owner} เสร็จ ${thd(a.due)}) ดูรายละเอียดใน Action plan`; });
     if (auto && auto.aging_over60 > 0) notes.push(`มีงานค้างเกิน 60 วัน ${auto.aging_over60} งาน ต้องปิดหรือกำหนดวันเสร็จ`);
-    return { title: `KPI ตามสัญญา (แนบ 4) ${H.code}`, org: H.name, period: mName(y, m), findings,
+    return { title: `KPI ตามสัญญา (แนบ 4) รายเดือน ${H.code}`, org: H.name, period: mName(y, m), findings,
       kpis: [["คะแนนรวม", t], ["ผลประเมิน", t >= 90 ? "ผ่าน" : "ไม่ผ่าน"], ["ส่วนลด", DISC.includes(H.code) ? disc(t) + "%" : "-"], ["ข้อที่เสียคะแนน", lost.length], ["ข้อที่ยังไม่มีค่า", blank.length]],
       analysis: analysis.length ? analysis : ["ทุกข้อที่กรอกได้คะแนนเต็ม"], notes,
       sections: [{ title: "คะแนนรายหมวด", head: ["หมวด", "ได้", "เต็ม"], rows: cats }, { title: "ข้อที่เสียคะแนน", head: ["ข้อ", "ได้", "เต็ม"], rows: lost.map(x => [x.it.code + " " + x.it.title.slice(0, 40), x.sc, x.it.max]), chart: false }] };
@@ -474,7 +474,7 @@
   function drawAi() {
     const R = aiRep, w = canWrite();
     $("#aiBox").innerHTML = `<h2>รายงาน Action plan โดย AI 3 คน</h2>${ROLES}<p class="meta">AI 1 เสนอ → AI 2 วิเคราะห์ทบทวน → AI 3 ตรวจ ถ้าสั่งแก้ AI 1 แก้และ AI 2 ทบทวนใหม่ วนจน AI 3 ให้ผ่าน (${aiLog.length} รอบ) แล้ว AI 3 เรียบเรียงรายงาน ตรวจทานก่อนนำเสนอทุกครั้ง</p>` +
-      `<h3>บทสรุปผู้บริหาร</h3><p>${esc(R.summary)}</p>` +
+      `<h3>บทสรุปผู้บริหาร รายเดือน</h3><p>${esc(R.summary)}</p>` +
       (R.swot ? `<h3>SWOT</h3><div class="fish">${swotSvg(R.swot)}</div>` : `<p class="note">${esc(swotLines(R)[0])}</p>`) +
       `<h3>บทวิเคราะห์</h3><ul>${R.analysis.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` +
       R.items.map(it => `<h3>ข้อ ${esc(it.code)} ${esc(it.title)}</h3><div class="fish">${fishSvg(it.code, it.title, aiRca(it))}</div>` +
@@ -510,7 +510,7 @@
   async function aiDeck() { const [y, m] = ym(), H = hosp(), R = aiRep, pics = await Promise.all(R.items.map(it => fishPng(fishSvg(it.code, it.title, aiRca(it)))));
     const PR = aiPlanRows(R), ch = gChunks(PR);
     const gp = await Promise.all(ch.map(c => { const g = ganttSvg(c); return toPng(g.svg, g.w, g.h).then(img => ({ ...g, img })); }));
-    return { title: `รายงาน Action plan แก้ไข KPI ${H.code}`, org: H.name, period: mName(y, m) + " · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)",
+    return { title: `รายงาน Action plan แก้ไข KPI รายเดือน ${H.code}`, org: H.name, period: mName(y, m) + " · จัดทำโดย AI 3 คน (เสนอ · วิเคราะห์ทบทวน · ตรวจสอบแก้ไข)",
       findings: [R.summary, ...swotNote(R)], lead: await swotLead(R), kpis: [["คะแนนรวม", r1(total())], ["ข้อที่ตก", R.items.length], ["ขั้นตอนแก้ไขทั้งหมด", R.items.reduce((s, it) => s + it.actions.length, 0)]],
       analysis: R.analysis,
       sections: [...gp.map((g, i) => ({ title: `แผนงานและวันวางเสร็จ (Gantt)${gp.length > 1 ? ` ${i + 1}/${gp.length}` : ""}`, img: g.img, imgR: g.h / g.w, svg: g.svg, note: `ทั้งหมด ${PR.length} ขั้นตอน วางเสร็จทั้งหมด ${thd(PR.reduce((m, p) => p.end > m ? p.end : m, PR[0].end))}` })),
@@ -548,7 +548,7 @@
       fails.length ? `ไม่ผ่านเกณฑ์ 90 จำนวน ${fails.length} โรง-เดือน: ${fails.join(", ")}` : "ทุกโรงทุกเดือนที่บันทึกผ่านเกณฑ์ 90"];
     const disc6 = fails.filter(f => DISC.includes(f.split(" ")[0]));
     if (disc6.length) findings.push(`มีผลต่อส่วนลดค่าบริการ ${disc6.length} โรง-เดือน (เฉพาะ 6 โรงที่สัญญามีข้อส่วนลด)`);
-    return { title: "KPI ตามสัญญา (แนบ 4) 12 โรงพยาบาล", org: "งานบริหารวิศวกรรมอาคาร", period: `ปี พ.ศ. ${Y + 543}`, findings,
+    return { title: "KPI ตามสัญญา (แนบ 4) รายปี 12 โรงพยาบาล", org: "งานบริหารวิศวกรรมอาคาร", period: `ปี พ.ศ. ${Y + 543}`, findings,
       kpis: got.map(r => [r.h.code, r.avg]),
       analysis: got.length ? [`คะแนนเฉลี่ยสูงสุด ${got[0].h.code} (${got[0].avg}) ต่ำสุด ${got[got.length - 1].h.code} (${got[got.length - 1].avg})`, ...R.filter(r => r.avg == null).slice(0, 1).map(() => `ยังไม่มีผล: ${R.filter(r => r.avg == null).map(r => r.h.code).join(", ")}`)] : ["ยังไม่มีคะแนนให้วิเคราะห์"],
       notes: fails.length ? ["ให้หัวหน้าแต่ละโรงระบุสาเหตุและแผนแก้ไขในช่องหมายเหตุของข้อที่เสียคะแนน"] : [],

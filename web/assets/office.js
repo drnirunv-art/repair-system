@@ -117,9 +117,13 @@ window.Office = (() => {
     figures.filter(f => /รวม$/.test(f[0])).slice(0, 4).forEach(f => findings.push(`${f[0].replace(": รวม", "")} รวม ${nf(f[1])}`));
     return { figures, groups, findings };
   }
+  // ดร. (2026-11-27): the executive summary heading says which period it covers (รายวัน / รายสัปดาห์ / รายเดือน / รายปี), read from the report title
+  const perTag = t => { t = String(t || "");
+    return /bi-?weekly|ราย ?2 ?สัปดาห์/i.test(t) ? " ราย 2 สัปดาห์" : /รายสัปดาห์|ประจำสัปดาห์|weekly/i.test(t) ? " รายสัปดาห์" : /รายเดือน|ประจำเดือน|monthly/i.test(t) ? " รายเดือน"
+      : /รายปี|ประจำปี|ทั้งปี|แผนปี|yearly|annual|master ?plan/i.test(t) ? " รายปี" : /รายวัน|ประจำวัน|วันนี้|daily/i.test(t) ? " รายวัน" : ""; };
   // summary sheet rows: title block, findings (given ones first), key figures, split tables
   function summarySheet({ title, org, period, findings = [], figures = [], groups = [], notes = [], sumHead }) {
-    const rows = [[title], [[org, period].filter(Boolean).join(" · ")], ["ออกรายงานเมื่อ " + now()], [], [sumHead || "บทสรุปผู้บริหาร"]], styles = { 0: 2, 4: 3 };
+    const rows = [[title], [[org, period].filter(Boolean).join(" · ")], ["ออกรายงานเมื่อ " + now()], [], [sumHead || "บทสรุปผู้บริหาร" + perTag(title)]], styles = { 0: 2, 4: 3 };
     findings.forEach((f, i) => rows.push([`${i + 1}. ${f}`]));
     if (notes.length) { rows.push([]); styles[rows.length] = 3; rows.push(["ข้อสังเกตและข้อเสนอแนะ"]); notes.forEach((f, i) => rows.push([`${i + 1}. ${f}`])); }
     if (figures.length) { rows.push([]); styles[rows.length] = 1; rows.push(["ตัวเลขสำคัญ", "ค่า"]); figures.forEach(f => rows.push(f)); }
@@ -145,10 +149,10 @@ window.Office = (() => {
   const fixR = x => { if (x && x.svg) { const m = String(x.svg).match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/); if (m) x.imgR = +m[2] / +m[1]; } return x; };
   const deckParts = d => { const out = []; [...(d.lead || []), ...(d.sections || [])].forEach(fixR);
     const sec = x => out.push({ h: x.title, head: x.head, rows: x.rows && x.rows.length ? x.rows : null, note: x.note, img: x.img, imgR: x.imgR, svg: x.svg }), shown = x => (x.rows && x.rows.length) || x.img || x.svg;
-    if ((d.findings || []).length) out.push({ h: d.sumHead || "บทสรุปผู้บริหาร", list: d.findings });
+    if ((d.findings || []).length) out.push({ h: d.sumHead || "บทสรุปผู้บริหาร" + perTag(d.title), list: d.findings });
     (d.lead || []).filter(shown).forEach(sec);
     if ((d.kpis || []).length) out.push({ h: "ตัวเลขสำคัญ", head: ["ตัวชี้วัด", "ค่า"], rows: d.kpis });
-    if ((d.analysis || []).length) out.push({ h: d.anaHead || "บทวิเคราะห์", list: d.analysis });
+    if ((d.analysis || []).length) out.push({ h: d.anaHead || "บทวิเคราะห์" + perTag(d.title), list: d.analysis });
     (d.sections || []).filter(shown).forEach(sec);
     if ((d.notes || []).length) out.push({ h: "ข้อสังเกตและข้อเสนอแนะ", list: d.notes });
     return out; };
@@ -230,6 +234,33 @@ window.Office = (() => {
         if (!got.length) return; const d = tableDeck(got), nm = got[0].name + "_บทสรุปผู้บริหาร";
         try { mode = m === "pptx" ? null : m; await pptx(nm, d); } catch (e) { alert(e.message || e); } }; b.after(c); }); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addDeck); else addDeck();
+  // ดร. (2026-11-27): on every page the export / AI buttons of a tab also sit in one box at the top of that tab.
+  // The original buttons stay where they are; the copies press them. water.html builds its own box.
+  const TOP_RX = /^(🤖|ดาวน์โหลด|Excel|PPT|Word|PDF|CSV|พิมพ์|ส่งออก)/;
+  function topBoxes() {
+    if (/water\.html$/.test(location.pathname)) return;
+    document.querySelectorAll("main section, body > section").forEach(sec => {
+      if (sec.hidden || !sec.offsetParent || sec.closest(".topbox")) return;
+      const y0 = sec.getBoundingClientRect().top;
+      const bs = [...sec.querySelectorAll("button")].filter(b => !b.closest(".topbox, table, form, dialog, .modal, .job, .card, li") && TOP_RX.test(b.textContent.trim()) && b.offsetParent && b.getBoundingClientRect().top - y0 > 420);
+      const sig = bs.map(b => b.textContent.trim()).join("|"); let box = sec.querySelector(":scope > .topbox");
+      if (!bs.length) { if (box) box.remove(); return; }
+      if (box && box.dataset.sig === sig) return;
+      if (!box) { box = document.createElement("div"); box.className = "aibox topbox"; box.style.cssText = "margin:0 0 12px;padding:10px 14px;border:1px solid #c9d8ee;border-radius:12px;background:#f5f9ff";
+        const h = [...sec.children].slice(0, 4).find(x => x.classList.contains("hsel")); if (h) h.after(box); else sec.prepend(box); }
+      box.dataset.sig = sig; box.innerHTML = "<p><b>ปุ่มทั้งหมดของแท็บนี้</b></p>"; let lastPar = null, row = null;
+      bs.forEach(b => { if (b.parentElement !== lastPar) { lastPar = b.parentElement;
+          let h = null, n = b; while (n && n !== sec && !h) { let q = n.previousElementSibling; while (q && !h) { if (/^H[23]$/.test(q.tagName)) h = q; else h = (q.querySelectorAll && [...q.querySelectorAll("h2,h3")].pop()) || null; q = q.previousElementSibling; } n = n.parentElement; }
+          if (h && h.textContent.trim() && new Set(bs.map(x => x.parentElement)).size > 1) { const c = document.createElement("p"); c.className = "sub"; c.innerHTML = "<b></b>"; c.firstChild.textContent = h.textContent.trim(); box.append(c); }
+          row = document.createElement("div"); row.className = "acts"; box.append(row); }
+        const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bsmall\b/, ""); c.textContent = b.textContent;
+        const sync = () => { c.hidden = b.hidden; c.disabled = b.disabled; c.textContent = b.textContent; }; sync(); new MutationObserver(sync).observe(b, { attributes: true, childList: true, characterData: true, subtree: true });
+        c.onclick = () => { if (/🤖/.test(b.textContent)) b.scrollIntoView({ behavior: "smooth", block: "center" }); b.click(); }; row.append(c); }); });
+  }
+  let topT = null; const topLater = (ms = 400) => { clearTimeout(topT); topT = setTimeout(() => { try { topBoxes(); } catch (e) { console.warn(e); } }, ms); };
+  document.addEventListener("click", e => { if (!e.target.closest || !e.target.closest(".topbox")) topLater(); }, true);
+  document.addEventListener("change", () => topLater(), true);
+  window.addEventListener("load", () => { topLater(1200); new MutationObserver(() => topLater(700)).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] }); });
   async function pptx(name, d) {
     const m = mode; mode = null;
     [...(d.lead || []), ...(d.sections || [])].forEach(fixR);
@@ -273,14 +304,14 @@ window.Office = (() => {
       if (sec.note) s.addText(sec.note, { x: 0.5, y: 6.3, w: 12.3, h: 0.55, fontFace: F, fontSize: 14, color: ACC, italic: true });
       foot(s, ++n); };
     const shown = x => (x.rows && x.rows.length) || x.img || x.svg;
-    if ((d.findings || []).length) bulletSlides(d.sumHead || "บทสรุปผู้บริหาร", d.findings);
+    if ((d.findings || []).length) bulletSlides(d.sumHead || "บทสรุปผู้บริหาร" + perTag(d.title), d.findings);
     (d.lead || []).filter(shown).forEach(secSlide);   // lead: drawings that belong to the executive summary (SWOT 4 boxes), right after it
     for (let q = 0; q < (d.kpis || []).length; q += 12) { s = p.addSlide(); head(s, "ตัวเลขสำคัญ" + (q ? " (ต่อ)" : ""));
       d.kpis.slice(q, q + 12).forEach(([k, v], i) => { const cx = 0.5 + (i % 4) * 3.1, cy = 1.5 + Math.floor(i / 4) * 1.8;
         s.addShape(p.ShapeType.roundRect, { x: cx, y: cy, w: 2.9, h: 1.55, fill: { color: "F4F7FB" }, line: { color: "D5DEE9" }, rectRadius: 0.08 });
         s.addText(String(v), { x: cx + 0.15, y: cy + 0.15, w: 2.6, h: 0.75, fontFace: F, fontSize: 26, bold: true, color: ACC });
         s.addText(String(k), { x: cx + 0.15, y: cy + 0.85, w: 2.6, h: 0.62, fontFace: F, fontSize: vis(k) > 40 ? 10 : 12, color: MUT, valign: "top", fit: "shrink" }); }); foot(s, ++n); }
-    if ((d.analysis || []).length) bulletSlides(d.anaHead || "บทวิเคราะห์", d.analysis);
+    if ((d.analysis || []).length) bulletSlides(d.anaHead || "บทวิเคราะห์" + perTag(d.title), d.analysis);
     (d.sections || []).filter(shown).forEach(secSlide);
     if ((d.notes || []).length) bulletSlides("ข้อสังเกตและข้อเสนอแนะ", d.notes);
     await p.writeFile({ fileName: name.replace(/\.pptx$/i, "") + ".pptx" });
