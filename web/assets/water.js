@@ -475,8 +475,9 @@
   const siteCur = () => $("#cSiteW").hidden ? "" : $("#cSite").value;
   const catOrg = () => `${hosp().name || ""}${siteCur() ? " · อาคาร " + siteCur() : ""}`;
   function catSites(g) { const v = $("#cSite").value, S = [...new Set(points.filter(p => p.active && grpOf(p.system) === g).map(siteOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, "th", { numeric: true }));
-    $("#cSiteW").hidden = !S.length; $("#cSite").innerHTML = S.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("") + `<option value="">รวมทุกอาคาร</option>`;
-    $("#cSite").value = S.includes(v) || (v === "" && S.length && $("#cSite").dataset.all) ? v : S[0] || ""; }
+    // default = all buildings in one report (the AI analyses each building separately inside it); one building only when picked
+    $("#cSiteW").hidden = !S.length; $("#cSite").innerHTML = `<option value="">รวมทุกอาคาร (AI วิเคราะห์แยกอาคาร)</option>` + S.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+    $("#cSite").value = S.includes(v) && $("#cSite").dataset.one ? v : ""; }
   function catYears() { const y = +today().slice(0, 4), ys = [...new Set([y, y - 1, ...results.map(r => +r.sampled_on.slice(0, 4))])].sort((a, b) => b - a), v = $("#cY").value;
     $("#cY").innerHTML = ys.map(x => `<option value="${x}">พ.ศ. ${x + 543}</option>`).join(""); if (ys.includes(+v)) $("#cY").value = v; }
   function catPoints(g) { const v = $("#cPt").value, st = siteCur(), L = points.filter(p => p.active && grpOf(p.system) === g && (!st || siteOf(p) === st)).sort((a, b) => CAT_SYS[g].indexOf(a.system) - CAT_SYS[g].indexOf(b.system) || a.code.localeCompare(b.code));
@@ -649,7 +650,7 @@
     const gs = planGantt(D); $("#cGantt").innerHTML = gs ? `<p class="sub"><b>แผนการแก้ไข (Gantt)</b> จากวันที่พบถึงวันกำหนดเสร็จ · น้ำเงิน = กำลังแก้ไข · แดง = เลยกำหนด · เขียว = ปิดแล้ว</p><div class="tw">${gs.replace("<svg ", '<svg class="trend" ')}</div>` : "";
   }
   ["#cY", "#cPt"].forEach(s => $(s).onchange = () => rCat(catCur));
-  $("#cSite").onchange = () => { $("#cSite").dataset.all = $("#cSite").value === "" ? "1" : ""; $("#cPt").value = ""; rCat(catCur); };
+  $("#cSite").onchange = () => { $("#cSite").dataset.one = $("#cSite").value ? "1" : ""; $("#cPt").value = ""; rCat(catCur); };
   const catAi = () => { const a = aiOf(hosp().id, catCur, $("#cY").value); return a && a.report; };
   const catName = k => `น้ำ_หมวด${CAT_NO[catCur]}_${GRP[catCur]}_${k}_${hosp().code || ""}${siteCur() ? "_" + siteCur().replace(/\s/g, "") : ""}_${dTH(today()).replace(/\s/g, "")}`;
   $("#wcX").onclick = () => { const D = catData(catCur), T = catTexts(D), title = `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`;
@@ -1043,8 +1044,8 @@
       const bad = data.filter(r => r.status === "fail").length;
       toast(`บันทึกแล้ว ${data.length} ค่า${bad ? ` · นอกเกณฑ์ ${bad} ค่า ระบบเปิดรายการแก้ไขให้แล้ว` : ""}`, !!bad); await load(); rImp();
       // every month: the AI writes that month's executive summary + analysis for each group the saved values belong to
-      const Y = f.month.slice(0, 4), M = +f.month.slice(5, 7), gs = [...new Set(data.map(r => { const pt = ptOf(plOf(r.plan_id).point_id); return grpOf(pt.system) + "|" + siteOf(pt); }))];
-      // one summary per group AND per building (hospitals with buildings far apart are analysed separately)
+      const Y = f.month.slice(0, 4), M = +f.month.slice(5, 7), gs = [...new Set(data.map(r => grpOf(ptOf(plOf(r.plan_id).point_id).system) + "|"))];
+      // one summary per group; for hospitals with several buildings it covers all buildings and the AI analyses each building separately inside it
       for (const gk of gs) { const [g, st] = gk.split("|"), el = $("#uMsg"), lb = `${GRP[g]}${st ? " อาคาร " + st : ""}`; el.textContent = `AI กำลังเขียนสรุปผู้บริหารประจำเดือน ${MON[M - 1]} ${+Y + 543} ของ${lb}`;
         try { await monthAi(g, Y, M, el, st); el.textContent = `สรุปผู้บริหารประจำเดือน ${MON[M - 1]} ${+Y + 543} ของ${lb} เสร็จแล้ว ดูได้ที่แท็บหมวด ${CAT_NO[g]}`; }
         catch (e) { el.textContent = ""; toast(`AI สรุปประจำเดือนไม่สำเร็จ: ${errText(e)} (กดปุ่ม 🤖 ในแท็บหมวดเพื่อลองใหม่)`, true); } } });
