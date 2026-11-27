@@ -1172,8 +1172,8 @@
     const mo = [[$("#cMoAi"), "#cMoOut"], ...sib("#wmP").map(b => [b])].filter(([b]) => vis(b));
     box.innerHTML = `<p><b>ปุ่มทั้งหมดของหมวดนี้</b> <span class="sub">(${esc(catOrg())} · ปี ${esc($("#cY").selectedOptions[0] ? $("#cY").selectedOptions[0].text : "")})</span></p>
       <p class="sub">รายงานทั้งปี</p><div class="acts" id="cTopY"></div>
-      <div class="hsel"><label for="cMoTop">รายงานประจำเดือน</label><select id="cMoTop">${$("#cMo").innerHTML}</select></div><div class="acts" id="cTopM"></div>`;
-    $("#cMoTop").value = $("#cMo").value; $("#cMoTop").onchange = () => { $("#cMo").value = $("#cMoTop").value; rCat(catCur); };
+      <p class="sub">รายงานประจำเดือน ${esc($("#cMo").selectedOptions[0] ? $("#cMo").selectedOptions[0].text : "")} (เลือกเดือนที่ช่อง "เดือน" ข้างช่องปี)</p><div class="acts" id="cTopM"></div>`;
+    $("#cMoTop").innerHTML = $("#cMo").innerHTML; $("#cMoTop").value = $("#cMo").value; $("#cMoTop").onchange = () => { $("#cMo").value = $("#cMoTop").value; rCat(catCur); };
     yr.forEach(([b, sc]) => $("#cTopY").append(prox(b, sc))); mo.forEach(([b, sc]) => $("#cTopM").append(prox(b, sc)));
     $("#cAiTop").hidden = true; box.hidden = !yr.length && !mo.length;
   }
