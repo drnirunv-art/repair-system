@@ -667,7 +667,7 @@
     const gs = planGantt(D); if (gs) sheets.push({ name: "Gantt แผนแก้ไข", rows: [["แผนการแก้ไข (Gantt)"]], styles: { 0: 2 }, svg: gs });
     sheets.splice(1, 0, ...v4Sheets(D), ...aiSheets(catAi(), ""));
     chartGrids(D).forEach((svg, i) => sheets.push({ name: `กราฟ ${i + 1}`, rows: [[`กราฟแนวโน้มรายเดือนเทียบค่ามาตรฐาน ชุดที่ ${i + 1}`]], styles: { 0: 2 }, svg }));
-    Office.xlsx(catName("รายงาน"), sheets); };
+    Office.xlsx(catName(`รายปี${+$("#cY").value + 543}_รายงาน`), sheets); };
   $("#wcP").onclick = () => { const D = catData(catCur), T = catTexts(D), gs = planGantt(D);
     const d = { title: `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`, org: catOrg(), period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`,
       findings: T.find, analysis: T.anal, notes: T.notes,
@@ -679,7 +679,7 @@
         ...chartGrids(D).map((svg, i) => ({ title: `กราฟแนวโน้มรายเดือนเทียบค่ามาตรฐาน ชุดที่ ${i + 1}`, svg, note: "เส้นประสีแดง = ค่ามาตรฐาน · จุดสีแดง = เดือนที่นอกเกณฑ์" })),
         { title: "แผนการแก้ไข (Action plan)", head: ["ลำดับ", "ประเด็น", "มาตรการ / การแก้ไข", "ผู้รับผิดชอบ", "กำหนดเสร็จ", "สถานะ"], colW: [0.7, 4.2, 3.4, 1.6, 1.3, 1.1], rows: D.acts.map((p, i) => { const r = planRow(p, i); return [r[0], r[2], r[4] || "ยังไม่ได้เขียนการแก้ไข", r[5], r[6], r[8]]; }) },
         ...(gs ? [{ title: "แผนการแก้ไข (Gantt)", svg: gs, note: "น้ำเงิน = กำลังแก้ไข · แดง = เลยกำหนด · เขียว = ปิดแล้ว" }] : [])] };
-    return Office.pptx(catName("บทสรุปผู้บริหาร"), d).catch(e => toast(errText(e), true)); };
+    return Office.pptx(catName(`รายปี${+$("#cY").value + 543}_บทสรุปผู้บริหาร`), d).catch(e => toast(errText(e), true)); };
 
   // ---------- Excel แบบรายงานน้ำเสีย v4: the hospital's own yearly wastewater workbook (3 sheets, formulas and 4 charts come from
   // the template file assets/water-ww-v4.xlsx); the page fills the lab values of every month and the AI writes the texts ----------
@@ -857,7 +857,7 @@
     files["xl/worksheets/sheet3.xml"] = s3.xml();
     const parts = Office.zip(Object.entries(files).map(([name, data]) => ({ name, data })));
     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob(parts, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })),
-      download: `สรุปผลการตรวจวัดคุณภาพน้ำเสีย_${hosp().code || ""}_${D.YT}.xlsx` });
+      download: `สรุปผลการตรวจวัดคุณภาพน้ำเสีย_รายปี${D.YT}_${hosp().code || ""}${siteCur() ? "_" + siteCur().replace(/\s/g, "") : ""}.xlsx` });
     document.body.appendChild(a); a.click(); a.remove();
     return { url: a.href, name: a.download };
   }
@@ -1195,11 +1195,11 @@
     try { await monthAi(catCur, $("#cY").value, +$("#cMo").value + 1, $("#cMoMsg")); $("#cMoMsg").textContent = "เสร็จแล้ว"; rCat(catCur); } catch (e) { $("#cMoMsg").textContent = ""; throw e; } });
   const moTitle = D => `สรุปผลตรวจคุณภาพน้ำประจำเดือน ${MON[moD.m]} ${D.YT} · หมวด ${CAT_NO[D.g]} ${GRP[D.g]}`;
   $("#wmX").onclick = () => { const D = catData(catCur), M = moD = monthData(D, +$("#cMo").value), a = aiOfM(hosp().id, D.g, D.Y, M.m + 1), R = a && a.report;
-    Office.xlsx(catName(`สรุปเดือน${MON[M.m]}`), [Office.summarySheet({ title: moTitle(D), org: catOrg(), period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`, findings: [...(R ? R.summary : []), ...M.find, ...(R ? R.analysis : [])], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`] }),
+    Office.xlsx(catName(`รายเดือน_${MON[M.m]}${D.YT}`), [Office.summarySheet({ title: moTitle(D), org: catOrg(), period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`, findings: [...(R ? R.summary : []), ...M.find, ...(R ? R.analysis : [])], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`] }),
       { name: "ผลเดือนนี้", header: 0, rows: [MO_HEAD, ...M.rows.map(moRow)] }, { name: "อ้างอิง JCI ME กฎหมาย", header: 0, rows: [REF_HEAD, ...refRows(D.g)] }, ...(D.g === "WASTE" ? [{ name: "% การบำบัด", header: 0, rows: [["พารามิเตอร์", "เป้าหมาย", "เดือนนี้", "เฉลี่ยทั้งปี"], ...M.rem.map(r => [r.name, `มากกว่า ${r.target}%`, r.mv == null ? "-" : r.mv + "%", r.avg == null ? "-" : r.avg + "%"])] }] : []),
       ...aiSheets(R, "")]); };
   $("#wmP").onclick = () => { const D = catData(catCur), M = moD = monthData(D, +$("#cMo").value), a = aiOfM(hosp().id, D.g, D.Y, M.m + 1), R = a && a.report;
-    return Office.pptx(catName(`สรุปเดือน${MON[M.m]}`), { title: moTitle(D), org: catOrg(), period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`,
+    return Office.pptx(catName(`รายเดือน_${MON[M.m]}${D.YT}_บทสรุปผู้บริหาร`), { title: moTitle(D), org: catOrg(), period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`,
       findings: R ? R.summary : M.find, analysis: R ? [...R.analysis, ...(R.risks || []).map(x => "ความเสี่ยง: " + x)] : [], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`],
       sections: [{ title: `ผลตรวจเดือน ${MON[M.m]} ${D.YT} เทียบค่ามาตรฐาน`, head: ["จุดตรวจ", "รายการ", "ผลเดือนนี้", "ค่ามาตรฐาน", "สรุป", "เดือนก่อน"], colW: [1.1, 4.2, 1.6, 2.3, 1.2, 1.9], rows: M.rows.map(r => { const x = moRow(r); return [x[0], x[1] + (x[4] ? ` (${x[4]})` : ""), x[3], x[5], x[6], x[7]]; }) },
         ...(D.g === "WASTE" && M.rem.some(r => r.mv != null) ? [{ title: "% การบำบัดเดือนนี้", head: ["พารามิเตอร์", "เป้าหมาย", "เดือนนี้", "เฉลี่ยทั้งปี"], colW: [3.3, 3, 3, 3], rows: M.rem.map(r => [r.name, `มากกว่า ${r.target}%`, r.mv == null ? "-" : r.mv + "%", r.avg == null ? "-" : r.avg + "%"]) }] : []),
