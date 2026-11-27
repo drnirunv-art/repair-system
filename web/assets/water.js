@@ -1043,9 +1043,10 @@
       const bad = data.filter(r => r.status === "fail").length;
       toast(`บันทึกแล้ว ${data.length} ค่า${bad ? ` · นอกเกณฑ์ ${bad} ค่า ระบบเปิดรายการแก้ไขให้แล้ว` : ""}`, !!bad); await load(); rImp();
       // every month: the AI writes that month's executive summary + analysis for each group the saved values belong to
-      const Y = f.month.slice(0, 4), M = +f.month.slice(5, 7), gs = [...new Set(data.map(r => grpOf(ptOf(plOf(r.plan_id).point_id).system)))];
-      for (const g of gs) { const el = $("#uMsg"); el.textContent = `AI กำลังเขียนสรุปผู้บริหารประจำเดือน ${MON[M - 1]} ${+Y + 543} ของ${GRP[g]}`;
-        try { await monthAi(g, Y, M, el); el.textContent = `สรุปผู้บริหารประจำเดือน ${MON[M - 1]} ${+Y + 543} ของ${GRP[g]} เสร็จแล้ว ดูได้ที่แท็บหมวด ${CAT_NO[g]}`; }
+      const Y = f.month.slice(0, 4), M = +f.month.slice(5, 7), gs = [...new Set(data.map(r => { const pt = ptOf(plOf(r.plan_id).point_id); return grpOf(pt.system) + "|" + siteOf(pt); }))];
+      // one summary per group AND per building (hospitals with buildings far apart are analysed separately)
+      for (const gk of gs) { const [g, st] = gk.split("|"), el = $("#uMsg"), lb = `${GRP[g]}${st ? " อาคาร " + st : ""}`; el.textContent = `AI กำลังเขียนสรุปผู้บริหารประจำเดือน ${MON[M - 1]} ${+Y + 543} ของ${lb}`;
+        try { await monthAi(g, Y, M, el, st); el.textContent = `สรุปผู้บริหารประจำเดือน ${MON[M - 1]} ${+Y + 543} ของ${lb} เสร็จแล้ว ดูได้ที่แท็บหมวด ${CAT_NO[g]}`; }
         catch (e) { el.textContent = ""; toast(`AI สรุปประจำเดือนไม่สำเร็จ: ${errText(e)} (กดปุ่ม 🤖 ในแท็บหมวดเพื่อลองใหม่)`, true); } } });
   }
 
@@ -1161,15 +1162,16 @@
     $("#cMoAi").hidden = !canRec;
   }
   $("#cMo").onchange = () => rCat(catCur);
-  const monthInput = (D, M) => ({ hospital: D.hcode, ...(siteOf(D.pts.find(siteOf)) ? { building: siteCur() || "รวมทุกอาคาร: " + [...new Set(D.pts.map(siteOf).filter(Boolean))].join(" / ") } : {}), group: GRP[D.g], month: `${MON[M.m]} ${D.YT}`, standard: CAT_LAW[D.g], references: refAi(D.g),
+  const monthInput = (D, M, site = siteCur()) => ({ hospital: D.hcode, ...(siteOf(D.pts.find(siteOf)) ? { building: site || "รวมทุกอาคาร: " + [...new Set(D.pts.map(siteOf).filter(Boolean))].join(" / ") } : {}), group: GRP[D.g], month: `${MON[M.m]} ${D.YT}`, standard: CAT_LAW[D.g], references: refAi(D.g),
     items: M.rows.map(r => ({ point: `${r.x.pt.code} ${r.x.pt.name}`, item: r.x.pl.param, type: TT[r.x.pl.test_type], value: r.v, unit: r.x.pl.unit || "", standard: hasLim(r.x.pl) ? crit(r.x.pl) : "ไม่กำหนด", reference: refTag(r.x.pl, r.x.pt), result: moRow(r)[6], previous_month: r.prev ? `${r.prev.t} (${MON[r.prev.m]})` : null, year_avg: r.x.avg, year_max: r.x.maxT, times_out_this_year: r.x.fail })),
     removal_this_month: M.rem.filter(r => r.mv != null).map(r => ({ parameter: r.name, value: r.mv, target: r.target, year_avg: r.avg })),
     corrective_actions: M.acts.map(p => ({ problem: p.a.problem, action: p.a.action || "", owner: p.a.owner || "", due: p.a.due, status: p.a.status })),
     files: wfiles.filter(f => f.month.startsWith(`${D.Y}-${String(M.m + 1).padStart(2, "0")}`)).map(f => f.file_name) });
-  async function monthAi(g, Y, m, el) { // m = 1..12
-    const D = catData(g, { points, plans, results, actions, Y, pid: null, tt: "", hcode: hosp().code || "" }), M = monthData(D, m - 1);
-    if (!M.rows.length) throw new Error(`ยังไม่มีผลของเดือน ${MON[m - 1]} ${+Y + 543}`);
-    const r = await aiCall({ step: "summary", hospital_id: hosp().id, site: siteCur() || null, grp: g, year: +Y, month: m, input: monthInput(D, M) }, el);
+  async function monthAi(g, Y, m, el, site) { // m = 1..12 · site = building ("" = whole hospital / all buildings)
+    site = site === undefined ? siteCur() : site;
+    const D = catData(g, { points, plans, results, actions, Y, pid: null, tt: "", hcode: hosp().code || "", site }), M = monthData(D, m - 1);
+    if (!M.rows.length) throw new Error(`ยังไม่มีผลของเดือน ${MON[m - 1]} ${+Y + 543}${site ? " ของอาคาร " + site : ""}`);
+    const r = await aiCall({ step: "summary", hospital_id: hosp().id, site: site || null, grp: g, year: +Y, month: m, input: monthInput(D, M, site) }, el);
     aiReps.unshift({ hospital_id: hosp().id, grp: g, year: +Y, month: m, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() });
   }
   $("#cMoAi").onclick = guard(async () => { $("#cMoMsg").textContent = "AI กำลังเขียนสรุปประจำเดือน (ประมาณ 20-60 วินาที)";
