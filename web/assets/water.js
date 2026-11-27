@@ -217,7 +217,7 @@
   const ACT_HEAD = ["วันที่พบ", "ปัญหา", "สาเหตุ", "การแก้ไข", "ผู้รับผิดชอบ", "ต้องเสร็จ", "ใบแจ้งซ่อม", "ผลตรวจซ้ำ", "สถานะ", "ปิดเมื่อ"];
   const fileName = k => `น้ำ_${k}_${hosp().code || ""}_${dTH(today()).replace(/\s/g, "")}`;
   $("#oX").onclick = () => { const S = summary(), T = texts(S);
-    Office.xlsx(fileName("บทสรุป"), [Office.summarySheet({ title: "สรุปแผนจัดการน้ำ (Water Management, JCI FMS.08.04)", org: hosp().name, period: period(), findings: [...T.findings, ...T.analysis], notes: T.notes,
+    Office.xlsx(fileName("บทสรุป"), [Office.summarySheet({ title: `สรุปแผนจัดการน้ำ (Water Management, JCI FMS.08.04) ช่วง ${S.days} วันล่าสุด`, sumHead: `บทสรุปผู้บริหาร ช่วง ${S.days} วันล่าสุด`, org: hosp().name, period: period(), findings: [...T.findings, ...T.analysis], notes: T.notes,
         figures: [["จุดตรวจที่ใช้งาน", S.pts.length], ["รายการตรวจตามแผน", S.lp.length], ["ตรวจตามกำหนด (%)", T.sch ?? "-"], [`ผลตรวจ ${S.days} วัน (ครั้ง)`, S.res.length], ["ผ่านเกณฑ์ (%)", T.pr ?? "-"], ["นอกเกณฑ์ (ครั้ง)", S.fails.length], ["แก้ไขยังไม่ปิด", S.open.length]] }),
       { name: "กลุ่มน้ำ × ชนิดการตรวจ", rows: [GT_HEAD, ...byGT(S)], header: 0 },
       { name: "แยกตามระบบ", rows: [["ระบบน้ำ", "จุดตรวจ", "รายการ", "เลยกำหนด", "ยังไม่เคย", "ตรวจตามกำหนด %", "ตรวจ (ครั้ง)", "นอกเกณฑ์", "ผ่าน %"], ...bySys(S)], header: 0 },
@@ -225,7 +225,7 @@
       { name: "ผลตรวจ", rows: [RES_HEAD, ...S.res.map(resRow)], header: 0 },
       { name: "การแก้ไข", rows: [ACT_HEAD, ...S.acts.map(actRow)], header: 0 }]); };
   $("#wP").onclick = () => { const S = summary(), T = texts(S), bs = bySys(S);
-    const d = { title: "สรุปแผนจัดการน้ำ (Water Management, JCI FMS.08.04)", org: hosp().name, period: period(), findings: T.findings, analysis: T.analysis, notes: T.notes,
+    const d = { title: `สรุปแผนจัดการน้ำ (Water Management, JCI FMS.08.04) ช่วง ${S.days} วันล่าสุด`, sumHead: `บทสรุปผู้บริหาร ช่วง ${S.days} วันล่าสุด`, anaHead: `บทวิเคราะห์ ช่วง ${S.days} วันล่าสุด`, org: hosp().name, period: period(), findings: T.findings, analysis: T.analysis, notes: T.notes,
       kpis: [["จุดตรวจที่ใช้งาน", String(S.pts.length)], ["รายการตรวจตามแผน", String(S.lp.length)], ["ตรวจตามกำหนด", T.sch == null ? "-" : T.sch + "%"], [`ผ่านเกณฑ์ (${S.days} วัน)`, T.pr == null ? "-" : T.pr + "%"], ["นอกเกณฑ์", String(S.fails.length)], ["แก้ไขยังไม่ปิด", String(S.open.length)]],
       sections: [
         { title: "แยกตามกลุ่มน้ำ (น้ำกินดื่ม / น้ำใช้ / น้ำเสีย) และชนิดการตรวจ (ตรวจเชื้อ / สารเคมี)", head: GT_HEAD, rows: byGT(S).map(r => r.map(v => v ?? "-")), chart: false },
@@ -642,7 +642,7 @@
   let catCur = "DRINK";
   function rCat(g) {
     catCur = g; catYears(); catSites(g); catPoints(g); rCatAi(); $("#wcV4").hidden = g !== "WASTE"; const D = catData(g), T = catTexts(D), pass = D.res.filter(r => r.status !== "fail").length;
-    $("#cTitle").textContent = `หมวด ${CAT_NO[g]} ${GRP[g]} · สรุปผลการตรวจวัดคุณภาพน้ำ ${catOrg()} ปี พ.ศ. ${D.YT}`;
+    $("#cTitle").textContent = `หมวด ${CAT_NO[g]} ${GRP[g]} · สรุปผลการตรวจวัดคุณภาพน้ำ รายปี ${catOrg()} ปี พ.ศ. ${D.YT} (ม.ค.–ธ.ค.)`;
     $("#cSub").textContent = `ค่ามาตรฐานอ้างอิง: ${CAT_LAW[g]}`;
     $("#cRef").innerHTML = `<tr>${REF_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + refRows(g).map(r => `<tr>${r.map((c, i) => `<td>${i === 1 ? `<b>${esc(c)}</b>` : esc(c)}</td>`).join("")}</tr>`).join("");
     const cr = pct(D.clean.length, D.tested.length), pr = pct(pass, D.res.length), o = D.acts.filter(p => p.a.status === "open").length;
@@ -672,10 +672,10 @@
   $("#cSite").onchange = () => { $("#cSite").dataset.one = $("#cSite").value ? "1" : ""; $("#cPt").value = ""; rCat(catCur); };
   const catAi = () => { const a = aiOf(hosp().id, catCur, $("#cY").value); return a && a.report; };
   const catName = k => `น้ำ_หมวด${CAT_NO[catCur]}_${GRP[catCur]}_${k}_${hosp().code || ""}${siteCur() ? "_" + siteCur().replace(/\s/g, "") : ""}_${dTH(today()).replace(/\s/g, "")}`;
-  $("#wcX").onclick = () => { const D = catData(catCur), T = catTexts(D), title = `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`;
+  $("#wcX").onclick = () => { const D = catData(catCur), T = catTexts(D), title = `สรุปผลการตรวจวัดคุณภาพน้ำ รายปี พ.ศ. ${D.YT} หมวด ${CAT_NO[catCur]} ${GRP[catCur]}`;
     const mon = [["ตารางสรุปข้อมูลผลตรวจรายเดือน " + GRP[catCur] + " ปี พ.ศ. " + D.YT], []], st = { 0: 2 };
     D.blocks.forEach((b, i) => { st[mon.length] = 2; mon.push([`ส่วนที่ ${i + 1} ${b.pt.code} ${b.pt.name} · ${SYS[b.pt.system]}`]); st[mon.length] = 1; mon.push(monHead()); monRows(b).forEach(r => mon.push(r)); mon.push([]); });
-    const sheets = [Office.summarySheet({ title, org: catOrg(), period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`, findings: [...T.find, ...T.anal], notes: T.notes,
+    const sheets = [Office.summarySheet({ title, org: catOrg(), period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`, findings: [...T.find, ...T.anal], notes: T.notes, sumHead: `บทสรุปผู้บริหาร รายปี พ.ศ. ${D.YT}`,
         kpis: [["จุดตรวจ", D.pts.length], ["ผลตรวจ (ครั้ง)", D.res.length], ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`], ...wwKpi(D)] }),
       { name: "ตารางบทสรุป KPI", header: 0, rows: [EXEC_HEAD, ...D.all.map(execRow)] },
       { name: "อ้างอิง JCI ME กฎหมาย", header: 0, rows: [REF_HEAD, ...refRows(catCur)] },
@@ -684,14 +684,14 @@
       { name: "แผนการแก้ไข", header: 0, rows: [PLAN_HEAD, ...D.acts.map(planRow)] },
       { name: "ผลตรวจทั้งหมด", header: 0, rows: [RES_HEAD, ...D.res.map(resRow)] }];
     const gs = planGantt(D); if (gs) sheets.push({ name: "Gantt แผนแก้ไข", rows: [["แผนการแก้ไข (Gantt)"]], styles: { 0: 2 }, svg: gs });
-    sheets.splice(1, 0, ...v4Sheets(D), ...aiSheets(catAi(), ""));
+    sheets.splice(1, 0, ...v4Sheets(D), ...aiSheets(catAi(), " รายปี"));
     chartGrids(D).forEach((svg, i) => sheets.push({ name: `กราฟ ${i + 1}`, rows: [[`กราฟแนวโน้มรายเดือนเทียบค่ามาตรฐาน ชุดที่ ${i + 1}`]], styles: { 0: 2 }, svg }));
     Office.xlsx(catName(`รายปี${+$("#cY").value + 543}_รายงาน`), sheets); };
   $("#wcP").onclick = () => { const D = catData(catCur), T = catTexts(D), gs = planGantt(D);
-    const d = { title: `สรุปผลการตรวจวัดคุณภาพน้ำ หมวด ${CAT_NO[catCur]} ${GRP[catCur]} ปี พ.ศ. ${D.YT}`, org: catOrg(), period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`,
+    const d = { title: `สรุปผลการตรวจวัดคุณภาพน้ำ รายปี พ.ศ. ${D.YT} หมวด ${CAT_NO[catCur]} ${GRP[catCur]}`, sumHead: `บทสรุปผู้บริหาร รายปี พ.ศ. ${D.YT}`, anaHead: `บทวิเคราะห์ รายปี พ.ศ. ${D.YT}`, org: catOrg(), period: `${hosp().code || ""} · ปี พ.ศ. ${D.YT} · ข้อมูล ณ ${dTH(today())}`,
       findings: T.find, analysis: T.anal, notes: T.notes,
       kpis: [["จุดตรวจ", D.pts.length], ["ผลตรวจ (ครั้ง)", D.res.length], ["ผ่านเกณฑ์", (pct(D.res.filter(r => r.status !== "fail").length, D.res.length) ?? "-") + "%"], ["เดือนที่ผ่านทุกรายการ", `${D.clean.length}/${D.tested.length}`], ...wwKpi(D)],
-      sections: [...v4Sections(D), ...aiSections(catAi()), refSec(catCur),
+      sections: [...v4Sections(D), ...aiSections(catAi(), "รายปี"), refSec(catCur),
         { title: "ตารางบทสรุป (ค่าเฉลี่ย ต่ำสุด–สูงสุด เทียบค่ามาตรฐาน)", head: ["จุดตรวจ", "รายการ", "ชนิด", "ค่าเฉลี่ย", "ต่ำสุด – สูงสุด", "ค่ามาตรฐาน", "การประเมิน"], colW: [1.0, 3.5, 0.9, 1.1, 1.5, 1.8, 2.5], rows: D.all.map(x => { const r = execRow(x); return [x.pt.code, x.pl.param + (x.pl.unit ? ` (${x.pl.unit})` : ""), r[2], r[4], r[5], r[6], r[9]]; }) },
         ...(catCur === "WASTE" ? [{ title: "ประสิทธิภาพการบำบัด (% Removal)", head: ["พารามิเตอร์", "เป้าหมาย", "เฉลี่ย", "เดือนที่ต่ำกว่าเป้าหมาย", "สถานะ"], colW: [3, 2.3, 2, 2.5, 2.5], rows: D.removal.map(r => [r.name, `มากกว่า ${r.target}%`, r.avg == null ? "-" : r.avg + "%", r.low, remRow(r)[15]]) }] : []),
         ...D.blocks.map((b, i) => ({ title: `ส่วนที่ ${i + 1} ${b.pt.code} ${b.pt.name}: ผลรายเดือน`, head: ["รายการ", "เกณฑ์", ...MON], colW: [3.1, 1.6, ...MON.map(() => 7.6 / 12)], rows: b.rows.map(x => [x.pl.param, hasLim(x.pl) ? crit(x.pl) : "ไม่กำหนด", ...x.cell.map(cellTxt)]) })),
@@ -837,7 +837,7 @@
     const T = catTexts(D), col = i => String.fromCharCode(68 + i); // D..O = ม.ค...ธ.ค.
     // แผ่น 2 ตารางสรุปข้อมูล
     const s2 = sheetEd(dec.decode(files["xl/worksheets/sheet2.xml"]));
-    s2.set("A1", `ตารางสรุปผลการวิเคราะห์คุณภาพน้ำเสีย ประจำปี ${D.YT} (มกราคม – ธันวาคม) | ${H}`);
+    s2.set("A1", `ตารางสรุปผลการวิเคราะห์คุณภาพน้ำเสีย รายปี ${D.YT} (มกราคม – ธันวาคม) | ${H}`);
     for (const [sys, codes, row0, dRow] of V4_ROWS) {
       const xs = codes.map(c => F.by(sys, c)), any = xs.filter(Boolean);
       for (let i = 0; i < 12; i++) { const l = any.flatMap(x => x.cell[i]).sort((a, b) => a.sampled_on < b.sampled_on ? -1 : 1);
@@ -1065,9 +1065,9 @@
       // every month: the AI writes that month's executive summary + analysis for each group the saved values belong to
       const Y = f.month.slice(0, 4), M = +f.month.slice(5, 7), gs = [...new Set(data.map(r => grpOf(ptOf(plOf(r.plan_id).point_id).system) + "|"))];
       // one summary per group; for hospitals with several buildings it covers all buildings and the AI analyses each building separately inside it
-      for (const gk of gs) { const [g, st] = gk.split("|"), el = $("#uMsg"), lb = `${GRP[g]}${st ? " อาคาร " + st : ""}`; el.textContent = `AI กำลังเขียนสรุปผู้บริหารประจำเดือน ${MON[M - 1]} ${+Y + 543} ของ${lb}`;
-        try { await monthAi(g, Y, M, el, st); el.textContent = `สรุปผู้บริหารประจำเดือน ${MON[M - 1]} ${+Y + 543} ของ${lb} เสร็จแล้ว ดูได้ที่แท็บหมวด ${CAT_NO[g]}`; }
-        catch (e) { el.textContent = ""; toast(`AI สรุปประจำเดือนไม่สำเร็จ: ${errText(e)} (กดปุ่ม 🤖 ในแท็บหมวดเพื่อลองใหม่)`, true); } } });
+      for (const gk of gs) { const [g, st] = gk.split("|"), el = $("#uMsg"), lb = `${GRP[g]}${st ? " อาคาร " + st : ""}`; el.textContent = `AI กำลังเขียนสรุปผู้บริหารรายเดือน ${MON[M - 1]} ${+Y + 543} ของ${lb}`;
+        try { await monthAi(g, Y, M, el, st); el.textContent = `สรุปผู้บริหารรายเดือน ${MON[M - 1]} ${+Y + 543} ของ${lb} เสร็จแล้ว ดูได้ที่แท็บหมวด ${CAT_NO[g]}`; }
+        catch (e) { el.textContent = ""; toast(`AI สรุปรายเดือนไม่สำเร็จ: ${errText(e)} (กดปุ่ม 🤖 ในแท็บหมวดเพื่อลองใหม่)`, true); } } });
   }
 
   // ---------- AI สรุปผู้บริหาร + วิเคราะห์ ----------
@@ -1081,9 +1081,9 @@
   const aiSite = (r, h) => !h || ((r.report && r.report.site) || "") === siteCur();
   const aiOf = (h, g, y) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && !r.month && aiSite(r, h));
   const aiOfM = (h, g, y, m) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && +r.month === +m && aiSite(r, h));
-  function aiHtml(rep, when, model) {
+  function aiHtml(rep, when, model, lab = "") {
     if (!rep) return ""; const R = rep, G = aiGantt(R);
-    return `<h3>บทสรุปผู้บริหารโดย AI</h3><ol>${(R.summary || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><h3>บทวิเคราะห์โดย AI</h3><ol>${(R.analysis || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol>
+    return `<h3>บทสรุปผู้บริหาร${lab ? " " + lab : ""} โดย AI</h3><ol>${(R.summary || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><h3>บทวิเคราะห์${lab ? " " + lab : ""} โดย AI</h3><ol>${(R.analysis || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol>
       ${(R.risks || []).length ? `<h3>ความเสี่ยง</h3><ol>${R.risks.map(x => `<li>${esc(x)}</li>`).join("")}</ol>` : ""}
       ${(R.plan || []).length ? `<h3>แผนงานที่ AI เสนอ</h3><div class="tw"><table class="tt"><tr><th>ลำดับ</th><th>ประเด็น</th><th>มาตรการ</th><th>ผู้รับผิดชอบ</th><th>เริ่ม</th><th>กำหนดเสร็จ</th><th>เป้าหมาย (KPI)</th><th>อ้างอิง JCI ME · กฎหมาย</th></tr>${R.plan.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.issue)}</td><td>${esc(p.action)}</td><td>${esc(p.owner)}</td><td>${dTH(p.start)}</td><td>${dTH(p.due)}</td><td>${esc(p.target || "")}</td><td>${esc(p.ref || "")}</td></tr>`).join("")}</table></div>` : ""}
       ${G ? `<p class="sub"><b>แผนงาน (Gantt)</b></p><div class="tw">${G.replace("<svg ", '<svg class="trend" ')}</div>` : ""}
@@ -1092,21 +1092,21 @@
   }
   // AI parts for the exports of a deck / workbook
   const refSec = g => ({ title: "อ้างอิง JCI 8th FMS ME และกฎหมายควบคุม", head: REF_HEAD, colW: [1.5, 3.9, 5.0, 1.9], rows: refRows(g) });
-  const aiSections = R => !R ? [] : [
-    { title: "บทสรุปผู้บริหารโดย AI", head: ["ข้อ", "สรุป"], colW: [0.8, 11.5], rows: (R.summary || []).map((x, i) => [i + 1, x]) },
-    { title: "บทวิเคราะห์โดย AI", head: ["ข้อ", "วิเคราะห์"], colW: [0.8, 11.5], rows: [...(R.analysis || []), ...(R.risks || []).map(x => "ความเสี่ยง: " + x), ...(R.data_gaps || []).map(x => "ข้อมูลที่ยังขาด: " + x)].map((x, i) => [i + 1, x]) },
+  const aiSections = (R, lab = "") => !R ? [] : [
+    { title: `บทสรุปผู้บริหาร${lab ? " " + lab : ""} โดย AI`, head: ["ข้อ", "สรุป"], colW: [0.8, 11.5], rows: (R.summary || []).map((x, i) => [i + 1, x]) },
+    { title: `บทวิเคราะห์${lab ? " " + lab : ""} โดย AI`, head: ["ข้อ", "วิเคราะห์"], colW: [0.8, 11.5], rows: [...(R.analysis || []), ...(R.risks || []).map(x => "ความเสี่ยง: " + x), ...(R.data_gaps || []).map(x => "ข้อมูลที่ยังขาด: " + x)].map((x, i) => [i + 1, x]) },
     { title: "แผนงานที่ AI เสนอ", head: ["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ", "เป้าหมาย (KPI)", "อ้างอิง"], colW: [0.5, 2.1, 3.2, 1.3, 0.9, 0.9, 1.6, 1.8], rows: (R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due), p.target || "", p.ref || ""]) },
     ...(aiGantt(R) ? [{ title: "แผนงานที่ AI เสนอ (Gantt)", svg: aiGantt(R), note: "แถบสีแดง = เลยกำหนดแล้ว" }] : [])];
-  const aiSheets = (R, tag) => !R ? [] : [{ name: `AI สรุป${tag}`, header: 0, rows: [["ข้อ", "บทสรุปผู้บริหารโดย AI"], ...(R.summary || []).map((x, i) => [i + 1, x]), [], ["ข้อ", "บทวิเคราะห์โดย AI"], ...(R.analysis || []).map((x, i) => [i + 1, x]),
+  const aiSheets = (R, tag) => !R ? [] : [{ name: `AI สรุป${tag}`, header: 0, rows: [["ข้อ", `บทสรุปผู้บริหาร${tag} โดย AI`], ...(R.summary || []).map((x, i) => [i + 1, x]), [], ["ข้อ", `บทวิเคราะห์${tag} โดย AI`], ...(R.analysis || []).map((x, i) => [i + 1, x]),
       ...((R.risks || []).length ? [[], ["ข้อ", "ความเสี่ยง"], ...R.risks.map((x, i) => [i + 1, x])] : []), ...((R.data_gaps || []).length ? [[], ["ข้อ", "ข้อมูลที่ยังขาด"], ...R.data_gaps.map((x, i) => [i + 1, x])] : [])] },
     { name: `AI แผนงาน${tag}`, header: 0, rows: [["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ", "เป้าหมาย (KPI)", "อ้างอิง JCI ME · กฎหมาย"], ...(R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due), p.target || "", p.ref || ""])] },
     ...(aiGantt(R) ? [{ name: `AI Gantt${tag}`, rows: [["แผนงานที่ AI เสนอ (Gantt)"]], styles: { 0: 2 }, svg: aiGantt(R) }] : [])];
-  function rCatAi() { const a = aiOf(hosp().id, catCur, $("#cY").value); $("#cAi").innerHTML = a ? aiHtml(a.report, a.created_at, a.model) : `<p class="sub">ยังไม่มีบทสรุปจาก AI ของหมวดนี้ปีนี้ กดปุ่ม 🤖 เพื่อให้ AI อ่านผลทั้งปีแล้วเขียนบทสรุปผู้บริหาร บทวิเคราะห์ และแผนงาน</p>`;
+  function rCatAi() { const a = aiOf(hosp().id, catCur, $("#cY").value); $("#cAi").innerHTML = a ? aiHtml(a.report, a.created_at, a.model, `รายปี พ.ศ. ${+$("#cY").value + 543}`) : `<p class="sub">ยังไม่มีบทสรุปจาก AI ของหมวดนี้ปีนี้ กดปุ่ม 🤖 เพื่อให้ AI อ่านผลทั้งปีแล้วเขียนบทสรุปผู้บริหาร บทวิเคราะห์ และแผนงาน</p>`;
     $("#cAiBtn").hidden = !canRec; $("#cAiTop").hidden = true; }
   // shortcut at the top of the หมวด tab: same as the 🤖 button further down, then jumps to its result
   $("#cAiTop").onclick = () => { $("#cAiBtn").closest(".aibox").scrollIntoView({ behavior: "smooth", block: "start" }); $("#cAiBtn").click(); };
   $("#cAiBtn").onclick = guard(async () => { const D = catData(catCur); if (!D.res.length) throw new Error("ยังไม่มีผลตรวจของหมวดนี้ในปีที่เลือก");
-    $("#cAiMsg").textContent = "AI กำลังอ่านผลทั้งปีและเขียนบทสรุป (ประมาณ 20-60 วินาที)";
+    $("#cAiMsg").textContent = "AI กำลังอ่านผลทั้งปีและเขียนบทสรุปรายปี (ประมาณ 20-60 วินาที)";
     try { const r = await aiCall({ step: "summary", hospital_id: hosp().id, site: siteCur() || null, grp: catCur, year: +D.Y, input: aiInputOf(D) }, $("#cAiMsg"));
       aiReps.unshift({ hospital_id: hosp().id, grp: catCur, year: +D.Y, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() }); $("#cAiMsg").textContent = "เสร็จแล้ว"; rCatAi(); if (catCur === "WASTE") rV4(catData("WASTE")); }
     catch (e) { $("#cAiMsg").textContent = ""; throw e; } });
@@ -1131,7 +1131,7 @@
     V = { g, Y, YT: +Y + 543, rows, ai: ai.data && ai.data[0] }; $("#vMsg").textContent = ""; rV(); });
   function rV() { if (!V) return;
     $("#vGrp").innerHTML = `<tr>${vHead().map(h => `<th>${h}</th>`).join("")}</tr>` + V.rows.map(r => `<tr>${vRow(r).map((c, i) => `<td class="${i === 5 ? cls2(r.pr) : i === 7 && r.fails.length ? "fail" : ""} ${[2, 3, 4, 5].includes(i) ? "n" : ""}">${esc(String(c))}</td>`).join("")}</tr>`).join("");
-    $("#vAiBtn").hidden = !exec; $("#vAi").innerHTML = V.ai ? aiHtml(V.ai.report, V.ai.created_at, V.ai.model) : `<p class="sub">${exec ? "กดปุ่ม 🤖 เพื่อให้ AI สรุปและวิเคราะห์หมวดนี้ของทุกโรง" : "สรุป 12 โรงโดย AI ทำได้เฉพาะผู้บริหาร"}</p>`; }
+    $("#vAiBtn").hidden = !exec; $("#vAi").innerHTML = V.ai ? aiHtml(V.ai.report, V.ai.created_at, V.ai.model, `รายปี พ.ศ. ${V.YT} (12 โรง)`) : `<p class="sub">${exec ? "กดปุ่ม 🤖 เพื่อให้ AI สรุปและวิเคราะห์หมวดนี้ของทุกโรง" : "สรุป 12 โรงโดย AI ทำได้เฉพาะผู้บริหาร"}</p>`; }
   const cls2 = v => v == null ? "never" : v >= 95 ? "ok" : v >= 80 ? "warn" : "fail";
   const vInput = () => ({ group: GRP[V.g], year_be: V.YT, references: refAi(V.g), hospitals: V.rows.map(r => ({ hospital: r.code, sampling_points: r.D.pts.length, items: r.D.all.length, results: r.D.res.length, pass_rate: r.pr, months_all_pass: r.D.clean.length, months_with_results: r.D.tested.length,
     out_of_range: r.D.all.filter(x => x.fail).map(x => ({ item: x.pl.param, point: x.pt.code, times: x.fail, max: x.maxT, min: x.minT, standard: crit(x.pl), reference: refTag(x.pl, x.pt) })), watch: r.watch,
@@ -1146,15 +1146,15 @@
       N.length ? `โรงที่ยังไม่มีจุดตรวจในหมวดนี้: ${N.map(r => r.code).join(", ")}` : "ทุกโรงมีจุดตรวจในหมวดนี้แล้ว",
       `ไฟล์ผลแล็บที่แนบในปีนี้รวม ${V.rows.reduce((t, r) => t + r.nf, 0)} ไฟล์`]; };
   $("#vgX").onclick = () => { if (!V) return toast("กด \"แสดงข้อมูล\" ก่อน", true);
-    Office.xlsx(`น้ำ_${GRP[V.g]}_12โรง_${V.YT}`, [Office.summarySheet({ title: `ผลตรวจคุณภาพน้ำ ${GRP[V.g]} เปรียบเทียบ 12 โรง ปี พ.ศ. ${V.YT}`, org: "โรงพยาบาลในเครือ 12 โรง", period: `ข้อมูล ณ ${dTH(today())}`, findings: vFind(), notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[V.g]}`] }),
-      { name: "เปรียบเทียบ 12 โรง", header: 0, rows: [vHead(), ...V.rows.map(vRow)] }, { name: "อ้างอิง JCI ME กฎหมาย", header: 0, rows: [REF_HEAD, ...refRows(V.g)] }, ...aiSheets(V.ai && V.ai.report, "")]); };
+    Office.xlsx(`น้ำ_${GRP[V.g]}_12โรง_${V.YT}`, [Office.summarySheet({ title: `ผลตรวจคุณภาพน้ำ ${GRP[V.g]} เปรียบเทียบ 12 โรง รายปี พ.ศ. ${V.YT}`, org: "โรงพยาบาลในเครือ 12 โรง", period: `ข้อมูล ณ ${dTH(today())}`, findings: vFind(), sumHead: `บทสรุปผู้บริหาร รายปี พ.ศ. ${V.YT} (12 โรง)`, notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[V.g]}`] }),
+      { name: "เปรียบเทียบ 12 โรง", header: 0, rows: [vHead(), ...V.rows.map(vRow)] }, { name: "อ้างอิง JCI ME กฎหมาย", header: 0, rows: [REF_HEAD, ...refRows(V.g)] }, ...aiSheets(V.ai && V.ai.report, " รายปี 12 โรง")]); };
   $("#vgP").onclick = () => { if (!V) return toast("กด \"แสดงข้อมูล\" ก่อน", true); const R = V.ai && V.ai.report;
-    return Office.pptx(`น้ำ_${GRP[V.g]}_12โรง_บทสรุปผู้บริหาร_${V.YT}`, { title: `ผลตรวจคุณภาพน้ำ ${GRP[V.g]} เปรียบเทียบ 12 โรง ปี พ.ศ. ${V.YT}`, org: "โรงพยาบาลในเครือ 12 โรง", period: `ข้อมูล ณ ${dTH(today())}`,
+    return Office.pptx(`น้ำ_${GRP[V.g]}_12โรง_บทสรุปผู้บริหาร_${V.YT}`, { title: `ผลตรวจคุณภาพน้ำ ${GRP[V.g]} เปรียบเทียบ 12 โรง รายปี พ.ศ. ${V.YT}`, sumHead: `บทสรุปผู้บริหาร รายปี พ.ศ. ${V.YT} (12 โรง)`, anaHead: `บทวิเคราะห์ รายปี พ.ศ. ${V.YT} (12 โรง)`, org: "โรงพยาบาลในเครือ 12 โรง", period: `ข้อมูล ณ ${dTH(today())}`,
       findings: R ? R.summary : vFind(), analysis: R ? R.analysis : [], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[V.g]}`],
       sections: [{ title: "เปรียบเทียบ 12 โรง", head: ["โรง", "ผลตรวจ", "ผ่านเกณฑ์", "เดือนผ่านทุกรายการ", "รายการนอกเกณฑ์", "แก้ไขยังไม่ปิด"], colW: [0.9, 1.1, 1.2, 1.6, 6.3, 1.2], rows: V.rows.map(r => [r.code, r.D.res.length, r.pr == null ? "-" : r.pr + "%", `${r.D.clean.length}/${r.D.tested.length}`, r.fails.join(" · ") || "-", r.D.acts.filter(p => p.a.status === "open").length]) },
-        ...aiSections(R).slice(2), refSec(V.g)] }).catch(e => toast(errText(e), true)); };
+        ...aiSections(R, "รายปี 12 โรง").slice(2), refSec(V.g)] }).catch(e => toast(errText(e), true)); };
 
-  // ---------- สรุปผู้บริหารประจำเดือน (one month of one group, compared with the month before and the year) ----------
+  // ---------- สรุปผู้บริหารรายเดือน (one month of one group, compared with the month before and the year) ----------
   const prevOf = (x, m) => { for (let k = m - 1; k >= 0; k--) if (x.cell[k].length) return { m: k, t: cellTxt(x.cell[k]) }; return null; };
   const monStat = l => !l.length ? "" : l.some(r => r.status === "fail") ? "fail" : l.some(r => r.status === "warn") ? "warn" : "pass";
   function monthData(D, m) { // m = 0..11
@@ -1178,7 +1178,7 @@
     const M = moD = monthData(D, +$("#cMo").value), a = aiOfM(hosp().id, D.g, D.Y, M.m + 1);
     $("#cMoFind").innerHTML = M.find.map(x => `<li>${esc(x)}</li>`).join("");
     $("#cMoT").innerHTML = `<tr>${MO_HEAD.map(h => `<th>${h}</th>`).join("")}</tr>` + (M.rows.length ? M.rows.map(r => `<tr>${moRow(r).map((c, i) => `<td class="${i === 6 ? { fail: "fail", warn: "warn", pass: hasLim(r.x.pl) ? "ok" : "" }[r.st] : i === 3 ? "n" : ""}">${i === 2 ? ttPill(r.x.pl) : esc(String(c))}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="10">ยังไม่มีผลของเดือนนี้ แนบไฟล์ผลแล็บที่แท็บ "แนบไฟล์ผลแล็บ · AI"</td></tr>`);
-    $("#cMoOut").innerHTML = a ? aiHtml(a.report, a.created_at, a.model) : M.rows.length ? `<p class="sub">ยังไม่มีสรุปจาก AI ของเดือนนี้ กดปุ่ม 🤖 (หลังบันทึกผลจากไฟล์ ระบบให้ AI สรุปให้อัตโนมัติ)</p>` : "";
+    $("#cMoOut").innerHTML = a ? aiHtml(a.report, a.created_at, a.model, `รายเดือน ${MON[M.m]} ${D.YT}`) : M.rows.length ? `<p class="sub">ยังไม่มีสรุปจาก AI ของเดือนนี้ กดปุ่ม 🤖 (หลังบันทึกผลจากไฟล์ ระบบให้ AI สรุปให้อัตโนมัติ)</p>` : "";
     $("#cMoAi").hidden = !canRec;
   }
   $("#cMo").onchange = () => rCat(catCur);
@@ -1210,17 +1210,17 @@
     const r = await aiCall({ step: "summary", hospital_id: hosp().id, site: site || null, grp: g, year: +Y, month: m, input: monthInput(D, M, site) }, el);
     aiReps.unshift({ hospital_id: hosp().id, grp: g, year: +Y, month: m, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() });
   }
-  $("#cMoAi").onclick = guard(async () => { $("#cMoMsg").textContent = "AI กำลังเขียนสรุปประจำเดือน (ประมาณ 20-60 วินาที)";
+  $("#cMoAi").onclick = guard(async () => { $("#cMoMsg").textContent = "AI กำลังเขียนสรุปรายเดือน (ประมาณ 20-60 วินาที)";
     try { await monthAi(catCur, $("#cY").value, +$("#cMo").value + 1, $("#cMoMsg")); $("#cMoMsg").textContent = "เสร็จแล้ว"; rCat(catCur); } catch (e) { $("#cMoMsg").textContent = ""; throw e; } });
-  const moTitle = D => `สรุปผลตรวจคุณภาพน้ำประจำเดือน ${MON[moD.m]} ${D.YT} · หมวด ${CAT_NO[D.g]} ${GRP[D.g]}`;
+  const moTitle = D => `สรุปผลตรวจคุณภาพน้ำ รายเดือน ${MON[moD.m]} ${D.YT} · หมวด ${CAT_NO[D.g]} ${GRP[D.g]}`, moHead = D => `บทสรุปผู้บริหาร รายเดือน ${MON[moD.m]} ${D.YT}`;
   $("#wmX").onclick = () => { const D = catData(catCur), M = moD = monthData(D, +$("#cMo").value), a = aiOfM(hosp().id, D.g, D.Y, M.m + 1), R = a && a.report;
-    Office.xlsx(catName(`รายเดือน_${MON[M.m]}${D.YT}`), [Office.summarySheet({ title: moTitle(D), org: catOrg(), period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`, findings: [...(R ? R.summary : []), ...M.find, ...(R ? R.analysis : [])], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`] }),
+    Office.xlsx(catName(`รายเดือน_${MON[M.m]}${D.YT}`), [Office.summarySheet({ title: moTitle(D), org: catOrg(), period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`, findings: [...(R ? R.summary : []), ...M.find, ...(R ? R.analysis : [])], sumHead: moHead(D), notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`] }),
       { name: "ผลเดือนนี้", header: 0, rows: [MO_HEAD, ...M.rows.map(moRow)] }, { name: "อ้างอิง JCI ME กฎหมาย", header: 0, rows: [REF_HEAD, ...refRows(D.g)] }, ...(D.g === "WASTE" ? [{ name: "% การบำบัด", header: 0, rows: [["พารามิเตอร์", "เป้าหมาย", "เดือนนี้", "เฉลี่ยทั้งปี"], ...M.rem.map(r => [r.name, `มากกว่า ${r.target}%`, r.mv == null ? "-" : r.mv + "%", r.avg == null ? "-" : r.avg + "%"])] }] : []),
-      ...aiSheets(R, "")]); };
+      ...aiSheets(R, " รายเดือน")]); };
   $("#wmP").onclick = () => { const D = catData(catCur), M = moD = monthData(D, +$("#cMo").value), a = aiOfM(hosp().id, D.g, D.Y, M.m + 1), R = a && a.report;
-    return Office.pptx(catName(`รายเดือน_${MON[M.m]}${D.YT}_บทสรุปผู้บริหาร`), { title: moTitle(D), org: catOrg(), period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`,
+    return Office.pptx(catName(`รายเดือน_${MON[M.m]}${D.YT}_บทสรุปผู้บริหาร`), { title: moTitle(D), sumHead: moHead(D), anaHead: `บทวิเคราะห์ รายเดือน ${MON[moD.m]} ${D.YT}`, org: catOrg(), period: `${hosp().code || ""} · ข้อมูล ณ ${dTH(today())}`,
       findings: R ? R.summary : M.find, analysis: R ? [...R.analysis, ...(R.risks || []).map(x => "ความเสี่ยง: " + x)] : [], notes: [`ค่ามาตรฐานอ้างอิง: ${CAT_LAW[D.g]}`],
       sections: [{ title: `ผลตรวจเดือน ${MON[M.m]} ${D.YT} เทียบค่ามาตรฐาน`, head: ["จุดตรวจ", "รายการ", "ผลเดือนนี้", "ค่ามาตรฐาน", "สรุป", "เดือนก่อน"], colW: [1.1, 4.2, 1.6, 2.3, 1.2, 1.9], rows: M.rows.map(r => { const x = moRow(r); return [x[0], x[1] + (x[4] ? ` (${x[4]})` : ""), x[3], x[5], x[6], x[7]]; }) },
         ...(D.g === "WASTE" && M.rem.some(r => r.mv != null) ? [{ title: "% การบำบัดเดือนนี้", head: ["พารามิเตอร์", "เป้าหมาย", "เดือนนี้", "เฉลี่ยทั้งปี"], colW: [3.3, 3, 3, 3], rows: M.rem.map(r => [r.name, `มากกว่า ${r.target}%`, r.mv == null ? "-" : r.mv + "%", r.avg == null ? "-" : r.avg + "%"]) }] : []),
-        ...aiSections(R).slice(2), refSec(D.g)] }).catch(e => toast(errText(e), true)); };
+        ...aiSections(R, "รายเดือน").slice(2), refSec(D.g)] }).catch(e => toast(errText(e), true)); };
 })();

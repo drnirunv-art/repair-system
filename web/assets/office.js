@@ -118,8 +118,8 @@ window.Office = (() => {
     return { figures, groups, findings };
   }
   // summary sheet rows: title block, findings (given ones first), key figures, split tables
-  function summarySheet({ title, org, period, findings = [], figures = [], groups = [], notes = [] }) {
-    const rows = [[title], [[org, period].filter(Boolean).join(" · ")], ["ออกรายงานเมื่อ " + now()], [], ["บทสรุปผู้บริหาร"]], styles = { 0: 2, 4: 3 };
+  function summarySheet({ title, org, period, findings = [], figures = [], groups = [], notes = [], sumHead }) {
+    const rows = [[title], [[org, period].filter(Boolean).join(" · ")], ["ออกรายงานเมื่อ " + now()], [], [sumHead || "บทสรุปผู้บริหาร"]], styles = { 0: 2, 4: 3 };
     findings.forEach((f, i) => rows.push([`${i + 1}. ${f}`]));
     if (notes.length) { rows.push([]); styles[rows.length] = 3; rows.push(["ข้อสังเกตและข้อเสนอแนะ"]); notes.forEach((f, i) => rows.push([`${i + 1}. ${f}`])); }
     if (figures.length) { rows.push([]); styles[rows.length] = 1; rows.push(["ตัวเลขสำคัญ", "ค่า"]); figures.forEach(f => rows.push(f)); }
@@ -145,10 +145,10 @@ window.Office = (() => {
   const fixR = x => { if (x && x.svg) { const m = String(x.svg).match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/); if (m) x.imgR = +m[2] / +m[1]; } return x; };
   const deckParts = d => { const out = []; [...(d.lead || []), ...(d.sections || [])].forEach(fixR);
     const sec = x => out.push({ h: x.title, head: x.head, rows: x.rows && x.rows.length ? x.rows : null, note: x.note, img: x.img, imgR: x.imgR, svg: x.svg }), shown = x => (x.rows && x.rows.length) || x.img || x.svg;
-    if ((d.findings || []).length) out.push({ h: "บทสรุปผู้บริหาร", list: d.findings });
+    if ((d.findings || []).length) out.push({ h: d.sumHead || "บทสรุปผู้บริหาร", list: d.findings });
     (d.lead || []).filter(shown).forEach(sec);
     if ((d.kpis || []).length) out.push({ h: "ตัวเลขสำคัญ", head: ["ตัวชี้วัด", "ค่า"], rows: d.kpis });
-    if ((d.analysis || []).length) out.push({ h: "บทวิเคราะห์", list: d.analysis });
+    if ((d.analysis || []).length) out.push({ h: d.anaHead || "บทวิเคราะห์", list: d.analysis });
     (d.sections || []).filter(shown).forEach(sec);
     if ((d.notes || []).length) out.push({ h: "ข้อสังเกตและข้อเสนอแนะ", list: d.notes });
     return out; };
@@ -273,14 +273,14 @@ window.Office = (() => {
       if (sec.note) s.addText(sec.note, { x: 0.5, y: 6.3, w: 12.3, h: 0.55, fontFace: F, fontSize: 14, color: ACC, italic: true });
       foot(s, ++n); };
     const shown = x => (x.rows && x.rows.length) || x.img || x.svg;
-    if ((d.findings || []).length) bulletSlides("บทสรุปผู้บริหาร", d.findings);
+    if ((d.findings || []).length) bulletSlides(d.sumHead || "บทสรุปผู้บริหาร", d.findings);
     (d.lead || []).filter(shown).forEach(secSlide);   // lead: drawings that belong to the executive summary (SWOT 4 boxes), right after it
     for (let q = 0; q < (d.kpis || []).length; q += 12) { s = p.addSlide(); head(s, "ตัวเลขสำคัญ" + (q ? " (ต่อ)" : ""));
       d.kpis.slice(q, q + 12).forEach(([k, v], i) => { const cx = 0.5 + (i % 4) * 3.1, cy = 1.5 + Math.floor(i / 4) * 1.8;
         s.addShape(p.ShapeType.roundRect, { x: cx, y: cy, w: 2.9, h: 1.55, fill: { color: "F4F7FB" }, line: { color: "D5DEE9" }, rectRadius: 0.08 });
         s.addText(String(v), { x: cx + 0.15, y: cy + 0.15, w: 2.6, h: 0.75, fontFace: F, fontSize: 26, bold: true, color: ACC });
         s.addText(String(k), { x: cx + 0.15, y: cy + 0.85, w: 2.6, h: 0.62, fontFace: F, fontSize: vis(k) > 40 ? 10 : 12, color: MUT, valign: "top", fit: "shrink" }); }); foot(s, ++n); }
-    if ((d.analysis || []).length) bulletSlides("บทวิเคราะห์", d.analysis);
+    if ((d.analysis || []).length) bulletSlides(d.anaHead || "บทวิเคราะห์", d.analysis);
     (d.sections || []).filter(shown).forEach(secSlide);
     if ((d.notes || []).length) bulletSlides("ข้อสังเกตและข้อเสนอแนะ", d.notes);
     await p.writeFile({ fileName: name.replace(/\.pptx$/i, "") + ".pptx" });

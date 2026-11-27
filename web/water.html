@@ -99,28 +99,29 @@
         <p class="sub">ทุกผลนอกเกณฑ์ในรายงานนี้ระบุ ME และกฎหมายที่เกี่ยวข้อง ผู้ตรวจ JCI ถามหลักฐานตาม ME เหล่านี้ ฝ่ายสิ่งแวดล้อมของแต่ละโรงควรยืนยันว่ากฎหมายเป็นฉบับล่าสุด</p>
         <div class="tw"><table class="tt" id="cRef"></table></div></details>
       <div class="kpis" id="cKpi"></div>
-      <div class="aibox"><div class="acts"><button class="btn" type="button" id="cAiBtn">🤖 AI สรุปรายปี (ผู้บริหาร + วิเคราะห์)</button><span class="sub" id="cAiMsg" role="status"></span></div><div id="cAi"></div></div>
-      <div class="aibox"><h2>สรุปผู้บริหารประจำเดือน</h2>
+      <div class="aibox"><h2>สรุปผู้บริหารรายปีโดย AI (ทุกเดือนของปีที่เลือก)</h2><div class="acts"><button class="btn" type="button" id="cAiBtn">🤖 AI สรุปรายปี (ผู้บริหาร + วิเคราะห์)</button><span class="sub" id="cAiMsg" role="status"></span></div><div id="cAi"></div></div>
+      <div class="aibox"><h2>สรุปผู้บริหารรายเดือน (เดือนที่เลือก)</h2>
         <div class="hsel"><label for="cMo">เดือน</label><select id="cMo"></select><button class="btn" type="button" id="cMoAi">🤖 AI สรุปรายเดือน (ผู้บริหาร + วิเคราะห์)</button><span class="sub" id="cMoMsg" role="status"></span></div>
         <ol id="cMoFind"></ol>
         <div class="tw"><table class="tt" id="cMoT"></table></div>
         <div id="cMoOut"></div>
         <div class="acts"><button class="btn primary" type="button" id="wmX">Excel รายเดือน</button><button class="btn" type="button" id="wmP">PPT รายเดือน (บทสรุป + วิเคราะห์)</button></div></div>
-      <h2>1. บทสรุปผู้บริหาร</h2>
-      <div class="aibox" id="cV4" hidden><h2>สรุปผู้บริหารแบบรายงานน้ำเสีย v4</h2>
+      <h2>รายงานรายปี (ทั้งปี ม.ค.–ธ.ค.)</h2>
+      <h2>1. บทสรุปผู้บริหาร รายปี</h2>
+      <div class="aibox" id="cV4" hidden><h2>สรุปผู้บริหารรายปี แบบรายงานน้ำเสีย v4</h2>
         <div class="acts"><button class="btn primary" type="button" id="cV4Btn">Excel รายปี แบบรายงานน้ำเสีย (v4)</button><span class="sub" id="cV4Msg" role="status"></span></div>
         <div id="cV4Body"></div></div>
       <ol id="cFind"></ol>
       <div class="tw"><table class="tt" id="cExec"></table></div>
       <div id="cRemBox"><h2>ประสิทธิภาพการบำบัด (% Removal)</h2><p class="sub">% การบำบัด = (น้ำเสียเข้าระบบ − น้ำทิ้ง) ÷ น้ำเสียเข้าระบบ × 100 ใช้ผลที่เก็บในเดือนเดียวกัน</p><div class="tw"><table class="tt" id="cRem"></table></div></div>
-      <h2>2. บทวิเคราะห์</h2>
+      <h2>2. บทวิเคราะห์ รายปี</h2>
       <ol id="cAnal"></ol>
-      <h2>3. ตารางสรุปผลตรวจรายเดือน</h2>
+      <h2>3. ตารางผลตรวจแต่ละเดือนของทั้งปี</h2>
       <p class="sub">ช่องสีแดง = นอกเกณฑ์ · สีเหลือง = ระดับเฝ้าระวัง · ช่องว่าง = ไม่มีผลตรวจในเดือนนั้น · ค่าที่ห้องปฏิบัติการรายงานเป็น &lt;, &gt; หรือ ND แสดงตามที่รายงาน</p>
       <div id="cMon"></div>
       <h2>4. กราฟแนวโน้มรายเดือนเทียบค่ามาตรฐาน</h2>
       <div id="cChart"></div>
-      <h2>5. แผนการแก้ไข (Action plan)</h2>
+      <h2>5. แผนการแก้ไข (Action plan) ของทั้งปี</h2>
       <div class="tw"><table class="tt" id="cPlan"></table></div>
       <div id="cGantt"></div>
       <div class="acts"><button class="btn primary" type="button" id="wcX">Excel รายปี</button><button class="btn" type="button" id="wcP">PPT รายปี (บทสรุป + วิเคราะห์)</button><button class="btn" type="button" id="wcV4" hidden>Excel แบบรายงานน้ำเสีย (v4)</button><span class="sub" id="wcV4Msg" role="status"></span></div>
