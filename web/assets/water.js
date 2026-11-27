@@ -1171,10 +1171,12 @@
     const yr = [[$("#cAiBtn"), "#cAi"], ...sib("#wcP").map(b => [b]), ...(catCur === "WASTE" && !$("#cV4").hidden ? [[$("#cV4Btn")]] : [])].filter(([b]) => vis(b) && b.id !== "wcV4");
     const mo = [[$("#cMoAi"), "#cMoOut"], ...sib("#wmP").map(b => [b])].filter(([b]) => vis(b));
     box.innerHTML = `<p><b>ปุ่มทั้งหมดของหมวดนี้</b> <span class="sub">(${esc(catOrg())} · ปี ${esc($("#cY").selectedOptions[0] ? $("#cY").selectedOptions[0].text : "")})</span></p>
-      <p class="sub">รายงานทั้งปี</p><div class="acts" id="cTopY"></div>
-      <p class="sub">รายงานประจำเดือน ${esc($("#cMo").selectedOptions[0] ? $("#cMo").selectedOptions[0].text : "")} (เลือกเดือนที่ช่อง "เดือน" ข้างช่องปี)</p><div class="acts" id="cTopM"></div>`;
+      <p class="sub"><b>รายปี</b> (ทุกเดือนของปีที่เลือก)</p><div class="acts" id="cTopY"></div>
+      <p class="sub"><b>รายเดือน</b> ${esc($("#cMo").selectedOptions[0] ? $("#cMo").selectedOptions[0].text : "")} (เลือกเดือนที่ช่อง "เดือน" ข้างช่องปี)</p><div class="acts" id="cTopM"></div>`;
     $("#cMoTop").innerHTML = $("#cMo").innerHTML; $("#cMoTop").value = $("#cMo").value; $("#cMoTop").onchange = () => { $("#cMo").value = $("#cMoTop").value; rCat(catCur); };
-    yr.forEach(([b, sc]) => $("#cTopY").append(prox(b, sc))); mo.forEach(([b, sc]) => $("#cTopM").append(prox(b, sc)));
+    // Word / PDF buttons are added by office.js with plain labels: say which report they belong to
+    const tag = (c, w) => { if (!c.textContent.includes(w)) c.textContent = c.textContent.replace(/^(Word|PDF)/, `$1 ${w}`); return c; };
+    yr.forEach(([b, sc]) => $("#cTopY").append(tag(prox(b, sc), "รายปี"))); mo.forEach(([b, sc]) => $("#cTopM").append(tag(prox(b, sc), "รายเดือน")));
     $("#cAiTop").hidden = true; box.hidden = !yr.length && !mo.length;
   }
   const monthInput = (D, M, site = siteCur()) => ({ hospital: D.hcode, ...(siteOf(D.pts.find(siteOf)) ? { building: site || "รวมทุกอาคาร: " + [...new Set(D.pts.map(siteOf).filter(Boolean))].join(" / ") } : {}), group: GRP[D.g], month: `${MON[M.m]} ${D.YT}`, standard: CAT_LAW[D.g], references: refAi(D.g),
