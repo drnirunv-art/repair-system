@@ -3,6 +3,7 @@
 //                   Excel / Word / CSV) and maps every value to the central template (the hospital's water_plans).
 //                   It only PROPOSES rows: a person checks them on the page and saves. Proposal kept in water_files.ai.
 //   step "drive":   copies one attached file into the hospital's month folder in Google Drive (Apps Script hook, secret DRIVE_HOOK_URL).
+//   step "rca_*":   RCA by three AI roles (propose, review, check, report), saved in water_ai with report.kind = "rca".
 //   step "summary": executive summary + analysis + action plan for one hospital or for all 12 hospitals (hospital_id null,
 //                   executives only) from the figures the page computed; kept in water_ai.
 // Only water-quality figures are sent; no patient or staff personal data. The caller must be signed in and allowed to see the hospital.
@@ -47,6 +48,33 @@ const SUM_SHAPE = `ตอบเป็น JSON อย่างเดียว ร
 start / due เป็นวันที่ ค.ศ. รูปแบบ YYYY-MM-DD เริ่มไม่ก่อนวันนี้ แผน 3-8 ข้อ`;
 
 // Google retires model names over time, so the model is picked from the key's own model list when the preferred one is gone.
+// RCA by three AI roles (ดร. 2026-11-28): AI 1 drafts the RCA, AI 2 reviews it, AI 3 checks; when AI 3 asks for changes AI 1 and AI 2
+// revise ONE more round (the page drives each step), then AI 3 writes the final report (SWOT 4 boxes, fishbone 4M, 5 Why, solutions, plan + Gantt).
+const Txt = z.object({ text: z.string() });
+const TXT_SHAPE = `ตอบเป็น JSON อย่างเดียว รูปแบบ: {"text":"เนื้อหาทั้งหมดของคุณ เขียนเป็นข้อ ๆ ขึ้นบรรทัดใหม่ด้วย \\n"}`;
+const RcaCheck = z.object({ approved: z.boolean(), issues: z.array(z.string()).optional().default([]), summary: z.string().optional().default("") });
+const RCA_CHECK_SHAPE = `ตอบเป็น JSON อย่างเดียว รูปแบบ: {"approved":true,"issues":["สิ่งที่ต้องแก้ 1"],"summary":"สรุปผลการตรวจ 1-2 ประโยค"}
+approved = true เมื่อไม่มีสิ่งที่ต้องแก้แล้วเท่านั้น ถ้า approved = false ต้องมี issues อย่างน้อย 1 ข้อ เขียนแต่ละข้อให้แก้ได้ทันที`;
+const M4 = z.object({ man: z.array(z.string()), machine: z.array(z.string()), method: z.array(z.string()), material: z.array(z.string()) });
+const Rca = z.object({
+  summary: z.array(z.string()), analysis: z.array(z.string()),
+  swot: z.object({ strengths: z.array(z.string()), weaknesses: z.array(z.string()), opportunities: z.array(z.string()), threats: z.array(z.string()) }),
+  problems: z.array(z.object({ problem: z.string(), ref: z.string().optional().default(""), m4: M4, why5: z.array(z.string()), root_cause: z.string(), solutions: z.array(z.string()) })),
+  plan: z.array(z.object({ issue: z.string(), action: z.string(), owner: z.string(), start: z.string(), due: z.string(), target: z.string().optional().default(""), ref: z.string().optional().default("") })),
+  data_gaps: z.array(z.string()).optional().default([]),
+});
+const RCA_SHAPE = `ตอบเป็น JSON อย่างเดียว รูปแบบ:
+{"summary":["บทสรุปผู้บริหาร 3-6 ข้อ"],"analysis":["บทวิเคราะห์ 3-8 ข้อ"],"swot":{"strengths":[""],"weaknesses":[""],"opportunities":[""],"threats":[""]},
+"problems":[{"problem":"ปัญหา เช่น ฟีคัลโคลิฟอร์มน้ำทิ้งเกินเกณฑ์ 2 เดือน (ค่าสูงสุด 4,900 MPN/100 mL เกณฑ์ไม่เกิน 1,000)","ref":"JCI FMS.08.04 ME ... · ประกาศ ...","m4":{"man":[""],"machine":[""],"method":[""],"material":[""]},"why5":["ทำไม 1","ทำไม 2","ทำไม 3","ทำไม 4","ทำไม 5"],"root_cause":"สาเหตุราก","solutions":["วิธีแก้ที่ตรงสาเหตุราก"]}],
+"plan":[{"issue":"","action":"","owner":"ตำแหน่ง ไม่ใส่ชื่อคน","start":"YYYY-MM-DD","due":"YYYY-MM-DD","target":"เป้าหมายวัดผลได้","ref":"อ้างอิง JCI ME / กฎหมาย"}],"data_gaps":[""]}
+swot แต่ละช่อง 3-5 ข้อ · problems 1-4 ปัญหา เรียงจากสำคัญที่สุด · m4 แต่ละช่อง 1-4 ข้อ · why5 ครบ 5 ข้อ · solutions 2-4 ข้อ · plan 3-8 ข้อ วันที่เป็น ค.ศ. เริ่มไม่ก่อนวันนี้`;
+const RCA_CTX = `บริบท: ผู้รับจ้างงานบริหารวิศวกรรมอาคารของโรงพยาบาลในเครือ 12 โรง ดูแลระบบน้ำตามแผนจัดการน้ำ (Water Management Plan) JCI 8th FMS.08.04
+หมวด DRINK = น้ำกินดื่ม, USE = น้ำใช้ (น้ำประปา หอผึ่งเย็น RO ไตเทียม RO CSSD น้ำร้อน), WASTE = น้ำเสีย (น้ำเสียเข้าระบบ บ่อเติมอากาศ น้ำทิ้ง)
+งานคือทำ RCA (Root Cause Analysis) ของผลตรวจคุณภาพน้ำ: ใช้ผลนอกเกณฑ์ก่อน ถ้าไม่มีผลนอกเกณฑ์ ใช้ผลระดับเฝ้าระวัง ค่าที่แตะเพดานเกณฑ์ การตรวจไม่ครบความถี่ หรือการแก้ไขที่ยังไม่ปิด
+เครื่องมือบังคับ: ก้างปลา 4M (Man คน, Machine เครื่องจักร/ระบบ, Method วิธีการ, Material วัสดุ/สารเคมี/น้ำดิบ), 5 Why จนถึงสาเหตุราก, SWOT, วิธีแก้ และแผนงานที่มีวันเริ่มและวันเสร็จ (ใช้ทำ Gantt)
+ทุกตัวเลขต้องมาจากข้อมูลที่ให้เท่านั้น ห้ามแต่งตัวเลข ห้ามเขียนว่า Owner หรือผู้บริหารได้รับทราบหรือสั่งการแล้ว ใช้คำว่า Owner แทน GM ผู้รับผิดชอบเป็นตำแหน่ง ไม่ใส่ชื่อคน
+ทุกข้อที่พูดถึงผลนอกเกณฑ์ให้ปิดท้ายด้วยอ้างอิง JCI ME และกฎหมายที่เกี่ยวข้อง ตามข้อมูล references ที่ให้
+${FULL}`;
 let GEMINI = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
 const G = "https://generativelanguage.googleapis.com/v1beta";
 async function pickModel(key: string) {
@@ -233,6 +261,40 @@ ${text ? `\nเนื้อหาไฟล์ "${F.file_name}" (แปลงเ�
         await db.from("water_files").update({ status: F.status === "saved" ? "saved" : "error", error: String((e as Error)?.message ?? e) }).eq("id", F.id);
         throw e;
       }
+    }
+
+    if (typeof body.step === "string" && body.step.startsWith("rca_")) {
+      const h = body.hospital_id, grp = String(body.grp ?? ""), year = +body.year, month = body.month ? +body.month : null, site = body.site ? String(body.site).slice(0, 60) : "";
+      if (!h || !["DRINK", "USE", "WASTE"].includes(grp) || !(year > 2000)) return out({ error: "ข้อมูลไม่ครบ" }, 400);
+      if (month !== null && !(month >= 1 && month <= 12)) return out({ error: "เดือนไม่ถูกต้อง" }, 400);
+      const ok = await db.rpc("water_can_record", { h }); if (!ok.data) return out({ error: "ไม่มีสิทธิ์ของโรงพยาบาลนี้" }, 403);
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+      const scope = `${site ? `อาคาร ${site} · ` : ""}หมวด ${grp} · ${month ? `รายเดือน เดือนที่ ${month}` : "รายปี (ทุกเดือนของปี)"} ปี ค.ศ. ${year} (พ.ศ. ${year + 543}) · วันนี้ ${today}`;
+      const data = `ขอบเขต: ${scope}\nข้อมูลที่ระบบคำนวณแล้ว (JSON):\n${JSON.stringify(body.input ?? {}).slice(0, 50000)}`;
+      const p1 = String(body.p1 ?? "").slice(0, 20000), p2 = String(body.p2 ?? "").slice(0, 20000), fb = ((body.issues ?? []) as string[]).map((x, i) => `${i + 1}. ${x}`).join("\n");
+      const S1 = `${RCA_CTX}\nบทบาทของคุณ: AI 1 ผู้นำเสนอ ร่าง RCA: เลือกปัญหาสำคัญ ทำก้างปลา 4M, 5 Why, สาเหตุราก, SWOT, วิธีแก้ และแผนงานพร้อมวันเริ่มวันเสร็จ`;
+      const S2 = `${RCA_CTX}\nบทบาทของคุณ: AI 2 ผู้วิเคราะห์และทบทวน ตรวจว่าตัวเลขตรงข้อมูล สาเหตุใน 4M สมเหตุผลทางวิศวกรรมระบบน้ำหรือไม่ 5 Why ไปถึงสาเหตุรากจริงหรือไม่ วิธีแก้ตรงสาเหตุหรือไม่ แล้วเสนอสิ่งที่ควรเพิ่มหรือแก้`;
+      if (body.step === "rca_propose") {
+        const r = !fb ? await obj(S1, TXT_SHAPE, `${data}\n\nร่าง RCA ฉบับเต็ม`, Txt)
+          : await obj(`${S1}\nตอนนี้เป็นการแก้ไขรอบสุดท้ายตามคำสั่งของ AI 3 ให้แก้ครบทุกข้อ แล้วเขียนฉบับเต็มใหม่`, TXT_SHAPE, `${data}\n\nฉบับเดิมของคุณ:\n${p1}\n\nผลทบทวนของ AI 2:\n${p2}\n\nสิ่งที่ AI 3 สั่งให้แก้:\n${fb}`, Txt);
+        return out({ text: r.text, model: model() });
+      }
+      if (body.step === "rca_review") { const r = await obj(S2, TXT_SHAPE, `${data}\n\nร่าง RCA ของ AI 1:\n${p1}\n\nวิเคราะห์และทบทวนเป็นข้อ ๆ`, Txt); return out({ text: r.text, model: model() }); }
+      if (body.step === "rca_check") {
+        const c = await obj(`${RCA_CTX}\nบทบาทของคุณ: AI 3 ผู้ตรวจสอบ ตรวจร่างของ AI 1 และผลทบทวนของ AI 2 ว่าพร้อมนำเสนอ Owner หรือยัง: ตัวเลขตรงข้อมูล มีครบ 4M, 5 Why, สาเหตุราก, SWOT, วิธีแก้ และแผนที่มีวันเสร็จ`,
+          RCA_CHECK_SHAPE, `${data}\n\nร่าง RCA ของ AI 1:\n${p1}\n\nผลทบทวนของ AI 2:\n${p2}`, RcaCheck);
+        return out({ check: c, model: model() });
+      }
+      if (body.step === "rca_report") {
+        const R = await obj(`${RCA_CTX}\nบทบาทของคุณ: AI 3 ผู้ตรวจสอบ เรียบเรียงรายงาน RCA ฉบับสุดท้ายจากร่างของ AI 1 ผลทบทวนของ AI 2 และผลการตรวจของคุณ`, RCA_SHAPE,
+          `${data}\n\nร่าง RCA ของ AI 1:\n${p1}\n\nผลทบทวนของ AI 2:\n${p2}\n\nผลการตรวจของ AI 3:\n${String(body.log ?? "").slice(0, 6000)}`, Rca);
+        // deno-lint-ignore no-explicit-any
+        const rep: any = { ...R, kind: "rca", log: Array.isArray(body.loglist) ? body.loglist.slice(0, 20) : [] }; if (site) rep.site = site;
+        const ins = await db.from("water_ai").insert({ hospital_id: h, grp, year, month, report: rep, model: model(), created_by: u.user.id }).select("id,created_at").single();
+        if (ins.error) throw ins.error;
+        return out({ report: rep, model: model(), id: ins.data.id, created_at: ins.data.created_at });
+      }
+      return out({ error: "step ไม่ถูกต้อง" }, 400);
     }
 
     if (body.step === "summary") {

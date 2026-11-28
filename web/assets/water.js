@@ -1079,8 +1079,9 @@
     removal: D.removal.map(r => ({ parameter: r.name, target: `>${r.target}%`, avg: r.avg, months_below_target: r.low, monthly: r.m })),
     corrective_actions: D.acts.map(p => ({ problem: p.a.problem, action: p.a.action || "", owner: p.a.owner || "", due: p.a.due, status: p.a.status })) });
   const aiSite = (r, h) => !h || ((r.report && r.report.site) || "") === siteCur();
-  const aiOf = (h, g, y) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && !r.month && aiSite(r, h));
-  const aiOfM = (h, g, y, m) => aiReps.find(r => (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && +r.month === +m && aiSite(r, h));
+  const isRca = r => !!(r.report && r.report.kind === "rca");
+  const aiOf = (h, g, y) => aiReps.find(r => !isRca(r) && (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && !r.month && aiSite(r, h));
+  const aiOfM = (h, g, y, m) => aiReps.find(r => !isRca(r) && (r.hospital_id || null) === (h || null) && r.grp === g && +r.year === +y && +r.month === +m && aiSite(r, h));
   function aiHtml(rep, when, model, lab = "") {
     if (!rep) return ""; const R = rep, G = aiGantt(R);
     return `<h3>บทสรุปผู้บริหาร${lab ? " " + lab : ""} โดย AI</h3><ol>${(R.summary || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol><h3>บทวิเคราะห์${lab ? " " + lab : ""} โดย AI</h3><ol>${(R.analysis || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol>
@@ -1184,20 +1185,104 @@
   $("#cMo").onchange = () => rCat(catCur);
   // every button of the หมวด tab in one place at the top (whole year + month); each one presses the original button further down
   function cTop() {
+    try { rRca(); } catch (e) { console.warn(e); }
     const box = $("#cTop"), vis = b => b && !b.hidden, prox = (b, sc) => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bsmall\b/, ""); c.textContent = b.textContent;
       c.onclick = () => { if (sc) $(sc).scrollIntoView({ behavior: "smooth", block: "start" }); b.click(); }; return c; };
     const sib = id => { const b = $(id); return b ? [...b.parentElement.querySelectorAll("button")].filter(vis) : []; };
-    const yr = [[$("#cAiBtn"), "#cAi"], ...sib("#wcP").map(b => [b]), ...(catCur === "WASTE" && !$("#cV4").hidden ? [[$("#cV4Btn")]] : [])].filter(([b]) => vis(b) && b.id !== "wcV4");
-    const mo = [[$("#cMoAi"), "#cMoOut"], ...sib("#wmP").map(b => [b])].filter(([b]) => vis(b));
+    const yr = [[$("#cAiBtn"), "#cAi"], ...sib("#wcP").map(b => [b]), ...(catCur === "WASTE" && !$("#cV4").hidden ? [[$("#cV4Btn")]] : []), [$("#cRcaBtn"), "#cRcaBox"], ...sib("#rcP").map(b => [b])].filter(([b]) => vis(b) && b.id !== "wcV4");
+    const mo = [[$("#cMoAi"), "#cMoOut"], ...sib("#wmP").map(b => [b]), [$("#cRcaMoBtn"), "#cRcaMoBox"], ...sib("#rmP").map(b => [b])].filter(([b]) => vis(b));
     box.innerHTML = `<p><b>ปุ่มทั้งหมดของหมวดนี้</b> <span class="sub">(${esc(catOrg())} · ปี ${esc($("#cY").selectedOptions[0] ? $("#cY").selectedOptions[0].text : "")})</span></p>
       <p class="sub"><b>รายปี</b> (ทุกเดือนของปีที่เลือก)</p><div class="acts" id="cTopY"></div>
       <p class="sub"><b>รายเดือน</b> ${esc($("#cMo").selectedOptions[0] ? $("#cMo").selectedOptions[0].text : "")} (เลือกเดือนที่ช่อง "เดือน" ข้างช่องปี)</p><div class="acts" id="cTopM"></div>`;
     $("#cMoTop").innerHTML = $("#cMo").innerHTML; $("#cMoTop").value = $("#cMo").value; $("#cMoTop").onchange = () => { $("#cMo").value = $("#cMoTop").value; rCat(catCur); };
     // Word / PDF buttons are added by office.js with plain labels: say which report they belong to
-    const tag = (c, w) => { if (!c.textContent.includes(w)) c.textContent = c.textContent.replace(/^(Word|PDF)/, `$1 ${w}`); return c; };
-    yr.forEach(([b, sc]) => $("#cTopY").append(tag(prox(b, sc), "รายปี"))); mo.forEach(([b, sc]) => $("#cTopM").append(tag(prox(b, sc), "รายเดือน")));
+    const tag = (c, w, b) => { const r = /^r[cm]/.test(b.id) || (b.previousElementSibling && /^r[cm]P$/.test(b.previousElementSibling.id)) || (b.parentElement && b.parentElement.querySelector("#rcP, #rmP")); w = r && !/RCA/.test(c.textContent) ? "RCA " + w : w;
+      if (!c.textContent.includes(w)) c.textContent = c.textContent.replace(/^(Word|PDF)/, `$1 ${w}`); return c; };
+    yr.forEach(([b, sc]) => $("#cTopY").append(tag(prox(b, sc), "รายปี", b))); mo.forEach(([b, sc]) => $("#cTopM").append(tag(prox(b, sc), "รายเดือน", b)));
     $("#cAiTop").hidden = true; box.hidden = !yr.length && !mo.length;
   }
+  // ---------- RCA by AI 3 คน (ดร. 2026-11-28): fishbone 4M + 5 Why + SWOT + solutions + plan with Gantt, yearly or for the chosen month ----------
+  const RM4 = [["man", "Man คน"], ["machine", "Machine เครื่องจักร / ระบบ"], ["method", "Method วิธีการ"], ["material", "Material วัสดุ / สารเคมี / น้ำดิบ"]];
+  const RSW = [["strengths", "S จุดแข็ง", "#14632F", "#E3F3E8"], ["weaknesses", "W จุดอ่อน", "#B42318", "#FDE8E6"], ["opportunities", "O โอกาส", "#0B5CAD", "#E3EEFA"], ["threats", "T อุปสรรค", "#8A5A00", "#FCEFD2"]];
+  function rSwotSvg(sw) { // SWOT 4 boxes, every point in full (boxes grow)
+    const W = 1400, LH = 30, B = RSW.map(([k]) => ((sw && sw[k]) || []).map(t => wrapTxt(String(t), 48))), bh = L => Math.max(300, 96 + L.reduce((a, l) => a + l.length * LH + 12, 0));
+    const R1 = Math.max(bh(B[0]), bh(B[1])), R2 = Math.max(bh(B[2]), bh(B[3])), H = 60 + R1 + R2; let s = "";
+    RSW.forEach(([, lab, ink, bg], i) => { const X = 20 + (i % 2) * 690, Y = i < 2 ? 20 : 40 + R1, h = i < 2 ? R1 : R2;
+      s += `<rect x="${X}" y="${Y}" width="670" height="${h}" rx="12" fill="${bg}" stroke="${ink}" stroke-width="3"/><text x="${X + 24}" y="${Y + 44}" font-size="26" font-weight="bold" fill="${ink}">${lab}</text>`;
+      let yy = Y + 92; B[i].forEach(L => { L.forEach((t, j) => { s += `<text x="${X + (j ? 50 : 28)}" y="${yy}" font-size="22" fill="#1F2A37">${esc((j ? "" : "• ") + t)}</text>`; yy += LH; }); yy += 12; }); });
+    return svgWrap(W, H, s);
+  }
+  function rFishSvg(pr, no) { // fishbone 4M, every cause in full (bones grow)
+    const W = 1400, FL = 20, B = RM4.map(([k, lab], i) => { const items = ((pr.m4 && pr.m4[k]) || []).map(t => wrapTxt(String(t), 28)), need = items.reduce((a, l) => a + l.length * FL + 14, 0); return { lab, i, items, len: Math.max(220, need + 70) }; });
+    const TL = wrapTxt(pr.problem, 18), hh = Math.max(184, 88 + TL.length * 26), up = Math.max(B[0].len, B[1].len, hh / 2 + 10), dn = Math.max(B[2].len, B[3].len, hh / 2 + 10), Y = 70 + up, H = Math.round(Y + dn + 70);
+    let s = `<line x1="30" y1="${Y}" x2="1132" y2="${Y}" stroke="#1F2A37" stroke-width="6"/><polygon points="1126,${Y - 24} 1150,${Y} 1126,${Y + 24}" fill="#1F2A37"/>` +
+      `<rect x="1152" y="${Y - hh / 2}" width="236" height="${hh}" rx="14" fill="#FDE8E6" stroke="#B42318" stroke-width="3"/><text x="1270" y="${Y - hh / 2 + 40}" text-anchor="middle" font-size="22" font-weight="bold" fill="#9B1C13">ปัญหาที่ ${no}</text>` +
+      TL.map((t, i) => `<text x="1270" y="${Y - hh / 2 + 76 + i * 26}" text-anchor="middle" font-size="17" fill="#1F2A37">${esc(t)}</text>`).join("");
+    B.forEach(b => { const J = b.i % 2 ? 1040 : 560, top = b.i < 2, ex = J - 220, ey = top ? Y - b.len : Y + b.len, bxAt = yy => top ? ex + 220 * (yy - ey) / b.len : ex + 220 * (ey - yy) / b.len;
+      s += `<line x1="${ex}" y1="${ey}" x2="${J}" y2="${Y}" stroke="#0B5CAD" stroke-width="4"/><rect x="${ex - 150}" y="${top ? ey - 52 : ey + 6}" width="300" height="46" rx="9" fill="#0B5CAD"/><text x="${ex}" y="${top ? ey - 21 : ey + 37}" text-anchor="middle" fill="#ffffff" font-size="18" font-weight="bold">${b.lab}</text>`;
+      let yy = top ? ey + 42 : Y + 52;
+      b.items.forEach(L => { const bx = bxAt(yy); s += `<line x1="${Math.round(bx - 24)}" y1="${yy}" x2="${Math.round(bx)}" y2="${yy}" stroke="#0B5CAD" stroke-width="2"/>`;
+        L.forEach((t, j) => { s += `<text x="${Math.round(bxAt(yy + j * FL + (top ? 0 : 6)) - 30)}" y="${yy + 6 + j * FL}" text-anchor="end" font-size="16" fill="#1F2A37">${esc(t)}</text>`; }); yy += L.length * FL + 14; }); });
+    return svgWrap(W, H, s);
+  }
+  const rcaOf = (h, g, y, m) => aiReps.find(r => isRca(r) && r.hospital_id === h && r.grp === g && +r.year === +y && (m ? +r.month === +m : !r.month) && aiSite(r, h));
+  const rcaLab = (Y, m) => m ? `รายเดือน ${MON[m - 1]} ${+Y + 543}` : `รายปี พ.ศ. ${+Y + 543}`;
+  const rcaLogRows = R => (R.log || []).map(x => [x.who, x.text]);
+  function rcaHtml(a, lab) { const R = a.report, G = aiGantt(R), li = l => `<ol>${(l || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol>`;
+    return `<h3>บทสรุปผู้บริหาร RCA ${esc(lab)} โดย AI 3 คน</h3>${li(R.summary)}<h3>SWOT</h3><div class="tw">${rSwotSvg(R.swot).replace("<svg ", '<svg class="trend" ')}</div>` +
+      (R.problems || []).map((p, i) => `<h3>ปัญหาที่ ${i + 1}: ${esc(p.problem)}</h3>${p.ref ? `<p class="sub">อ้างอิง: ${esc(p.ref)}</p>` : ""}<p class="sub"><b>ก้างปลา 4M</b></p><div class="tw">${rFishSvg(p, i + 1).replace("<svg ", '<svg class="trend" ')}</div>` +
+        `<p class="sub"><b>5 Why</b></p><ol>${(p.why5 || []).map((w, k) => `<li>ทำไมครั้งที่ ${k + 1}: ${esc(w)}</li>`).join("")}</ol><p><b>สาเหตุราก:</b> ${esc(p.root_cause)}</p><p class="sub"><b>วิธีแก้</b></p>${li(p.solutions)}`).join("") +
+      `<h3>บทวิเคราะห์ RCA ${esc(lab)}</h3>${li(R.analysis)}` +
+      ((R.plan || []).length ? `<h3>แผนแก้ไข</h3><div class="tw"><table class="tt"><tr><th>ลำดับ</th><th>ประเด็น</th><th>มาตรการ</th><th>ผู้รับผิดชอบ</th><th>เริ่ม</th><th>กำหนดเสร็จ</th><th>เป้าหมาย</th><th>อ้างอิง</th></tr>${R.plan.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.issue)}</td><td>${esc(p.action)}</td><td>${esc(p.owner)}</td><td>${esc(dTH(p.start))}</td><td>${esc(dTH(p.due))}</td><td>${esc(p.target || "")}</td><td>${esc(p.ref || "")}</td></tr>`).join("")}</table></div>` : "") +
+      (G ? `<p class="sub"><b>แผนแก้ไข (Gantt)</b></p><div class="tw">${G.replace("<svg ", '<svg class="trend" ')}</div>` : "") +
+      ((R.data_gaps || []).length ? `<h3>ข้อมูลที่ยังขาด</h3>${li(R.data_gaps)}` : "") +
+      ((R.log || []).length ? `<h3>การตรวจวนของ AI 3 คน</h3><div class="tw"><table class="tt"><tr><th>ขั้นตอน</th><th>ผล</th></tr>${R.log.map(x => `<tr><td>${esc(x.who)}</td><td>${esc(x.text)}</td></tr>`).join("")}</table></div>` : "") +
+      `<p class="sub">ทำเมื่อ ${dTH(a.created_at)}${a.model ? " · " + esc(a.model) : ""} · ตัวเลขมาจากผลที่บันทึกในระบบ ให้ผู้รับผิดชอบตรวจทานก่อนนำเสนอ Owner</p>`; }
+  function rRca() { const Y = $("#cY").value, m = +$("#cMo").value + 1, h = hosp().id;
+    const a = rcaOf(h, catCur, Y), b = rcaOf(h, catCur, Y, m);
+    $("#cRca").innerHTML = a ? rcaHtml(a, rcaLab(Y)) : `<p class="sub">ยังไม่มี RCA รายปีของหมวดนี้ กดปุ่ม 🤖 AI 3 คน ทำ RCA รายปี</p>`;
+    $("#cRcaMo").innerHTML = b ? rcaHtml(b, rcaLab(Y, m)) : `<p class="sub">ยังไม่มี RCA ของเดือน ${MON[m - 1]} ${+Y + 543} กดปุ่ม 🤖 AI 3 คน ทำ RCA รายเดือน</p>`;
+    $("#cRcaBtn").hidden = $("#cRcaMoBtn").hidden = !canRec; }
+  async function rcaRun(m, msg) { // m = 1..12 for a month, 0 for the whole year
+    const site = siteCur(), D = catData(catCur), Y = D.Y; let input;
+    if (m) { const M = monthData(D, m - 1); if (!M.rows.length) throw new Error(`ยังไม่มีผลของเดือน ${MON[m - 1]} ${+Y + 543}${site ? " ของอาคาร " + site : ""}`); input = monthInput(D, M, site); }
+    else { if (!D.res.length) throw new Error("ยังไม่มีผลตรวจของหมวดนี้ในปีที่เลือก"); input = aiInputOf(D); }
+    const base = { hospital_id: hosp().id, site: site || null, grp: catCur, year: +Y, month: m || null, input }, log = [], say = t => { msg.textContent = t; };
+    say("AI 1 กำลังร่าง RCA (ก้างปลา 4M, 5 Why, SWOT, วิธีแก้, แผน)"); let p1 = (await aiCall({ ...base, step: "rca_propose" }, msg)).text; log.push({ who: "AI 1 ผู้นำเสนอ", text: "ร่าง RCA รอบที่ 1 เสร็จ" });
+    say("AI 2 กำลังวิเคราะห์และทบทวนร่างของ AI 1"); let p2 = (await aiCall({ ...base, step: "rca_review", p1 }, msg)).text; log.push({ who: "AI 2 ผู้วิเคราะห์ทบทวน", text: "ทบทวนรอบที่ 1 เสร็จ" });
+    say("AI 3 กำลังตรวจสอบ"); let c = (await aiCall({ ...base, step: "rca_check", p1, p2 }, msg)).check;
+    log.push({ who: "AI 3 ผู้ตรวจสอบ รอบที่ 1", text: c.approved ? `ผ่าน: ${c.summary}` : `สั่งแก้ ${c.issues.length} ข้อ: ${c.issues.join(" · ")}` });
+    if (!c.approved) {
+      say("AI 1 กำลังแก้ตามที่ AI 3 สั่ง"); p1 = (await aiCall({ ...base, step: "rca_propose", p1, p2, issues: c.issues }, msg)).text; log.push({ who: "AI 1 ผู้นำเสนอ", text: "แก้ไขรอบที่ 2 ตามที่ AI 3 สั่ง" });
+      say("AI 2 กำลังทบทวนฉบับแก้"); p2 = (await aiCall({ ...base, step: "rca_review", p1 }, msg)).text; log.push({ who: "AI 2 ผู้วิเคราะห์ทบทวน", text: "ทบทวนฉบับแก้รอบที่ 2" });
+      say("AI 3 กำลังตรวจสอบอีกครั้ง"); c = (await aiCall({ ...base, step: "rca_check", p1, p2 }, msg)).check;
+      log.push({ who: "AI 3 ผู้ตรวจสอบ รอบที่ 2", text: c.approved ? `ผ่าน: ${c.summary}` : `ยังมีข้อสังเกต ${c.issues.length} ข้อ ใส่ไว้ในรายงานฉบับสุดท้าย: ${c.issues.join(" · ")}` }); }
+    say("AI 3 กำลังเขียนรายงาน RCA ฉบับสุดท้าย");
+    const r = await aiCall({ ...base, step: "rca_report", p1, p2, log: log.map(x => `${x.who}: ${x.text}`).join("\n"), loglist: log }, msg);
+    aiReps.unshift({ hospital_id: hosp().id, grp: catCur, year: +Y, month: m || null, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() });
+  }
+  const rcaGo = (m, el) => guard(async () => { try { await rcaRun(m(), $(el)); $(el).textContent = "เสร็จแล้ว"; rCat(catCur); } catch (e) { $(el).textContent = ""; throw e; } });
+  $("#cRcaBtn").onclick = rcaGo(() => 0, "#cRcaMsg");
+  $("#cRcaMoBtn").onclick = rcaGo(() => +$("#cMo").value + 1, "#cRcaMoMsg");
+  function rcaDeck(m) { const Y = $("#cY").value, a = rcaOf(hosp().id, catCur, Y, m || undefined); if (!a) throw new Error("ยังไม่มี RCA กดปุ่ม 🤖 AI 3 คน ทำ RCA ก่อน");
+    const R = a.report, lab = rcaLab(Y, m), G = aiGantt(R);
+    return { a, lab, d: { title: `RCA ผลตรวจคุณภาพน้ำ ${lab} หมวด ${CAT_NO[catCur]} ${GRP[catCur]} โดย AI 3 คน`, sumHead: `บทสรุปผู้บริหาร RCA ${lab}`, anaHead: `บทวิเคราะห์ RCA ${lab}`, org: catOrg(), period: `${hosp().code || ""} · ทำเมื่อ ${dTH(a.created_at)} · ข้อมูล ณ ${dTH(today())}`,
+      findings: R.summary || [], analysis: R.analysis || [], lead: [{ title: "SWOT", svg: rSwotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }],
+      sections: [...(R.problems || []).flatMap((p, i) => [{ title: `ปัญหาที่ ${i + 1}: ก้างปลา 4M`, svg: rFishSvg(p, i + 1), note: p.ref ? "อ้างอิง: " + p.ref : "" },
+          { title: `ปัญหาที่ ${i + 1}: 5 Why สาเหตุราก และวิธีแก้`, head: ["หัวข้อ", "รายละเอียด"], left: true, colW: [2.4, 9.9], rows: [["ปัญหา", p.problem], ...(p.why5 || []).map((w, k) => [`ทำไมครั้งที่ ${k + 1}`, w]), ["สาเหตุราก", p.root_cause], ...(p.solutions || []).map((x, k) => [`วิธีแก้ ${k + 1}`, x])] }]),
+        { title: "แผนแก้ไข", head: ["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ", "เป้าหมาย", "อ้างอิง"], colW: [0.5, 2.1, 3.2, 1.3, 0.9, 0.9, 1.6, 1.8], rows: (R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due), p.target || "", p.ref || ""]) },
+        ...(G ? [{ title: "แผนแก้ไข (Gantt)", svg: G, note: "แถบสีแดง = เลยกำหนดแล้ว" }] : []),
+        ...((R.data_gaps || []).length ? [{ title: "ข้อมูลที่ยังขาด", head: ["ข้อ", "รายละเอียด"], colW: [0.8, 11.5], rows: R.data_gaps.map((x, i) => [i + 1, x]) }] : []),
+        ...((R.log || []).length ? [{ title: "การตรวจวนของ AI 3 คน", head: ["ขั้นตอน", "ผล"], left: true, colW: [3, 9.3], rows: rcaLogRows(R) }] : []), refSec(catCur)] } }; }
+  const rcaFile = m => catName(m ? `RCA_รายเดือน_${MON[m - 1]}${+$("#cY").value + 543}` : `RCA_รายปี${+$("#cY").value + 543}`);
+  const rcaP = m => () => { try { const { d } = rcaDeck(m); return Office.pptx(rcaFile(m) + "_บทสรุปผู้บริหาร", d).catch(e => toast(errText(e), true)); } catch (e) { toast(errText(e), true); } };
+  const rcaX = m => () => { try { const { d } = rcaDeck(m);
+      Office.xlsx(rcaFile(m), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: [...d.findings, ...d.analysis], sumHead: d.sumHead }),
+        { name: "SWOT", rows: [["SWOT"]], styles: { 0: 2 }, svg: d.lead[0].svg },
+        ...d.sections.filter(x => x.svg).map((x, i) => ({ name: `ภาพ ${i + 1}`, rows: [[x.title]], styles: { 0: 2 }, svg: x.svg })),
+        ...d.sections.filter(x => x.rows && !x.svg).map(x => ({ name: x.title.replace(/[\\/?*[\]:]/g, " ").slice(0, 31), header: 0, rows: [x.head, ...x.rows] }))]); } catch (e) { toast(errText(e), true); } };
+  $("#rcP").onclick = rcaP(0); $("#rcX").onclick = rcaX(0);
+  $("#rmP").onclick = () => rcaP(+$("#cMo").value + 1)(); $("#rmX").onclick = () => rcaX(+$("#cMo").value + 1)();
   const monthInput = (D, M, site = siteCur()) => ({ hospital: D.hcode, ...(siteOf(D.pts.find(siteOf)) ? { building: site || "รวมทุกอาคาร: " + [...new Set(D.pts.map(siteOf).filter(Boolean))].join(" / ") } : {}), group: GRP[D.g], month: `${MON[M.m]} ${D.YT}`, standard: CAT_LAW[D.g], references: refAi(D.g),
     items: M.rows.map(r => ({ point: `${r.x.pt.code} ${r.x.pt.name}`, item: r.x.pl.param, type: TT[r.x.pl.test_type], value: r.v, unit: r.x.pl.unit || "", standard: hasLim(r.x.pl) ? crit(r.x.pl) : "ไม่กำหนด", reference: refTag(r.x.pl, r.x.pt), result: moRow(r)[6], previous_month: r.prev ? `${r.prev.t} (${MON[r.prev.m]})` : null, year_avg: r.x.avg, year_max: r.x.maxT, times_out_this_year: r.x.fail })),
     removal_this_month: M.rem.filter(r => r.mv != null).map(r => ({ parameter: r.name, value: r.mv, target: r.target, year_avg: r.avg })),
