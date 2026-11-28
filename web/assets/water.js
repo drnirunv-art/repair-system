@@ -107,7 +107,7 @@
   }
   // ดร.: every tab keeps its buttons and period pickers at the top. The original buttons stay where they were;
   // the top box holds copies that press the original (and scroll to the result for AI buttons).
-  const TOPS = { sum: [["#oX", "", "บทสรุปภาพรวม"], ["#sRcaBtn", "#sRcaBox", "RCA ภาพรวมโดย AI 3 คน"], ["#rsX", "", ""]], due: [["#dX"]], hist: [["#hX"]], reg: [["#rX"]], all: [["#vX", "", "ภาพรวม 12 โรง"], ["#vAiBtn", "#vAi", "ผลตรวจรายหมวด 12 โรง (ปี + หมวดที่เลือก)"], ["#vgX", "", ""]] };
+  const TOPS = { due: [["#dX"]], hist: [["#hX"]], reg: [["#rX"]], all: [["#vX", "", "ภาพรวม 12 โรง"], ["#vAiBtn", "#vAi", "ผลตรวจรายหมวด 12 โรง (ปี + หมวดที่เลือก)"], ["#vgX", "", ""]] };
   function secTop(t) {
     const sec = $("#tab-" + t), L = TOPS[t]; if (!sec || !L) return;
     if (t === "all" && !sec.dataset.moved) { const h = $("#vY").closest(".hsel"); h.insertAdjacentHTML("afterbegin", `<b class="sub">ผลตรวจรายหมวด 12 โรง:</b> `); sec.prepend(h); sec.dataset.moved = 1; }
@@ -121,7 +121,7 @@
       let row = box.lastElementChild; if (!row || !row.classList.contains("acts") || cap) { row = document.createElement("div"); row.className = "acts"; box.append(row); }
       bs.forEach(b => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bsmall\b/, ""); c.textContent = /^#(sRca|rs)/.test(id) ? b.textContent.replace(/^(Word|PDF)(?! RCA)/, "$1 RCA ภาพรวม") : b.textContent;
         const sync = () => { c.hidden = b.hidden; c.disabled = b.disabled; }; sync(); new MutationObserver(sync).observe(b, { attributes: true, attributeFilter: ["hidden", "disabled"] });
-        c.onclick = () => { if (sc) $(sc).scrollIntoView({ behavior: "smooth", block: "start" }); b.click(); }; row.append(c); }); });
+        c.onclick = () => { if (sc) $(sc).scrollIntoView({ behavior: "smooth", block: "start" }); b.click(); }; row.append(c); b.classList.add("proxied"); }); });
   }
   $("#h").onchange = guard(async () => { await load(); show(cur); });
   function sysOpts() { const v = sysF(), ks = Object.keys(SYS).filter(k => !grpF() || grpOf(k) === grpF());
@@ -199,6 +199,7 @@
       ["เลยกำหนด / ยังไม่เคย", S.over.length + S.never.length, S.over.length + S.never.length ? "bad" : "good"], [`นอกเกณฑ์ (${S.days} วัน)`, S.fails.length, S.fails.length ? "bad" : "good"], ["แก้ไขยังไม่ปิด", S.open.length, S.open.length ? "bad" : "good"]]
       .map(([l, v, c]) => `<div class="kpi"><b class="${c || ""}">${esc(String(v))}</b><span>${esc(l)}</span></div>`).join("");
     $("#alert").innerHTML = S.openLate.length ? `<div class="note bad">มีรายการแก้ไขเลยวันที่ต้องเสร็จ ${S.openLate.length} รายการ ดูที่แท็บ "นอกเกณฑ์ · การแก้ไข"</div>` : "";
+    $("#hSum").textContent = `1. บทสรุปผู้บริหาร ช่วง ${S.days} วันล่าสุด`; $("#hAna").textContent = `2. บทวิเคราะห์ ช่วง ${S.days} วันล่าสุด`;
     $("#find").innerHTML = T.findings.map(t => `<li>${esc(t)}</li>`).join("");
     $("#anal").innerHTML = T.analysis.map(t => `<li>${esc(t)}</li>`).join("");
     const gt = byGT(S);
@@ -218,9 +219,9 @@
     return [dTH(r.sampled_on), a.problem || "", a.cause || "", a.action || "", a.owner || "", dTH(a.due), a.job_no || "", rt ? `${dTH(rt.sampled_on)} ${valTxt(rt)} (${RST[rt.status]})` : "", a.status === "done" ? "ปิดแล้ว" : a.due && a.due < today() ? "ยังไม่ปิด (เลยวันที่ต้องเสร็จ)" : "ยังไม่ปิด", a.closed_at ? dTH(a.closed_at) : ""]; };
   const ACT_HEAD = ["วันที่พบ", "ปัญหา", "สาเหตุ", "การแก้ไข", "ผู้รับผิดชอบ", "ต้องเสร็จ", "ใบแจ้งซ่อม", "ผลตรวจซ้ำ", "สถานะ", "ปิดเมื่อ"];
   const fileName = k => `น้ำ_${k}_${hosp().code || ""}_${dTH(today()).replace(/\s/g, "")}`;
-  $("#oX").onclick = () => { const S = summary(), T = texts(S);
-    Office.xlsx(fileName("บทสรุป"), [Office.summarySheet({ title: `สรุปแผนจัดการน้ำ (Water Management, JCI FMS.08.04) ช่วง ${S.days} วันล่าสุด`, sumHead: `บทสรุปผู้บริหาร ช่วง ${S.days} วันล่าสุด`, org: hosp().name, period: period(), findings: [...T.findings, ...T.analysis], notes: T.notes,
-        figures: [["จุดตรวจที่ใช้งาน", S.pts.length], ["รายการตรวจตามแผน", S.lp.length], ["ตรวจตามกำหนด (%)", T.sch ?? "-"], [`ผลตรวจ ${S.days} วัน (ครั้ง)`, S.res.length], ["ผ่านเกณฑ์ (%)", T.pr ?? "-"], ["นอกเกณฑ์ (ครั้ง)", S.fails.length], ["แก้ไขยังไม่ปิด", S.open.length]] }),
+  $("#oX").onclick = () => { const S = summary(), T = texts(S), rd = rcaDeckS();
+    Office.xlsx(fileName("บทสรุป"), [Office.summarySheet({ title: `สรุปแผนจัดการน้ำ (Water Management, JCI FMS.08.04) ช่วง ${S.days} วันล่าสุด`, sumHead: `บทสรุปผู้บริหาร ช่วง ${S.days} วันล่าสุด`, org: hosp().name, period: period(), findings: [...T.findings, ...(rd ? rd.findings.map(x => "AI 3 คน: " + x) : []), ...T.analysis, ...(rd ? rd.analysis.map(x => "AI 3 คน: " + x) : [])], notes: T.notes,
+        figures: [["จุดตรวจที่ใช้งาน", S.pts.length], ["รายการตรวจตามแผน", S.lp.length], ["ตรวจตามกำหนด (%)", T.sch ?? "-"], [`ผลตรวจ ${S.days} วัน (ครั้ง)`, S.res.length], ["ผ่านเกณฑ์ (%)", T.pr ?? "-"], ["นอกเกณฑ์ (ครั้ง)", S.fails.length], ["แก้ไขยังไม่ปิด", S.open.length]] }), ...(rd ? rcaSheets(rd) : []),
       { name: "กลุ่มน้ำ × ชนิดการตรวจ", rows: [GT_HEAD, ...byGT(S)], header: 0 },
       { name: "แยกตามระบบ", rows: [["ระบบน้ำ", "จุดตรวจ", "รายการ", "เลยกำหนด", "ยังไม่เคย", "ตรวจตามกำหนด %", "ตรวจ (ครั้ง)", "นอกเกณฑ์", "ผ่าน %"], ...bySys(S)], header: 0 },
       { name: "ตารางตรวจ", rows: [DUE_HEAD, ...S.due.map(dueRow)], header: 0 },
@@ -238,6 +239,10 @@
           return [dTH(r.sampled_on), GRP[grpOf(pt.system)], `${pt.code} ${pt.name}`, pl.param, TT[pl.test_type], valTxt(r), crit(pl), a ? (a.status === "done" ? "ปิดแล้ว" : "ยังไม่ปิด") + (a.action ? ": " + a.action : "") : "-"]; }), chart: false },
         { title: "รายการที่เลยกำหนดตรวจ / ยังไม่เคยตรวจ", head: ["จุดตรวจ", "รายการ", "ความถี่", "ตรวจล่าสุด", "ครบกำหนด", "สถานะ"], rows: [...S.over, ...S.never].map(x => [`${x.pt.code} ${x.pt.name}`, x.pl.param, FREQ[x.pl.freq], dTH(x.last), dTH(x.next), DST[x.st] + (x.late ? ` ${x.late} วัน` : "")]), chart: false },
         { title: "รายการแก้ไขที่ยังไม่ปิด", head: ["ปัญหา", "การแก้ไข", "ผู้รับผิดชอบ", "ต้องเสร็จ", "ใบแจ้งซ่อม"], rows: S.open.map(a => [a.problem || "", a.action || "ยังไม่ได้เขียน", a.owner || "-", dTH(a.due), a.job_no || "-"]), chart: false }] };
+    const rd = rcaDeckS(); // AI 3 คน: summary + SWOT right after the summary, analysis, fishbone, 5 Why, plan + Gantt; data tables after; AI log + references last
+    if (rd) { const tail = x => /^(การตรวจวนของ AI 3 คน|อ้างอิง)/.test(x.title);
+      d.findings = [...d.findings, ...rd.findings.map(x => "AI 3 คน: " + x)]; d.analysis = [...d.analysis, ...rd.analysis.map(x => "AI 3 คน: " + x)]; d.lead = rd.lead;
+      d.sections = [...rd.sections.filter(x => !tail(x)), ...d.sections, ...rd.sections.filter(tail)]; d.title += " รวมผลวิเคราะห์ AI 3 คน"; }
     return Office.pptx(fileName("บทสรุปผู้บริหาร"), d).catch(e => toast(errText(e), true)); };
 
   // ---------- ตารางตรวจ ----------
@@ -1191,16 +1196,19 @@
     const box = $("#cTop"), vis = b => b && !b.hidden, prox = (b, sc) => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bsmall\b/, ""); c.textContent = b.textContent;
       c.onclick = () => { if (sc) $(sc).scrollIntoView({ behavior: "smooth", block: "start" }); b.click(); }; return c; };
     const sib = id => { const b = $(id); return b ? [...b.parentElement.querySelectorAll("button")].filter(vis) : []; };
-    const yr = [[$("#cAiBtn"), "#cAi"], ...sib("#wcP").map(b => [b]), ...(catCur === "WASTE" && !$("#cV4").hidden ? [[$("#cV4Btn")]] : []), [$("#cRcaBtn"), "#cRcaBox"], ...sib("#rcP").map(b => [b])].filter(([b]) => vis(b) && b.id !== "wcV4");
-    const mo = [[$("#cMoAi"), "#cMoOut"], ...sib("#wmP").map(b => [b]), [$("#cRcaMoBtn"), "#cRcaMoBox"], ...sib("#rmP").map(b => [b])].filter(([b]) => vis(b));
-    box.innerHTML = `<p><b>ปุ่มทั้งหมดของหมวดนี้</b> <span class="sub">(${esc(catOrg())} · ปี ${esc($("#cY").selectedOptions[0] ? $("#cY").selectedOptions[0].text : "")})</span></p>
-      <p class="sub"><b>รายปี</b> (ทุกเดือนของปีที่เลือก)</p><div class="acts" id="cTopY"></div>
-      <p class="sub"><b>รายเดือน</b> ${esc($("#cMo").selectedOptions[0] ? $("#cMo").selectedOptions[0].text : "")} (เลือกเดือนที่ช่อง "เดือน" ข้างช่องปี)</p><div class="acts" id="cTopM"></div>`;
+    const yA = [[$("#cAiBtn"), "#cAi"], ...sib("#wcP").map(b => [b]), ...(catCur === "WASTE" && !$("#cV4").hidden ? [[$("#cV4Btn")]] : [])].filter(([b]) => vis(b) && b.id !== "wcV4"),
+      yR = [[$("#cRcaBtn"), "#cRcaBox"], ...sib("#rcP").map(b => [b])].filter(([b]) => vis(b)),
+      mA = [[$("#cMoAi"), "#cMoOut"], ...sib("#wmP").map(b => [b])].filter(([b]) => vis(b)),
+      mR = [[$("#cRcaMoBtn"), "#cRcaMoBox"], ...sib("#rmP").map(b => [b])].filter(([b]) => vis(b)), yr = [...yA, ...yR], mo = [...mA, ...mR];
+    const yT = $("#cY").selectedOptions[0] ? $("#cY").selectedOptions[0].text : "", mT = $("#cMo").selectedOptions[0] ? $("#cMo").selectedOptions[0].text : "";
+    box.innerHTML = `<p><b>ปุ่มทั้งหมดของหมวดนี้</b> <span class="sub">(${esc(catOrg())})</span></p>
+      <div class="tgrid"><div class="tcol"><p class="ttl">รายปี ${esc(yT)} <span class="sub">(ทุกเดือนของปี)</span></p><p class="sub">สรุปผู้บริหาร + วิเคราะห์</p><div class="acts" id="cTopY"></div><p class="sub">RCA โดย AI 3 คน</p><div class="acts" id="cTopYR"></div></div>
+      <div class="tcol"><p class="ttl">รายเดือน ${esc(mT)} <span class="sub">(เปลี่ยนเดือนที่ช่อง "เดือน" ด้านบน)</span></p><p class="sub">สรุปผู้บริหาร + วิเคราะห์</p><div class="acts" id="cTopM"></div><p class="sub">RCA โดย AI 3 คน</p><div class="acts" id="cTopMR"></div></div></div>`;
     $("#cMoTop").innerHTML = $("#cMo").innerHTML; $("#cMoTop").value = $("#cMo").value; $("#cMoTop").onchange = () => { $("#cMo").value = $("#cMoTop").value; rCat(catCur); };
-    // Word / PDF buttons are added by office.js with plain labels: say which report they belong to
-    const tag = (c, w, b) => { const r = /^r[cm]/.test(b.id) || (b.previousElementSibling && /^r[cm]P$/.test(b.previousElementSibling.id)) || (b.parentElement && b.parentElement.querySelector("#rcP, #rmP")); w = r && !/RCA/.test(c.textContent) ? "RCA " + w : w;
-      if (!c.textContent.includes(w)) c.textContent = c.textContent.replace(/^(Word|PDF)/, `$1 ${w}`); return c; };
-    yr.forEach(([b, sc]) => $("#cTopY").append(tag(prox(b, sc), "รายปี", b))); mo.forEach(([b, sc]) => $("#cTopM").append(tag(prox(b, sc), "รายเดือน", b)));
+    // the row says รายปี / รายเดือน and RCA already: short labels; the original buttons further down are hidden (one set of buttons only)
+    const put = (L, el) => L.forEach(([b, sc]) => { const c = prox(b, sc); c.textContent = c.textContent.replace(/^🤖/.test(c.textContent) ? / ?(รายปี|รายเดือน)/g : / ?(RCA )?(รายปี|รายเดือน)/g, "").replace(/ \((บทสรุป|ผู้บริหาร) \+ วิเคราะห์\)/, "").replace(/\s+/g, " ").trim(); b.classList.add("proxied"); $(el).append(c); });
+    put(yA, "#cTopY"); put(yR, "#cTopYR"); put(mA, "#cTopM"); put(mR, "#cTopMR");
+    $("#wcV4").classList.toggle("proxied", yA.some(([b]) => b.id === "cV4Btn"));
     $("#cAiTop").hidden = true; box.hidden = !yr.length && !mo.length;
   }
   // ---------- RCA by AI 3 คน (ดร. 2026-11-28): fishbone 4M + 5 Why + SWOT + solutions + plan with Gantt, yearly or for the chosen month ----------
@@ -1283,27 +1291,31 @@
   const rcaFile = m => catName(m ? `RCA_รายเดือน_${MON[m - 1]}${+$("#cY").value + 543}` : `RCA_รายปี${+$("#cY").value + 543}`);
   const rcaP = m => () => { try { const { d } = rcaDeck(m); return Office.pptx(rcaFile(m) + "_บทสรุปผู้บริหาร", d).catch(e => toast(errText(e), true)); } catch (e) { toast(errText(e), true); } };
   const rcaX = m => () => { try { rcaXlsx(rcaFile(m), rcaDeck(m).d); } catch (e) { toast(errText(e), true); } };
-  const rcaXlsx = (file, d) => { Office.xlsx(file, [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: [...d.findings, ...d.analysis], sumHead: d.sumHead }),
+  const rcaXlsx = (file, d) => { Office.xlsx(file, [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: [...d.findings, ...d.analysis], sumHead: d.sumHead }), ...rcaSheets(d)]); };
+  const rcaSheets = d => [
         { name: "SWOT", rows: [["SWOT"]], styles: { 0: 2 }, svg: d.lead[0].svg },
         ...d.sections.filter(x => x.svg).map((x, i) => ({ name: `ภาพ ${i + 1}`, rows: [[x.title]], styles: { 0: 2 }, svg: x.svg })),
-        ...d.sections.filter(x => x.rows && !x.svg).map(x => ({ name: x.title.replace(/[\\/?*[\]:]/g, " ").slice(0, 31), header: 0, rows: [x.head, ...x.rows] }))]); };
+        ...d.sections.filter(x => x.rows && !x.svg).map(x => ({ name: x.title.replace(/[\\/?*[\]:]/g, " ").slice(0, 31), header: 0, rows: [x.head, ...x.rows] }))];
   $("#rcP").onclick = rcaP(0); $("#rcX").onclick = rcaX(0);
   $("#rmP").onclick = () => rcaP(+$("#cMo").value + 1)(); $("#rmX").onclick = () => rcaX(+$("#cMo").value + 1)();
   // RCA of the overview tab: all water groups of the hospital in the chosen last-N-days window (stored with grp ALL, report.days)
   const rcaOfS = (h, days) => aiReps.find(r => isRca(r) && r.hospital_id === h && r.grp === "ALL" && !r.month && !(r.report && r.report.site) && +(r.report && r.report.days) === +days);
   const rcaLabS = days => `ภาพรวม ช่วง ${days} วันล่าสุด`;
-  function rRcaS() { const days = +$("#per").value, a = rcaOfS(hosp().id, days);
-    $("#sRca").innerHTML = a ? rcaHtml(a, rcaLabS(days)) : `<p class="sub">ยังไม่มี RCA ภาพรวมของช่วง ${days} วันล่าสุด กดปุ่ม 🤖 AI 3 คน ทำ RCA ภาพรวม</p>`;
-    $("#sRcaBtn").hidden = !canRec; }
-  // every finished AI report of this hospital (all หมวด), newest first, so the ภาพรวม tab shows results made in the หมวด tabs too
-  function rAiAll() { const h = hosp().id, days = +$("#per").value, here = rcaOfS(h, days), seen = new Set(), out = [];
-    aiReps.filter(r => r.hospital_id === h && r.report && !r.report.ww4 && aiSite(r, h) && r !== here).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).forEach(r => {
-      const rca = isRca(r), all = r.grp === "ALL", k = [r.grp, rca, all ? r.report.days : r.year, r.month || 0].join("|"); if (seen.has(k)) return; seen.add(k);
-      const per = all ? rcaLabS(r.report.days) : r.month ? `รายเดือน ${MON[r.month - 1]} ${+r.year + 543}` : `รายปี พ.ศ. ${+r.year + 543}`;
-      const what = rca ? "RCA โดย AI 3 คน" : "สรุปผู้บริหาร + วิเคราะห์ โดย AI", where = all ? "ภาพรวมทุกหมวด" : `หมวด ${CAT_NO[r.grp]} ${GRP[r.grp]}`;
-      out.push({ r, head: `${where} · ${what} · ${per}`, body: rca ? rcaHtml(r, all ? rcaLabS(r.report.days) : per) : aiHtml(r.report, r.created_at, r.model, per) }); });
-    $("#sAiAll").innerHTML = out.length ? out.map((x, i) => `<details class="aiall"${i ? "" : " open"}><summary><b>${esc(x.head)}</b> <span class="sub">ทำเสร็จเมื่อ ${dTH(x.r.created_at)}</span></summary>${x.body}</details>`).join("")
-      : `<p class="sub">ยังไม่มีผล AI ของโรงนี้ กดปุ่ม 🤖 ในแท็บหมวด 1-3 หรือปุ่ม RCA ภาพรวมด้านบน</p>`; }
+  const rcaCurS = () => rcaOfS(hosp().id, +$("#per").value) || aiReps.find(r => isRca(r) && r.hospital_id === hosp().id && r.grp === "ALL" && !r.month && !(r.report && r.report.site));
+  function rRcaS() { const days = +$("#per").value, a = rcaCurS(), tag = `<span class="aitag">AI 3 คน</span>`, li = l => `<ol>${(l || []).map(x => `<li>${esc(x)}</li>`).join("")}</ol>`;
+    $("#sRcaBtn").hidden = !canRec;
+    if (!a) { $("#sAiNote").innerHTML = `<div class="ainote">ยังไม่มีผลวิเคราะห์ของ AI 3 คน สำหรับภาพรวม${canRec ? ` กดปุ่ม 🤖 ด้านบน แล้ว SWOT, ก้างปลา 4M, 5 Why และแผนแก้ไข จะมาแสดงในหัวข้อ 1-3 ของหน้านี้` : ""}</div>`;
+      $("#sAiSum").innerHTML = $("#sAiAna").innerHTML = ""; $("#sAiPlan").innerHTML = `<p class="sub">แผนแก้ไขจะมาจากผลวิเคราะห์ของ AI 3 คน</p>`; return; }
+    const R = a.report, d = +R.days, G = aiGantt(R);
+    $("#sAiNote").innerHTML = `<div class="ainote">หัวข้อ 1-3 รวมผลวิเคราะห์ของ AI 3 คน (ทำเมื่อ ${dTH(a.created_at)} จากผลตรวจช่วง ${d} วันล่าสุด)${d !== days ? ` · <b>ช่วงที่เลือกตอนนี้คือ ${days} วัน</b> ถ้าต้องการผลของช่วงนี้ กดปุ่ม 🤖 อีกครั้ง` : ""}</div>`;
+    $("#sAiSum").innerHTML = `<h3>${tag}บทสรุปผู้บริหารจาก AI 3 คน</h3>${li(R.summary)}<h3>${tag}SWOT</h3><div class="tw">${rSwotSvg(R.swot).replace("<svg ", '<svg class="trend" ')}</div>`;
+    $("#sAiAna").innerHTML = `<h3>${tag}บทวิเคราะห์จาก AI 3 คน</h3>${li(R.analysis)}` + (R.problems || []).map((p, i) => `<h3>${tag}ปัญหาที่ ${i + 1}: ${esc(p.problem)}</h3>${p.ref ? `<p class="sub">อ้างอิง: ${esc(p.ref)}</p>` : ""}<p class="sub"><b>ก้างปลา 4M</b></p><div class="tw">${rFishSvg(p, i + 1).replace("<svg ", '<svg class="trend" ')}</div>` +
+        `<p class="sub"><b>5 Why</b></p><ol>${(p.why5 || []).map((w, k) => `<li>ทำไมครั้งที่ ${k + 1}: ${esc(w)}</li>`).join("")}</ol><p><b>สาเหตุราก:</b> ${esc(p.root_cause)}</p><p class="sub"><b>วิธีแก้</b></p>${li(p.solutions)}`).join("") +
+      ((R.data_gaps || []).length ? `<h3>ข้อมูลที่ยังขาด</h3>${li(R.data_gaps)}` : "");
+    $("#sAiPlan").innerHTML = ((R.plan || []).length ? `<div class="tw"><table class="tt"><tr><th>ลำดับ</th><th>ประเด็น</th><th>มาตรการ</th><th>ผู้รับผิดชอบ</th><th>เริ่ม</th><th>กำหนดเสร็จ</th><th>เป้าหมาย</th><th>อ้างอิง</th></tr>${R.plan.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.issue)}</td><td>${esc(p.action)}</td><td>${esc(p.owner)}</td><td>${esc(dTH(p.start))}</td><td>${esc(dTH(p.due))}</td><td>${esc(p.target || "")}</td><td>${esc(p.ref || "")}</td></tr>`).join("")}</table></div>` : `<p class="sub">AI ยังไม่ได้เสนอแผน</p>`) +
+      (G ? `<p class="sub"><b>Gantt</b></p><div class="tw">${G.replace("<svg ", '<svg class="trend" ')}</div>` : "") +
+      ((R.log || []).length ? `<details class="aiall"><summary><b>การตรวจวนของ AI 3 คน</b></summary><div class="tw"><table class="tt"><tr><th>ขั้นตอน</th><th>ผล</th></tr>${R.log.map(x => `<tr><td>${esc(x.who)}</td><td>${esc(x.text)}</td></tr>`).join("")}</table></div></details>` : "") +
+      `<p class="sub">AI ทำเมื่อ ${dTH(a.created_at)}${a.model ? " · " + esc(a.model) : ""} · ตัวเลขมาจากผลที่บันทึกในระบบ ให้ผู้รับผิดชอบตรวจทานก่อนนำเสนอ Owner</p>`; }
   const sumInput = S => { const T = texts(S), ptN = r => { const pl = plOf(r.plan_id), pt = ptOf(pl.point_id); return { pl, pt }; };
     return { hospital: hosp().code || "", period: `${S.days} วันล่าสุด (${dTH(S.from)} ถึง ${dTH(today())})`, findings: T.findings, analysis: T.analysis,
       by_group_and_test: [GT_HEAD, ...byGT(S)], by_system: [["ระบบน้ำ", "จุดตรวจ", "รายการ", "เลยกำหนด", "ยังไม่เคย", "ตรวจตามกำหนด %", "ตรวจ (ครั้ง)", "นอกเกณฑ์", "ผ่าน %"], ...bySys(S)],
@@ -1316,11 +1328,8 @@
     try { const r = await rcaLoop({ hospital_id: hosp().id, grp: "ALL", year: +today().slice(0, 4), month: null, days: S.days, input: sumInput(S) }, el);
       aiReps.unshift({ hospital_id: hosp().id, grp: "ALL", year: +today().slice(0, 4), month: null, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() });
       el.textContent = "เสร็จแล้ว"; rSum(); } catch (e) { el.textContent = ""; throw e; } });
-  const rcaDeckS = () => { const days = +$("#per").value, a = rcaOfS(hosp().id, days); if (!a) throw new Error("ยังไม่มี RCA ภาพรวมของช่วงนี้ กดปุ่ม 🤖 AI 3 คน ทำ RCA ภาพรวม ก่อน");
-    return rcaDeckOf(a, rcaLabS(days), `RCA ผลตรวจคุณภาพน้ำ ${rcaLabS(days)} ทุกกลุ่มน้ำ โดย AI 3 คน`, hosp().name || "", Object.keys(GRP).map(g => ({ ...refSec(g), title: `อ้างอิง JCI 8th FMS ME และกฎหมาย: ${GRP[g]}` }))); };
-  const rcaFileS = () => `น้ำ_RCA_ภาพรวม_${+$("#per").value}วัน_${hosp().code || ""}_${dTH(today()).replace(/\s/g, "")}`;
-  $("#rsP").onclick = () => { try { return Office.pptx(rcaFileS() + "_บทสรุปผู้บริหาร", rcaDeckS()).catch(e => toast(errText(e), true)); } catch (e) { toast(errText(e), true); } };
-  $("#rsX").onclick = () => { try { rcaXlsx(rcaFileS(), rcaDeckS()); } catch (e) { toast(errText(e), true); } };
+  const rcaDeckS = () => { const a = rcaCurS(); if (!a) return null;
+    return rcaDeckOf(a, rcaLabS(a.report.days), `RCA ผลตรวจคุณภาพน้ำ ${rcaLabS(a.report.days)} ทุกกลุ่มน้ำ โดย AI 3 คน`, hosp().name || "", Object.keys(GRP).map(g => ({ ...refSec(g), title: `อ้างอิง JCI 8th FMS ME และกฎหมาย: ${GRP[g]}` }))); };
   const monthInput = (D, M, site = siteCur()) => ({ hospital: D.hcode, ...(siteOf(D.pts.find(siteOf)) ? { building: site || "รวมทุกอาคาร: " + [...new Set(D.pts.map(siteOf).filter(Boolean))].join(" / ") } : {}), group: GRP[D.g], month: `${MON[M.m]} ${D.YT}`, standard: CAT_LAW[D.g], references: refAi(D.g),
     items: M.rows.map(r => ({ point: `${r.x.pt.code} ${r.x.pt.name}`, item: r.x.pl.param, type: TT[r.x.pl.test_type], value: r.v, unit: r.x.pl.unit || "", standard: hasLim(r.x.pl) ? crit(r.x.pl) : "ไม่กำหนด", reference: refTag(r.x.pl, r.x.pt), result: moRow(r)[6], previous_month: r.prev ? `${r.prev.t} (${MON[r.prev.m]})` : null, year_avg: r.x.avg, year_max: r.x.maxT, times_out_this_year: r.x.fail })),
     removal_this_month: M.rem.filter(r => r.mv != null).map(r => ({ parameter: r.name, value: r.mv, target: r.target, year_avg: r.avg })),

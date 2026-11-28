@@ -38,6 +38,8 @@
   .pt h3{margin:4px 0 6px;font-size:16px}
   table.mon td,table.mon th{font-size:13px}table.mon td:first-child{min-width:230px}#cExec td:nth-child(2){min-width:220px}#cExec td:nth-child(10){min-width:200px}table.mon td.sec{background:#dfe9f5;font-weight:700}
   .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px}
+  .proxied{display:none!important}.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.tcol{border:1px solid #d6e2f0;border-radius:8px;background:#fff;padding:4px 10px}.tcol .ttl{font-weight:700;margin:6px 0 2px}@media(max-width:760px){.tgrid{grid-template-columns:1fr}}
+  .sbar{border-color:#0B5CAD;background:#eef5ff}.ainote{border-left:4px solid #0B5CAD;background:#f4f8fd;padding:6px 10px;margin:8px 0;border-radius:6px}.aitag{display:inline-block;background:#0B5CAD;color:#fff;border-radius:6px;padding:1px 8px;font-size:.8em;margin-right:6px}
   details.aiall{border:1px solid #d6e2f0;border-radius:8px;background:#fff;padding:6px 10px;margin:8px 0}details.aiall>summary{cursor:pointer;padding:4px 0}
   .aibox{border:1px solid #c9d8ec;background:#f7faff;border-radius:10px;padding:6px 12px;margin:10px 0}.aibox h3{margin:8px 0 4px}
   .fchip{display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:8px;border:1px solid var(--line);background:#fff;font-size:12px;cursor:pointer;color:#17212b}.fchip.saved{background:#d5f0df}.fchip.read{background:#fcefd2}.fchip.error{background:#f8d7d3}
@@ -75,28 +77,33 @@
 
     <section id="tab-sum">
       <div class="hsel"><label for="per">ช่วงผลตรวจ</label><select id="per"><option value="30">30 วันล่าสุด</option><option value="90" selected>90 วันล่าสุด</option><option value="180">6 เดือนล่าสุด</option><option value="365">12 เดือนล่าสุด</option></select></div>
+      <div class="aibox sbar">
+        <div class="acts"><button class="btn primary" type="button" id="sRcaBtn">🤖 ให้ AI 3 คน วิเคราะห์หาสาเหตุ (RCA)</button><span class="sub" id="sRcaMsg" role="status"></span></div>
+        <p class="sub" style="margin:4px 0 0"><b>ดาวน์โหลดรายงานภาพรวม</b> (ไฟล์เดียวมีครบ: บทสรุป, SWOT, บทวิเคราะห์, ก้างปลา, 5 Why, แผนแก้ไข, Gantt และตารางผลตรวจ)</p>
+        <div class="acts"><button class="btn" type="button" id="oX">Excel (บทสรุป + ผลตรวจ)</button><button class="btn" type="button" id="wP">PPT (บทสรุป + วิเคราะห์)</button></div>
+      </div>
       <p class="sub">แผนจัดการน้ำ (Water Management Plan) ตาม JCI 8th FMS.08.04: ทุกจุดตรวจต้องตรวจครบตามความถี่ ผลต้องอยู่ในเกณฑ์ และผลที่นอกเกณฑ์ต้องมีการแก้ไขพร้อมผลตรวจซ้ำ</p>
       <div class="kpis" id="tot"></div>
       <div id="alert"></div>
-      <h2>บทสรุปผู้บริหาร</h2>
+      <div id="sAiNote"></div>
+      <h2 id="hSum">1. บทสรุปผู้บริหาร</h2>
       <ol id="find"></ol>
-      <h2>บทวิเคราะห์</h2>
+      <div id="sAiSum"></div>
+      <h2 id="hAna">2. บทวิเคราะห์</h2>
       <ol id="anal"></ol>
-      <h2>แยกตามกลุ่มน้ำ และชนิดการตรวจ (ตรวจเชื้อ / สารเคมี)</h2>
+      <div id="sAiAna"></div>
+      <h2>3. แผนแก้ไข (Action plan) และ Gantt</h2>
+      <div id="sAiPlan"></div>
+      <h2>4. ข้อมูลประกอบ</h2>
+      <h3>แยกตามกลุ่มน้ำ และชนิดการตรวจ (ตรวจเชื้อ / สารเคมี)</h3>
       <div class="tw"><table class="tt" id="byGT"></table></div>
-      <h2>แยกตามระบบน้ำ</h2>
+      <h3>แยกตามระบบน้ำ</h3>
       <div class="tw"><table class="tt" id="bySys"></table></div>
-      <h2>ผลนอกเกณฑ์ในช่วงที่เลือก</h2>
+      <h3>ผลนอกเกณฑ์ในช่วงที่เลือก</h3>
       <div class="tw"><table class="tt" id="fails"></table></div>
-       <div class="aibox" id="sRcaBox"><h2>RCA ภาพรวมโดย AI 3 คน (ก้างปลา 4M + 5 Why + SWOT + แผนแก้ไข)</h2>
-         <p class="sub">ใช้ผลทุกกลุ่มน้ำในช่วงที่เลือกด้านบน · AI 1 ร่าง RCA · AI 2 วิเคราะห์ทบทวน · AI 3 ตรวจสอบ ถ้า AI 3 สั่งแก้ AI 1 และ AI 2 แก้อีก 1 รอบ แล้ว AI 3 เขียนรายงานฉบับสุดท้าย</p>
-         <div class="acts"><button class="btn" type="button" id="sRcaBtn">🤖 AI 3 คน ทำ RCA ภาพรวม</button><span class="sub" id="sRcaMsg" role="status"></span></div>
-         <div id="sRca"></div>
-         <div class="acts"><button class="btn primary" type="button" id="rsX">Excel RCA ภาพรวม</button><button class="btn" type="button" id="rsP">PPT RCA ภาพรวม (บทสรุป + วิเคราะห์)</button></div></div>
-      <div class="aibox" id="sAiAllBox"><h2>ผล AI ที่ทำเสร็จแล้ว ทุกหมวด</h2>
-        <p class="sub">เมื่อ AI ทำเสร็จในแท็บหมวด 1-3 (สรุปผู้บริหารรายปี รายเดือน และ RCA โดย AI 3 คน) ผลจะมาแสดงที่นี่ด้วย เรียงจากล่าสุด กดหัวข้อเพื่อเปิดดูเต็ม ดาวน์โหลด Excel, PPT, Word, PDF ได้ที่แท็บหมวดนั้น</p>
-        <div id="sAiAll"></div></div>
-      <div class="acts"><button class="btn primary" type="button" id="oX">ดาวน์โหลด Excel (บทสรุป + ผลตรวจ)</button><button class="btn" type="button" id="wP">PPT (บทสรุป + วิเคราะห์)</button></div>
+      <h2>5. ผล AI ของแต่ละหมวด</h2>
+      <p class="sub">ผลที่ AI ทำเสร็จในแท็บหมวด 1-3 (สรุปผู้บริหารรายปี รายเดือน และ RCA) เรียงจากล่าสุด กดหัวข้อเพื่อเปิดดู ดาวน์โหลดได้ที่แท็บหมวดนั้น</p>
+      <div id="sAiAll"></div>
     </section>
 
     <section id="tab-cat" hidden>
