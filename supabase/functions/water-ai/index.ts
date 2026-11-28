@@ -265,11 +265,12 @@ ${text ? `\nเนื้อหาไฟล์ "${F.file_name}" (แปลงเ�
 
     if (typeof body.step === "string" && body.step.startsWith("rca_")) {
       const h = body.hospital_id, grp = String(body.grp ?? ""), year = +body.year, month = body.month ? +body.month : null, site = body.site ? String(body.site).slice(0, 60) : "";
-      if (!h || !["DRINK", "USE", "WASTE"].includes(grp) || !(year > 2000)) return out({ error: "ข้อมูลไม่ครบ" }, 400);
+      if (!h || !["DRINK", "USE", "WASTE", "ALL"].includes(grp) || !(year > 2000)) return out({ error: "ข้อมูลไม่ครบ" }, 400);
+      const days = grp === "ALL" ? Math.min(Math.max(+body.days || 90, 7), 400) : 0;
       if (month !== null && !(month >= 1 && month <= 12)) return out({ error: "เดือนไม่ถูกต้อง" }, 400);
       const ok = await db.rpc("water_can_record", { h }); if (!ok.data) return out({ error: "ไม่มีสิทธิ์ของโรงพยาบาลนี้" }, 403);
       const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
-      const scope = `${site ? `อาคาร ${site} · ` : ""}หมวด ${grp} · ${month ? `รายเดือน เดือนที่ ${month}` : "รายปี (ทุกเดือนของปี)"} ปี ค.ศ. ${year} (พ.ศ. ${year + 543}) · วันนี้ ${today}`;
+      const scope = days ? `ภาพรวมทุกกลุ่มน้ำของโรงพยาบาล (น้ำกินดื่ม น้ำใช้ น้ำเสีย) ช่วง ${days} วันล่าสุด ถึงวันนี้ ${today}` : `${site ? `อาคาร ${site} · ` : ""}หมวด ${grp} · ${month ? `รายเดือน เดือนที่ ${month}` : "รายปี (ทุกเดือนของปี)"} ปี ค.ศ. ${year} (พ.ศ. ${year + 543}) · วันนี้ ${today}`;
       const data = `ขอบเขต: ${scope}\nข้อมูลที่ระบบคำนวณแล้ว (JSON):\n${JSON.stringify(body.input ?? {}).slice(0, 50000)}`;
       const p1 = String(body.p1 ?? "").slice(0, 20000), p2 = String(body.p2 ?? "").slice(0, 20000), fb = ((body.issues ?? []) as string[]).map((x, i) => `${i + 1}. ${x}`).join("\n");
       const S1 = `${RCA_CTX}\nบทบาทของคุณ: AI 1 ผู้นำเสนอ ร่าง RCA: เลือกปัญหาสำคัญ ทำก้างปลา 4M, 5 Why, สาเหตุราก, SWOT, วิธีแก้ และแผนงานพร้อมวันเริ่มวันเสร็จ`;
@@ -289,7 +290,7 @@ ${text ? `\nเนื้อหาไฟล์ "${F.file_name}" (แปลงเ�
         const R = await obj(`${RCA_CTX}\nบทบาทของคุณ: AI 3 ผู้ตรวจสอบ เรียบเรียงรายงาน RCA ฉบับสุดท้ายจากร่างของ AI 1 ผลทบทวนของ AI 2 และผลการตรวจของคุณ`, RCA_SHAPE,
           `${data}\n\nร่าง RCA ของ AI 1:\n${p1}\n\nผลทบทวนของ AI 2:\n${p2}\n\nผลการตรวจของ AI 3:\n${String(body.log ?? "").slice(0, 6000)}`, Rca);
         // deno-lint-ignore no-explicit-any
-        const rep: any = { ...R, kind: "rca", log: Array.isArray(body.loglist) ? body.loglist.slice(0, 20) : [] }; if (site) rep.site = site;
+        const rep: any = { ...R, kind: "rca", log: Array.isArray(body.loglist) ? body.loglist.slice(0, 20) : [] }; if (site) rep.site = site; if (days) rep.days = days;
         const ins = await db.from("water_ai").insert({ hospital_id: h, grp, year, month, report: rep, model: model(), created_by: u.user.id }).select("id,created_at").single();
         if (ins.error) throw ins.error;
         return out({ report: rep, model: model(), id: ins.data.id, created_at: ins.data.created_at });

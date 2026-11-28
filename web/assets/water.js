@@ -107,7 +107,7 @@
   }
   // ดร.: every tab keeps its buttons and period pickers at the top. The original buttons stay where they were;
   // the top box holds copies that press the original (and scroll to the result for AI buttons).
-  const TOPS = { sum: [["#oX"]], due: [["#dX"]], hist: [["#hX"]], reg: [["#rX"]], all: [["#vX", "", "ภาพรวม 12 โรง"], ["#vAiBtn", "#vAi", "ผลตรวจรายหมวด 12 โรง (ปี + หมวดที่เลือก)"], ["#vgX", "", ""]] };
+  const TOPS = { sum: [["#oX", "", "บทสรุปภาพรวม"], ["#sRcaBtn", "#sRcaBox", "RCA ภาพรวมโดย AI 3 คน"], ["#rsX", "", ""]], due: [["#dX"]], hist: [["#hX"]], reg: [["#rX"]], all: [["#vX", "", "ภาพรวม 12 โรง"], ["#vAiBtn", "#vAi", "ผลตรวจรายหมวด 12 โรง (ปี + หมวดที่เลือก)"], ["#vgX", "", ""]] };
   function secTop(t) {
     const sec = $("#tab-" + t), L = TOPS[t]; if (!sec || !L) return;
     if (t === "all" && !sec.dataset.moved) { const h = $("#vY").closest(".hsel"); h.insertAdjacentHTML("afterbegin", `<b class="sub">ผลตรวจรายหมวด 12 โรง:</b> `); sec.prepend(h); sec.dataset.moved = 1; }
@@ -119,7 +119,7 @@
       const bs = [...a.parentElement.querySelectorAll("button")];
       if (cap) box.insertAdjacentHTML("beforeend", `<p class="sub"><b>${esc(cap)}</b></p>`);
       let row = box.lastElementChild; if (!row || !row.classList.contains("acts") || cap) { row = document.createElement("div"); row.className = "acts"; box.append(row); }
-      bs.forEach(b => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bsmall\b/, ""); c.textContent = b.textContent;
+      bs.forEach(b => { const c = document.createElement("button"); c.type = "button"; c.className = b.className.replace(/\bsmall\b/, ""); c.textContent = /^#(sRca|rs)/.test(id) ? b.textContent.replace(/^(Word|PDF)(?! RCA)/, "$1 RCA ภาพรวม") : b.textContent;
         const sync = () => { c.hidden = b.hidden; c.disabled = b.disabled; }; sync(); new MutationObserver(sync).observe(b, { attributes: true, attributeFilter: ["hidden", "disabled"] });
         c.onclick = () => { if (sc) $(sc).scrollIntoView({ behavior: "smooth", block: "start" }); b.click(); }; row.append(c); }); });
   }
@@ -193,6 +193,7 @@
   }
   function rSum() {
     const S = summary(), T = texts(S);
+    try { rRcaS(); } catch (e) { console.warn(e); }
     $("#tot").innerHTML = [["จุดตรวจที่ใช้งาน", S.pts.length], ["ตรวจตามกำหนด", T.sch == null ? "-" : T.sch + "%", cls(T.sch)], [`ผ่านเกณฑ์ (${S.days} วัน)`, T.pr == null ? "-" : T.pr + "%", cls(T.pr)],
       ["เลยกำหนด / ยังไม่เคย", S.over.length + S.never.length, S.over.length + S.never.length ? "bad" : "good"], [`นอกเกณฑ์ (${S.days} วัน)`, S.fails.length, S.fails.length ? "bad" : "good"], ["แก้ไขยังไม่ปิด", S.open.length, S.open.length ? "bad" : "good"]]
       .map(([l, v, c]) => `<div class="kpi"><b class="${c || ""}">${esc(String(v))}</b><span>${esc(l)}</span></div>`).join("");
@@ -1247,7 +1248,11 @@
     const site = siteCur(), D = catData(catCur), Y = D.Y; let input;
     if (m) { const M = monthData(D, m - 1); if (!M.rows.length) throw new Error(`ยังไม่มีผลของเดือน ${MON[m - 1]} ${+Y + 543}${site ? " ของอาคาร " + site : ""}`); input = monthInput(D, M, site); }
     else { if (!D.res.length) throw new Error("ยังไม่มีผลตรวจของหมวดนี้ในปีที่เลือก"); input = aiInputOf(D); }
-    const base = { hospital_id: hosp().id, site: site || null, grp: catCur, year: +Y, month: m || null, input }, log = [], say = t => { msg.textContent = t; };
+    const base = { hospital_id: hosp().id, site: site || null, grp: catCur, year: +Y, month: m || null, input };
+    const r = await rcaLoop(base, msg);
+    aiReps.unshift({ hospital_id: hosp().id, grp: catCur, year: +Y, month: m || null, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() });
+  }
+  async function rcaLoop(base, msg) { const log = [], say = t => { msg.textContent = t; };
     say("AI 1 กำลังร่าง RCA (ก้างปลา 4M, 5 Why, SWOT, วิธีแก้, แผน)"); let p1 = (await aiCall({ ...base, step: "rca_propose" }, msg)).text; log.push({ who: "AI 1 ผู้นำเสนอ", text: "ร่าง RCA รอบที่ 1 เสร็จ" });
     say("AI 2 กำลังวิเคราะห์และทบทวนร่างของ AI 1"); let p2 = (await aiCall({ ...base, step: "rca_review", p1 }, msg)).text; log.push({ who: "AI 2 ผู้วิเคราะห์ทบทวน", text: "ทบทวนรอบที่ 1 เสร็จ" });
     say("AI 3 กำลังตรวจสอบ"); let c = (await aiCall({ ...base, step: "rca_check", p1, p2 }, msg)).check;
@@ -1258,31 +1263,54 @@
       say("AI 3 กำลังตรวจสอบอีกครั้ง"); c = (await aiCall({ ...base, step: "rca_check", p1, p2 }, msg)).check;
       log.push({ who: "AI 3 ผู้ตรวจสอบ รอบที่ 2", text: c.approved ? `ผ่าน: ${c.summary}` : `ยังมีข้อสังเกต ${c.issues.length} ข้อ ใส่ไว้ในรายงานฉบับสุดท้าย: ${c.issues.join(" · ")}` }); }
     say("AI 3 กำลังเขียนรายงาน RCA ฉบับสุดท้าย");
-    const r = await aiCall({ ...base, step: "rca_report", p1, p2, log: log.map(x => `${x.who}: ${x.text}`).join("\n"), loglist: log }, msg);
-    aiReps.unshift({ hospital_id: hosp().id, grp: catCur, year: +Y, month: m || null, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() });
+    return aiCall({ ...base, step: "rca_report", p1, p2, log: log.map(x => `${x.who}: ${x.text}`).join("\n"), loglist: log }, msg);
   }
   const rcaGo = (m, el) => guard(async () => { try { await rcaRun(m(), $(el)); $(el).textContent = "เสร็จแล้ว"; rCat(catCur); } catch (e) { $(el).textContent = ""; throw e; } });
   $("#cRcaBtn").onclick = rcaGo(() => 0, "#cRcaMsg");
   $("#cRcaMoBtn").onclick = rcaGo(() => +$("#cMo").value + 1, "#cRcaMoMsg");
   function rcaDeck(m) { const Y = $("#cY").value, a = rcaOf(hosp().id, catCur, Y, m || undefined); if (!a) throw new Error("ยังไม่มี RCA กดปุ่ม 🤖 AI 3 คน ทำ RCA ก่อน");
-    const R = a.report, lab = rcaLab(Y, m), G = aiGantt(R);
-    return { a, lab, d: { title: `RCA ผลตรวจคุณภาพน้ำ ${lab} หมวด ${CAT_NO[catCur]} ${GRP[catCur]} โดย AI 3 คน`, sumHead: `บทสรุปผู้บริหาร RCA ${lab}`, anaHead: `บทวิเคราะห์ RCA ${lab}`, org: catOrg(), period: `${hosp().code || ""} · ทำเมื่อ ${dTH(a.created_at)} · ข้อมูล ณ ${dTH(today())}`,
+    const lab = rcaLab(Y, m); return { a, lab, d: rcaDeckOf(a, lab, `RCA ผลตรวจคุณภาพน้ำ ${lab} หมวด ${CAT_NO[catCur]} ${GRP[catCur]} โดย AI 3 คน`, catOrg(), [refSec(catCur)]) }; }
+  function rcaDeckOf(a, lab, title, org, refs) { const R = a.report, G = aiGantt(R);
+    return { title, sumHead: `บทสรุปผู้บริหาร RCA ${lab}`, anaHead: `บทวิเคราะห์ RCA ${lab}`, org, period: `${hosp().code || ""} · ทำเมื่อ ${dTH(a.created_at)} · ข้อมูล ณ ${dTH(today())}`,
       findings: R.summary || [], analysis: R.analysis || [], lead: [{ title: "SWOT", svg: rSwotSvg(R.swot), note: "S, W = ปัจจัยภายในทีม · O, T = ปัจจัยภายนอก" }],
       sections: [...(R.problems || []).flatMap((p, i) => [{ title: `ปัญหาที่ ${i + 1}: ก้างปลา 4M`, svg: rFishSvg(p, i + 1), note: p.ref ? "อ้างอิง: " + p.ref : "" },
           { title: `ปัญหาที่ ${i + 1}: 5 Why สาเหตุราก และวิธีแก้`, head: ["หัวข้อ", "รายละเอียด"], left: true, colW: [2.4, 9.9], rows: [["ปัญหา", p.problem], ...(p.why5 || []).map((w, k) => [`ทำไมครั้งที่ ${k + 1}`, w]), ["สาเหตุราก", p.root_cause], ...(p.solutions || []).map((x, k) => [`วิธีแก้ ${k + 1}`, x])] }]),
         { title: "แผนแก้ไข", head: ["ลำดับ", "ประเด็น", "มาตรการ", "ผู้รับผิดชอบ", "เริ่ม", "กำหนดเสร็จ", "เป้าหมาย", "อ้างอิง"], colW: [0.5, 2.1, 3.2, 1.3, 0.9, 0.9, 1.6, 1.8], rows: (R.plan || []).map((p, i) => [i + 1, p.issue, p.action, p.owner, dTH(p.start), dTH(p.due), p.target || "", p.ref || ""]) },
         ...(G ? [{ title: "แผนแก้ไข (Gantt)", svg: G, note: "แถบสีแดง = เลยกำหนดแล้ว" }] : []),
         ...((R.data_gaps || []).length ? [{ title: "ข้อมูลที่ยังขาด", head: ["ข้อ", "รายละเอียด"], colW: [0.8, 11.5], rows: R.data_gaps.map((x, i) => [i + 1, x]) }] : []),
-        ...((R.log || []).length ? [{ title: "การตรวจวนของ AI 3 คน", head: ["ขั้นตอน", "ผล"], left: true, colW: [3, 9.3], rows: rcaLogRows(R) }] : []), refSec(catCur)] } }; }
+        ...((R.log || []).length ? [{ title: "การตรวจวนของ AI 3 คน", head: ["ขั้นตอน", "ผล"], left: true, colW: [3, 9.3], rows: rcaLogRows(R) }] : []), ...refs] }; }
   const rcaFile = m => catName(m ? `RCA_รายเดือน_${MON[m - 1]}${+$("#cY").value + 543}` : `RCA_รายปี${+$("#cY").value + 543}`);
   const rcaP = m => () => { try { const { d } = rcaDeck(m); return Office.pptx(rcaFile(m) + "_บทสรุปผู้บริหาร", d).catch(e => toast(errText(e), true)); } catch (e) { toast(errText(e), true); } };
-  const rcaX = m => () => { try { const { d } = rcaDeck(m);
-      Office.xlsx(rcaFile(m), [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: [...d.findings, ...d.analysis], sumHead: d.sumHead }),
+  const rcaX = m => () => { try { rcaXlsx(rcaFile(m), rcaDeck(m).d); } catch (e) { toast(errText(e), true); } };
+  const rcaXlsx = (file, d) => { Office.xlsx(file, [Office.summarySheet({ title: d.title, org: d.org, period: d.period, findings: [...d.findings, ...d.analysis], sumHead: d.sumHead }),
         { name: "SWOT", rows: [["SWOT"]], styles: { 0: 2 }, svg: d.lead[0].svg },
         ...d.sections.filter(x => x.svg).map((x, i) => ({ name: `ภาพ ${i + 1}`, rows: [[x.title]], styles: { 0: 2 }, svg: x.svg })),
-        ...d.sections.filter(x => x.rows && !x.svg).map(x => ({ name: x.title.replace(/[\\/?*[\]:]/g, " ").slice(0, 31), header: 0, rows: [x.head, ...x.rows] }))]); } catch (e) { toast(errText(e), true); } };
+        ...d.sections.filter(x => x.rows && !x.svg).map(x => ({ name: x.title.replace(/[\\/?*[\]:]/g, " ").slice(0, 31), header: 0, rows: [x.head, ...x.rows] }))]); };
   $("#rcP").onclick = rcaP(0); $("#rcX").onclick = rcaX(0);
   $("#rmP").onclick = () => rcaP(+$("#cMo").value + 1)(); $("#rmX").onclick = () => rcaX(+$("#cMo").value + 1)();
+  // RCA of the overview tab: all water groups of the hospital in the chosen last-N-days window (stored with grp ALL, report.days)
+  const rcaOfS = (h, days) => aiReps.find(r => isRca(r) && r.hospital_id === h && r.grp === "ALL" && !r.month && !(r.report && r.report.site) && +(r.report && r.report.days) === +days);
+  const rcaLabS = days => `ภาพรวม ช่วง ${days} วันล่าสุด`;
+  function rRcaS() { const days = +$("#per").value, a = rcaOfS(hosp().id, days);
+    $("#sRca").innerHTML = a ? rcaHtml(a, rcaLabS(days)) : `<p class="sub">ยังไม่มี RCA ภาพรวมของช่วง ${days} วันล่าสุด กดปุ่ม 🤖 AI 3 คน ทำ RCA ภาพรวม</p>`;
+    $("#sRcaBtn").hidden = !canRec; }
+  const sumInput = S => { const T = texts(S), ptN = r => { const pl = plOf(r.plan_id), pt = ptOf(pl.point_id); return { pl, pt }; };
+    return { hospital: hosp().code || "", period: `${S.days} วันล่าสุด (${dTH(S.from)} ถึง ${dTH(today())})`, findings: T.findings, analysis: T.analysis,
+      by_group_and_test: [GT_HEAD, ...byGT(S)], by_system: [["ระบบน้ำ", "จุดตรวจ", "รายการ", "เลยกำหนด", "ยังไม่เคย", "ตรวจตามกำหนด %", "ตรวจ (ครั้ง)", "นอกเกณฑ์", "ผ่าน %"], ...bySys(S)],
+      out_of_limit: S.fails.map(r => { const { pl, pt } = ptN(r), a = actions.find(x => x.result_id === r.id); return { date: r.sampled_on, group: GRP[grpOf(pt.system)], point: `${pt.code} ${pt.name}`, location: pt.location || "", item: pl.param, type: TT[pl.test_type], value: valTxt(r), standard: crit(pl), reference: refTag(pl, pt), action: a ? `${a.action || a.problem || ""} (${a.status === "done" ? "ปิดแล้ว" : "ยังไม่ปิด"})` : "ยังไม่มีรายการแก้ไข" }; }),
+      watch_level: S.warns.map(r => { const { pl, pt } = ptN(r); return { date: r.sampled_on, point: `${pt.code} ${pt.name}`, item: pl.param, value: valTxt(r), standard: crit(pl) }; }),
+      overdue: S.over.map(d => ({ point: `${d.pt.code} ${d.pt.name}`, item: d.pl.param, frequency: FREQ[d.pl.freq], last: d.last, days_late: d.late })), never_tested: S.never.length,
+      open_actions: S.open.map(a => ({ problem: a.problem, action: a.action || "", owner: a.owner || "", due: a.due, late: !!(a.due && a.due < today()) })),
+      references: Object.keys(GRP).flatMap(g => refAi(g)) }; };
+  $("#sRcaBtn").onclick = guard(async () => { const S = summary(), el = $("#sRcaMsg"); if (!S.lp.length) throw new Error("ยังไม่มีแผนการตรวจน้ำของโรงนี้");
+    try { const r = await rcaLoop({ hospital_id: hosp().id, grp: "ALL", year: +today().slice(0, 4), month: null, days: S.days, input: sumInput(S) }, el);
+      aiReps.unshift({ hospital_id: hosp().id, grp: "ALL", year: +today().slice(0, 4), month: null, report: r.report, model: r.model, created_at: r.created_at || new Date().toISOString() });
+      el.textContent = "เสร็จแล้ว"; rSum(); } catch (e) { el.textContent = ""; throw e; } });
+  const rcaDeckS = () => { const days = +$("#per").value, a = rcaOfS(hosp().id, days); if (!a) throw new Error("ยังไม่มี RCA ภาพรวมของช่วงนี้ กดปุ่ม 🤖 AI 3 คน ทำ RCA ภาพรวม ก่อน");
+    return rcaDeckOf(a, rcaLabS(days), `RCA ผลตรวจคุณภาพน้ำ ${rcaLabS(days)} ทุกกลุ่มน้ำ โดย AI 3 คน`, hosp().name || "", Object.keys(GRP).map(g => ({ ...refSec(g), title: `อ้างอิง JCI 8th FMS ME และกฎหมาย: ${GRP[g]}` }))); };
+  const rcaFileS = () => `น้ำ_RCA_ภาพรวม_${+$("#per").value}วัน_${hosp().code || ""}_${dTH(today()).replace(/\s/g, "")}`;
+  $("#rsP").onclick = () => { try { return Office.pptx(rcaFileS() + "_บทสรุปผู้บริหาร", rcaDeckS()).catch(e => toast(errText(e), true)); } catch (e) { toast(errText(e), true); } };
+  $("#rsX").onclick = () => { try { rcaXlsx(rcaFileS(), rcaDeckS()); } catch (e) { toast(errText(e), true); } };
   const monthInput = (D, M, site = siteCur()) => ({ hospital: D.hcode, ...(siteOf(D.pts.find(siteOf)) ? { building: site || "รวมทุกอาคาร: " + [...new Set(D.pts.map(siteOf).filter(Boolean))].join(" / ") } : {}), group: GRP[D.g], month: `${MON[M.m]} ${D.YT}`, standard: CAT_LAW[D.g], references: refAi(D.g),
     items: M.rows.map(r => ({ point: `${r.x.pt.code} ${r.x.pt.name}`, item: r.x.pl.param, type: TT[r.x.pl.test_type], value: r.v, unit: r.x.pl.unit || "", standard: hasLim(r.x.pl) ? crit(r.x.pl) : "ไม่กำหนด", reference: refTag(r.x.pl, r.x.pt), result: moRow(r)[6], previous_month: r.prev ? `${r.prev.t} (${MON[r.prev.m]})` : null, year_avg: r.x.avg, year_max: r.x.maxT, times_out_this_year: r.x.fail })),
     removal_this_month: M.rem.filter(r => r.mv != null).map(r => ({ parameter: r.name, value: r.mv, target: r.target, year_avg: r.avg })),
