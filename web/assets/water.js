@@ -194,6 +194,7 @@
   function rSum() {
     const S = summary(), T = texts(S);
     try { rRcaS(); } catch (e) { console.warn(e); }
+    try { rAiAll(); } catch (e) { console.warn(e); }
     $("#tot").innerHTML = [["จุดตรวจที่ใช้งาน", S.pts.length], ["ตรวจตามกำหนด", T.sch == null ? "-" : T.sch + "%", cls(T.sch)], [`ผ่านเกณฑ์ (${S.days} วัน)`, T.pr == null ? "-" : T.pr + "%", cls(T.pr)],
       ["เลยกำหนด / ยังไม่เคย", S.over.length + S.never.length, S.over.length + S.never.length ? "bad" : "good"], [`นอกเกณฑ์ (${S.days} วัน)`, S.fails.length, S.fails.length ? "bad" : "good"], ["แก้ไขยังไม่ปิด", S.open.length, S.open.length ? "bad" : "good"]]
       .map(([l, v, c]) => `<div class="kpi"><b class="${c || ""}">${esc(String(v))}</b><span>${esc(l)}</span></div>`).join("");
@@ -1294,6 +1295,15 @@
   function rRcaS() { const days = +$("#per").value, a = rcaOfS(hosp().id, days);
     $("#sRca").innerHTML = a ? rcaHtml(a, rcaLabS(days)) : `<p class="sub">ยังไม่มี RCA ภาพรวมของช่วง ${days} วันล่าสุด กดปุ่ม 🤖 AI 3 คน ทำ RCA ภาพรวม</p>`;
     $("#sRcaBtn").hidden = !canRec; }
+  // every finished AI report of this hospital (all หมวด), newest first, so the ภาพรวม tab shows results made in the หมวด tabs too
+  function rAiAll() { const h = hosp().id, days = +$("#per").value, here = rcaOfS(h, days), seen = new Set(), out = [];
+    aiReps.filter(r => r.hospital_id === h && r.report && !r.report.ww4 && aiSite(r, h) && r !== here).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).forEach(r => {
+      const rca = isRca(r), all = r.grp === "ALL", k = [r.grp, rca, all ? r.report.days : r.year, r.month || 0].join("|"); if (seen.has(k)) return; seen.add(k);
+      const per = all ? rcaLabS(r.report.days) : r.month ? `รายเดือน ${MON[r.month - 1]} ${+r.year + 543}` : `รายปี พ.ศ. ${+r.year + 543}`;
+      const what = rca ? "RCA โดย AI 3 คน" : "สรุปผู้บริหาร + วิเคราะห์ โดย AI", where = all ? "ภาพรวมทุกหมวด" : `หมวด ${CAT_NO[r.grp]} ${GRP[r.grp]}`;
+      out.push({ r, head: `${where} · ${what} · ${per}`, body: rca ? rcaHtml(r, all ? rcaLabS(r.report.days) : per) : aiHtml(r.report, r.created_at, r.model, per) }); });
+    $("#sAiAll").innerHTML = out.length ? out.map((x, i) => `<details class="aiall"${i ? "" : " open"}><summary><b>${esc(x.head)}</b> <span class="sub">ทำเสร็จเมื่อ ${dTH(x.r.created_at)}</span></summary>${x.body}</details>`).join("")
+      : `<p class="sub">ยังไม่มีผล AI ของโรงนี้ กดปุ่ม 🤖 ในแท็บหมวด 1-3 หรือปุ่ม RCA ภาพรวมด้านบน</p>`; }
   const sumInput = S => { const T = texts(S), ptN = r => { const pl = plOf(r.plan_id), pt = ptOf(pl.point_id); return { pl, pt }; };
     return { hospital: hosp().code || "", period: `${S.days} วันล่าสุด (${dTH(S.from)} ถึง ${dTH(today())})`, findings: T.findings, analysis: T.analysis,
       by_group_and_test: [GT_HEAD, ...byGT(S)], by_system: [["ระบบน้ำ", "จุดตรวจ", "รายการ", "เลยกำหนด", "ยังไม่เคย", "ตรวจตามกำหนด %", "ตรวจ (ครั้ง)", "นอกเกณฑ์", "ผ่าน %"], ...bySys(S)],
